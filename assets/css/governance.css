@@ -264,6 +264,57 @@
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
 }
 
+/* --------------------------------------------------------------------------
+   Card configuration
+   -------------------------------------------------------------------------- */
+.gov-config-help {
+    margin-bottom: 15px;
+    padding: 12px 15px;
+    border-left: 4px solid #4796c4;
+    background: rgba(71, 150, 196, 0.1);
+}
+
+.gov-config-help p {
+    margin: 2px 0;
+}
+
+.gov-config-table {
+    width: 100%;
+}
+
+.gov-config-table textarea {
+    min-width: 220px;
+    resize: vertical;
+}
+
+.gov-config-table input[type="text"] {
+    min-width: 160px;
+}
+
+.gov-config-table .gov-field-disabled {
+    opacity: 0.45;
+}
+
+.gov-config-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.gov-theme-dark .gov-config-table input,
+.gov-theme-dark .gov-config-table textarea,
+.gov-theme-dark .gov-config-table select {
+    color: #f2f2f2;
+    background-color: #202326;
+    border-color: #525252;
+}
+
+@media (max-width: 1400px) {
+    .gov-config-container {
+        overflow-x: auto;
+    }
+}
+
 /* Responsive adjustment */
 @media (max-width: 768px) {
     .gov-summary-banner {

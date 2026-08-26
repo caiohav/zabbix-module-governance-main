@@ -25,9 +25,11 @@ class Module extends CModule {
 
         $mainMenuTitle = $isPt ? 'Governança' : 'Governance';
         $qualityTitle = $isPt ? 'Qualidade do monitoramento' : 'Monitoring quality';
+        $configTitle = $isPt ? 'Configuração dos cards' : 'Card configuration';
 
         $submenu = new CMenu([
-            (new CMenuItem($qualityTitle))->setAction('governance.quality.view')
+            (new CMenuItem($qualityTitle))->setAction('governance.quality.view'),
+            (new CMenuItem($configTitle))->setAction('governance.quality.config')
         ]);
 
         APP::Component()->get('menu.main')->add(

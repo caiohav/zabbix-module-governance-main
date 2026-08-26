@@ -19,6 +19,9 @@ Zabbix 6.0 LTS.
 - Indicadores circulares renderizados com Apache ECharts 5.6.0.
 - Cores adaptáveis aos temas claro e escuro do Zabbix 6.0.
 - Cards translúcidos e canvas ECharts transparente, sem fallback branco.
+- Cards configuráveis pelo frontend: nome, descrição, tipo de métrica, tags,
+  valores aceitos e participação no score geral.
+- Inclusão e remoção dinâmica de cards sem editar arquivos PHP.
 
 ## Pré-requisitos
 
@@ -37,6 +40,21 @@ Zabbix 6.0 LTS.
    **Examinar diretório**.
 5. Habilite **Governance & Quality Audit**.
 6. Entre como Super Admin e abra **Governança** no menu principal.
+
+## Configuração dos cards
+
+Abra **Governança → Configuração dos cards**. Cada card permite definir:
+
+- Nome e descrição apresentados no painel.
+- Tipo de métrica: tag personalizada, inventário, template ou interface.
+- Um ou mais nomes/aliases de tag separados por vírgula.
+- Valores aceitos para a tag, também separados por vírgula. Se ficar vazio,
+  qualquer valor não vazio será considerado conforme.
+- Se a métrica participa ou não do índice geral de governança.
+
+Use **Adicionar card** para criar novas métricas ou **Remover** para excluir um
+card. A configuração é salva no próprio registro do módulo no banco do Zabbix,
+sem criar tabelas adicionais.
 
 ## Diagnóstico
 
