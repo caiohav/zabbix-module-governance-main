@@ -7,6 +7,8 @@ Zabbix 6.0 LTS.
 
 - Menu visível exclusivamente para usuários Super Admin.
 - Interface automática em português ou inglês.
+- Página **Regras e cards / Rules and cards** totalmente traduzida conforme o
+  idioma do usuário.
 - Menu principal com ícone nativo e submenu para as páginas de governança.
 - Cobertura de tag de departamento (`departamento`, `department` ou `dept`).
 - Cobertura de tag de ambiente (`ambiente`, `environment` ou `env`).

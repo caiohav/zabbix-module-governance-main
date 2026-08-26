@@ -7,39 +7,66 @@
             return;
         }
 
+        const isPt = list.getAttribute('data-lang') === 'pt';
+        const text = isPt ? {
+            cardName: 'Nome do card',
+            remove: 'Remover',
+            description: 'Descrição',
+            metricType: 'Tipo de métrica',
+            customTag: 'Tag personalizada',
+            inventory: 'Inventário preenchido',
+            template: 'Template vinculado',
+            interface: 'Interface configurada',
+            overallScore: 'Participa do score geral',
+            tags: 'Tags / aliases',
+            acceptedValues: 'Valores aceitos (opcional)'
+        } : {
+            cardName: 'Card name',
+            remove: 'Remove',
+            description: 'Description',
+            metricType: 'Metric type',
+            customTag: 'Custom tag',
+            inventory: 'Populated inventory',
+            template: 'Linked template',
+            interface: 'Configured interface',
+            overallScore: 'Included in overall score',
+            tags: 'Tags / aliases',
+            acceptedValues: 'Accepted values (optional)'
+        };
+
         let nextIndex = list.querySelectorAll('.gov-config-card').length;
 
         const cardHtml = (index) => `
             <div class="gov-config-card">
                 <input type="hidden" name="cards[${index}][id]" value="custom_${index}">
                 <div class="gov-config-card-head">
-                    <input type="text" name="cards[${index}][title]" maxlength="255" placeholder="Nome do card">
-                    <button type="button" class="gov-remove-card">Remover</button>
+                    <input type="text" name="cards[${index}][title]" maxlength="255" placeholder="${text.cardName}">
+                    <button type="button" class="gov-remove-card">${text.remove}</button>
                 </div>
                 <div class="gov-config-grid">
                     <div class="gov-config-field gov-config-field-wide">
-                        <label>Descrição</label>
+                        <label>${text.description}</label>
                         <textarea name="cards[${index}][description]" rows="2"></textarea>
                     </div>
                     <div class="gov-config-field">
-                        <label>Tipo de métrica</label>
+                        <label>${text.metricType}</label>
                         <select name="cards[${index}][type]" class="gov-card-type">
-                            <option value="tag">Tag personalizada</option>
-                            <option value="inventory">Inventário preenchido</option>
-                            <option value="templates">Template vinculado</option>
-                            <option value="interface">Interface configurada</option>
+                            <option value="tag">${text.customTag}</option>
+                            <option value="inventory">${text.inventory}</option>
+                            <option value="templates">${text.template}</option>
+                            <option value="interface">${text.interface}</option>
                         </select>
                     </div>
                     <div class="gov-config-field gov-config-score-field">
                         <input type="checkbox" name="cards[${index}][include_score]" value="1" checked>
-                        <label>Participa do score geral</label>
+                        <label>${text.overallScore}</label>
                     </div>
                     <div class="gov-config-field gov-tag-setting">
-                        <label>Tags / aliases</label>
+                        <label>${text.tags}</label>
                         <input type="text" class="gov-tag-field" name="cards[${index}][tag_names]" placeholder="unidade,unit,site">
                     </div>
                     <div class="gov-config-field gov-tag-setting">
-                        <label>Valores aceitos (opcional)</label>
+                        <label>${text.acceptedValues}</label>
                         <input type="text" class="gov-tag-field" name="cards[${index}][tag_values]" placeholder="prod,homolog">
                     </div>
                 </div>

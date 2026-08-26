@@ -23,6 +23,7 @@ class QualityConfig extends CController {
     }
 
     protected function doAction(): void {
+        $isPt = (strpos(strtolower(CWebUser::getLang()), 'pt') === 0);
         $modules = API::Module()->get([
             'output' => ['moduleid', 'config'],
             'filter' => ['id' => 'zabbix_module_governance']
@@ -31,8 +32,9 @@ class QualityConfig extends CController {
         $storedCards = $modules ? ($modules[0]['config']['cards'] ?? []) : [];
 
         $this->setResponse(new CControllerResponseData([
-            'page_title' => 'Configuração dos Cards de Governança',
+            'page_title' => $isPt ? 'Configuração dos Cards de Governança' : 'Governance Card Configuration',
             'cards' => GovernanceConfig::normalizeCards($storedCards),
+            'is_pt' => $isPt,
             'is_dark' => self::isDarkTheme()
         ]));
     }

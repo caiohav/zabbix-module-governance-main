@@ -8,6 +8,7 @@ use CControllerResponseFatal;
 use CControllerResponseRedirect;
 use CMessageHelper;
 use CUrl;
+use CWebUser;
 use Modules\Governance\GovernanceConfig;
 
 class QualityConfigUpdate extends CController {
@@ -29,6 +30,7 @@ class QualityConfigUpdate extends CController {
     }
 
     protected function doAction(): void {
+        $isPt = (strpos(strtolower(CWebUser::getLang()), 'pt') === 0);
         $redirect = new CControllerResponseRedirect(
             (new CUrl('zabbix.php'))->setArgument('action', 'governance.quality.config')
         );
@@ -39,7 +41,10 @@ class QualityConfigUpdate extends CController {
         ]);
 
         if (!$modules) {
-            CMessageHelper::setErrorTitle('Não foi possível localizar o módulo de governança.');
+            CMessageHelper::setErrorTitle($isPt
+                ? 'Não foi possível localizar o módulo de governança.'
+                : 'The governance module could not be found.'
+            );
             $this->setResponse($redirect);
             return;
         }
@@ -51,9 +56,15 @@ class QualityConfigUpdate extends CController {
         ]]);
 
         if ($result) {
-            CMessageHelper::setSuccessTitle('Configuração dos cards atualizada.');
+            CMessageHelper::setSuccessTitle($isPt
+                ? 'Configuração dos cards atualizada.'
+                : 'Card configuration updated.'
+            );
         } else {
-            CMessageHelper::setErrorTitle('Não foi possível atualizar a configuração dos cards.');
+            CMessageHelper::setErrorTitle($isPt
+                ? 'Não foi possível atualizar a configuração dos cards.'
+                : 'The card configuration could not be updated.'
+            );
         }
 
         $this->setResponse($redirect);

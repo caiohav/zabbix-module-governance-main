@@ -6,10 +6,11 @@
  */
 
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$assetVersion = '?v=1.3.0';
+$assetVersion = '?v=1.3.1';
 $this->addCssFile($moduleWebPath . 'css/governance.css' . $assetVersion);
 $this->addJsFile($moduleWebPath . 'js/config.js' . $assetVersion);
 
+$isPt = $data['is_pt'];
 $widget = (new CWidget())->setTitle($data['page_title']);
 $form = (new CForm())
     ->setId('gov-config-form')
@@ -20,26 +21,31 @@ $form = (new CForm())
 
 $help = (new CDiv([
     new CTag('p', true,
-        'Crie cards de tags ou reutilize métricas nativas. Nomes e valores alternativos devem ser separados por vírgula.'
+        $isPt
+            ? 'Crie cards de tags ou reutilize métricas nativas. Nomes e valores alternativos devem ser separados por vírgula.'
+            : 'Create tag cards or reuse native metrics. Alternative names and values must be comma-separated.'
     ),
     new CTag('p', true,
-        'Se valores aceitos ficar vazio, qualquer valor não vazio será considerado conforme.'
+        $isPt
+            ? 'Se valores aceitos ficar vazio, qualquer valor não vazio será considerado conforme.'
+            : 'If accepted values is empty, any non-empty value will be considered compliant.'
     )
 ]))->addClass('gov-config-help');
 
 $cardList = (new CDiv())
     ->setId('gov-config-list')
-    ->addClass('gov-config-list');
+    ->addClass('gov-config-list')
+    ->setAttribute('data-lang', $isPt ? 'pt' : 'en');
 
 foreach ($data['cards'] as $index => $card) {
     $typeSelect = (new CSelect('cards[' . $index . '][type]'))
         ->addClass('gov-card-type')
         ->setValue($card['type'])
         ->addOptions(CSelect::createOptionsFromArray([
-            'tag' => 'Tag personalizada',
-            'inventory' => 'Inventário preenchido',
-            'templates' => 'Template vinculado',
-            'interface' => 'Interface configurada'
+            'tag' => $isPt ? 'Tag personalizada' : 'Custom tag',
+            'inventory' => $isPt ? 'Inventário preenchido' : 'Populated inventory',
+            'templates' => $isPt ? 'Template vinculado' : 'Linked template',
+            'interface' => $isPt ? 'Interface configurada' : 'Configured interface'
         ]));
 
     $cardList->addItem(
@@ -47,34 +53,34 @@ foreach ($data['cards'] as $index => $card) {
             (new CVar('cards[' . $index . '][id]', $card['id']))->removeId(),
             (new CDiv([
                 (new CTextBox('cards[' . $index . '][title]', $card['title']))
-                    ->setAttribute('placeholder', 'Nome do card'),
-                (new CButton('remove_card_' . $index, 'Remover'))
+                    ->setAttribute('placeholder', $isPt ? 'Nome do card' : 'Card name'),
+                (new CButton('remove_card_' . $index, $isPt ? 'Remover' : 'Remove'))
                     ->setAttribute('type', 'button')
                     ->addClass('gov-remove-card')
             ]))->addClass('gov-config-card-head'),
             (new CDiv([
                 (new CDiv([
-                    new CTag('label', true, 'Descrição'),
+                    new CTag('label', true, $isPt ? 'Descrição' : 'Description'),
                     (new CTextArea('cards[' . $index . '][description]', $card['description']))
                         ->setAttribute('rows', '2')
                 ]))->addClass('gov-config-field')->addClass('gov-config-field-wide'),
                 (new CDiv([
-                    new CTag('label', true, 'Tipo de métrica'),
+                    new CTag('label', true, $isPt ? 'Tipo de métrica' : 'Metric type'),
                     $typeSelect
                 ]))->addClass('gov-config-field'),
                 (new CDiv([
                     (new CCheckBox('cards[' . $index . '][include_score]', 1))
                         ->setChecked((bool) $card['include_score']),
-                    new CTag('label', true, 'Participa do score geral')
+                    new CTag('label', true, $isPt ? 'Participa do score geral' : 'Included in overall score')
                 ]))->addClass('gov-config-field')->addClass('gov-config-score-field'),
                 (new CDiv([
-                    new CTag('label', true, 'Tags / aliases'),
+                    new CTag('label', true, $isPt ? 'Tags / aliases' : 'Tags / aliases'),
                     (new CTextBox('cards[' . $index . '][tag_names]', $card['tag_names']))
                         ->addClass('gov-tag-field')
                         ->setAttribute('placeholder', 'unidade,unit,site')
                 ]))->addClass('gov-config-field')->addClass('gov-tag-setting'),
                 (new CDiv([
-                    new CTag('label', true, 'Valores aceitos (opcional)'),
+                    new CTag('label', true, $isPt ? 'Valores aceitos (opcional)' : 'Accepted values (optional)'),
                     (new CTextBox('cards[' . $index . '][tag_values]', $card['tag_values']))
                         ->addClass('gov-tag-field')
                         ->setAttribute('placeholder', 'prod,homolog')
@@ -85,10 +91,10 @@ foreach ($data['cards'] as $index => $card) {
 }
 
 $buttons = (new CDiv([
-    (new CButton('add_card', 'Adicionar card'))
+    (new CButton('add_card', $isPt ? 'Adicionar card' : 'Add card'))
         ->setId('gov-add-card')
         ->setAttribute('type', 'button'),
-    new CSubmit('save', 'Salvar configuração')
+    new CSubmit('save', $isPt ? 'Salvar configuração' : 'Save configuration')
 ]))->addClass('gov-config-actions');
 
 $form->addItem([$help, $cardList, $buttons]);
