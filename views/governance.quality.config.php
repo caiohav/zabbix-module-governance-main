@@ -6,7 +6,7 @@
  */
 
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$assetVersion = '?v=1.4.0';
+$assetVersion = '?v=1.4.1';
 $this->addCssFile($moduleWebPath . 'css/governance.css' . $assetVersion);
 $this->includeJsFile('governance.quality.config.js.php');
 
@@ -29,6 +29,11 @@ $help = (new CDiv([
         $isPt
             ? 'Se valores aceitos ficar vazio, qualquer valor não vazio será considerado conforme.'
             : 'If accepted values is empty, any non-empty value will be considered compliant.'
+    ),
+    new CTag('p', true,
+        $isPt
+            ? 'Um grupo pai também inclui seus subgrupos. Exemplo: Equipes inclui Equipes/Banco de Dados.'
+            : 'A parent group also includes its subgroups. Example: Teams includes Teams/Database.'
     )
 ]))->addClass('gov-config-help');
 

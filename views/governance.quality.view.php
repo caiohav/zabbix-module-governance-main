@@ -6,7 +6,7 @@
  */
 
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$assetVersion = '?v=1.4.0';
+$assetVersion = '?v=1.4.1';
 $this->addCssFile($moduleWebPath . 'css/governance.css' . $assetVersion);
 $this->includeJsFile('governance.quality.view.js.php');
 

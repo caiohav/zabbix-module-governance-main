@@ -218,9 +218,15 @@ class QualityView extends CController {
                     $groupId = trim((string) ($group['groupid'] ?? ''));
                     $groupName = mb_strtolower(trim((string) ($group['name'] ?? '')), 'UTF-8');
 
-                    if (in_array($groupId, $acceptedGroups, true)
-                            || in_array($groupName, $acceptedGroups, true)) {
-                        return true;
+                    foreach ($acceptedGroups as $acceptedGroup) {
+                        $groupPrefix = rtrim($acceptedGroup, '/');
+
+                        if ($groupId === $acceptedGroup
+                                || $groupName === $groupPrefix
+                                || ($groupPrefix !== ''
+                                    && strpos($groupName, $groupPrefix . '/') === 0)) {
+                            return true;
+                        }
                     }
                 }
 

@@ -56,7 +56,9 @@ Abra **Governança → Regras e cards**. Cada card permite definir:
   interface.
 - Um ou mais nomes/aliases de tag separados por vírgula.
 - Um ou mais nomes ou IDs de grupos de hosts separados por vírgula. O host será
-  considerado conforme quando pertencer a pelo menos um deles.
+  considerado conforme quando pertencer a pelo menos um deles. Um grupo
+  informado por nome também inclui seus subgrupos; por exemplo, `Equipes`
+  inclui `Equipes/Banco de Dados` e `Equipes/Conectividade`.
 - Valores aceitos para a tag, também separados por vírgula. Se ficar vazio,
   qualquer valor não vazio será considerado conforme.
 - Se a métrica participa ou não do índice geral de governança.
