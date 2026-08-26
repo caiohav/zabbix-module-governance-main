@@ -51,5 +51,8 @@ O manifesto usa a versão `1.0`, exigida pelo Zabbix 6.0. O formato `2.0` é de
 gerações posteriores do frontend e faz o módulo ser ignorado pelo scanner do
 6.0.
 
+A view utiliza `CWidget`, classe disponível no frontend 6.0. `CHtmlPage` não
+existe nessa versão e causa erro HTTP 500 ao abrir a ação.
+
 O Apache ECharts é distribuído junto com o módulo sob a licença Apache 2.0. A
 cópia da licença está em `assets/js/ECHARTS-LICENSE.txt`.

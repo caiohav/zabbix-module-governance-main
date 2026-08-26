@@ -6,12 +6,12 @@
  */
 
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$assetVersion = '?v=1.1.0';
+$assetVersion = '?v=1.1.1';
 $this->addCssFile($moduleWebPath . 'css/governance.css' . $assetVersion);
 $this->addJsFile($moduleWebPath . 'js/echarts.min.js' . $assetVersion);
 $this->addJsFile($moduleWebPath . 'js/quality.js' . $assetVersion);
 
-$page = (new CHtmlPage())
+$widget = (new CWidget())
     ->setTitle($data['page_title']);
 
 $isPt = $data['is_pt'];
@@ -105,4 +105,4 @@ if (empty($kpis)) {
 // Monta o layout final dentro do widget do Zabbix
 $content = (new CDiv([$summaryBanner, $cardsGrid]))->addClass('gov-container');
 
-$page->addItem($content)->show();
+$widget->addItem($content)->show();
