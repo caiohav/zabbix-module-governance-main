@@ -6,12 +6,15 @@
             description: 'Descrição',
             metricType: 'Tipo de métrica',
             customTag: 'Tag personalizada',
+            hostGroups: 'Grupo de hosts',
             inventory: 'Inventário preenchido',
             template: 'Template vinculado',
             interface: 'Interface configurada',
             overallScore: 'Participa do score geral',
             tags: 'Tags / aliases',
-            acceptedValues: 'Valores aceitos (opcional)'
+            acceptedValues: 'Valores aceitos (opcional)',
+            groupNames: 'Grupos de hosts (nomes ou IDs)',
+            groupPlaceholder: 'Servidores, Linux, 12'
         },
         en: {
             cardName: 'Card name',
@@ -19,12 +22,15 @@
             description: 'Description',
             metricType: 'Metric type',
             customTag: 'Custom tag',
+            hostGroups: 'Host group',
             inventory: 'Populated inventory',
             template: 'Linked template',
             interface: 'Configured interface',
             overallScore: 'Included in overall score',
             tags: 'Tags / aliases',
-            acceptedValues: 'Accepted values (optional)'
+            acceptedValues: 'Accepted values (optional)',
+            groupNames: 'Host groups (names or IDs)',
+            groupPlaceholder: 'Servers, Linux, 12'
         }
     };
 
@@ -35,12 +41,18 @@
             return;
         }
 
-        const isTag = typeSelect.value === 'tag';
+        const type = typeSelect.value;
+        const settings = [
+            ['.gov-tag-setting', type === 'tag'],
+            ['.gov-hostgroup-setting', type === 'hostgroups']
+        ];
 
-        card.querySelectorAll('.gov-tag-setting').forEach((fieldGroup) => {
-            fieldGroup.classList.toggle('gov-field-disabled', !isTag);
-            fieldGroup.querySelectorAll('input').forEach((input) => {
-                input.disabled = !isTag;
+        settings.forEach(([selector, enabled]) => {
+            card.querySelectorAll(selector).forEach((fieldGroup) => {
+                fieldGroup.classList.toggle('gov-field-disabled', !enabled);
+                fieldGroup.querySelectorAll('input').forEach((input) => {
+                    input.disabled = !enabled;
+                });
             });
         });
     };
@@ -75,6 +87,7 @@
                     <label>${text.metricType}</label>
                     <select name="cards[${index}][type]" class="gov-card-type">
                         <option value="tag">${text.customTag}</option>
+                        <option value="hostgroups">${text.hostGroups}</option>
                         <option value="inventory">${text.inventory}</option>
                         <option value="templates">${text.template}</option>
                         <option value="interface">${text.interface}</option>
@@ -91,6 +104,10 @@
                 <div class="gov-config-field gov-tag-setting">
                     <label>${text.acceptedValues}</label>
                     <input type="text" class="gov-tag-field" name="cards[${index}][tag_values]" placeholder="prod,homolog">
+                </div>
+                <div class="gov-config-field gov-config-field-wide gov-hostgroup-setting">
+                    <label>${text.groupNames}</label>
+                    <input type="text" class="gov-hostgroup-field" name="cards[${index}][group_names]" placeholder="${text.groupPlaceholder}">
                 </div>
             </div>
         </div>`;

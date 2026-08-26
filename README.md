@@ -17,6 +17,7 @@ Zabbix 6.0 LTS.
 - Cobertura de inventário (sistema operacional ou número de série).
 - Cobertura de vínculo com templates.
 - Cobertura de interfaces com IP ou DNS configurado.
+- Cobertura de associação a grupos de hosts definidos por nome ou ID.
 - Lista de até dez hosts não conformes por indicador.
 - Indicadores circulares renderizados com Apache ECharts 5.6.0.
 - Cores adaptáveis aos temas claro e escuro do Zabbix 6.0.
@@ -51,8 +52,11 @@ Zabbix 6.0 LTS.
 Abra **Governança → Regras e cards**. Cada card permite definir:
 
 - Nome e descrição apresentados no painel.
-- Tipo de métrica: tag personalizada, inventário, template ou interface.
+- Tipo de métrica: tag personalizada, grupo de hosts, inventário, template ou
+  interface.
 - Um ou mais nomes/aliases de tag separados por vírgula.
+- Um ou mais nomes ou IDs de grupos de hosts separados por vírgula. O host será
+  considerado conforme quando pertencer a pelo menos um deles.
 - Valores aceitos para a tag, também separados por vírgula. Se ficar vazio,
   qualquer valor não vazio será considerado conforme.
 - Se a métrica participa ou não do índice geral de governança.

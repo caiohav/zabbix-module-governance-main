@@ -6,7 +6,7 @@
  */
 
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$assetVersion = '?v=1.3.4';
+$assetVersion = '?v=1.4.0';
 $this->addCssFile($moduleWebPath . 'css/governance.css' . $assetVersion);
 $this->includeJsFile('governance.quality.config.js.php');
 
@@ -22,8 +22,8 @@ $form = (new CForm())
 $help = (new CDiv([
     new CTag('p', true,
         $isPt
-            ? 'Crie cards de tags ou reutilize métricas nativas. Nomes e valores alternativos devem ser separados por vírgula.'
-            : 'Create tag cards or reuse native metrics. Alternative names and values must be comma-separated.'
+            ? 'Crie cards de tags, grupos de hosts ou reutilize métricas nativas. Informe múltiplos valores separados por vírgula.'
+            : 'Create tag or host group cards, or reuse native metrics. Enter multiple values separated by commas.'
     ),
     new CTag('p', true,
         $isPt
@@ -43,6 +43,7 @@ foreach ($data['cards'] as $index => $card) {
         ->setValue($card['type'])
         ->addOptions(CSelect::createOptionsFromArray([
             'tag' => $isPt ? 'Tag personalizada' : 'Custom tag',
+            'hostgroups' => $isPt ? 'Grupo de hosts' : 'Host group',
             'inventory' => $isPt ? 'Inventário preenchido' : 'Populated inventory',
             'templates' => $isPt ? 'Template vinculado' : 'Linked template',
             'interface' => $isPt ? 'Interface configurada' : 'Configured interface'
@@ -84,7 +85,16 @@ foreach ($data['cards'] as $index => $card) {
                     (new CTextBox('cards[' . $index . '][tag_values]', $card['tag_values']))
                         ->addClass('gov-tag-field')
                         ->setAttribute('placeholder', 'prod,homolog')
-                ]))->addClass('gov-config-field')->addClass('gov-tag-setting')
+                ]))->addClass('gov-config-field')->addClass('gov-tag-setting'),
+                (new CDiv([
+                    new CTag('label', true,
+                        $isPt ? 'Grupos de hosts (nomes ou IDs)' : 'Host groups (names or IDs)'
+                    ),
+                    (new CTextBox('cards[' . $index . '][group_names]', $card['group_names']))
+                        ->addClass('gov-hostgroup-field')
+                        ->setAttribute('placeholder', $isPt ? 'Servidores, Linux, 12' : 'Servers, Linux, 12')
+                ]))->addClass('gov-config-field')->addClass('gov-config-field-wide')
+                    ->addClass('gov-hostgroup-setting')
             ]))->addClass('gov-config-grid')
         ]))->addClass('gov-config-card')
     );

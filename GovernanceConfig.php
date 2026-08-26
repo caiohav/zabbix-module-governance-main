@@ -29,7 +29,7 @@ final class GovernanceConfig {
 
         $normalized = [];
         $usedIds = [];
-        $allowedTypes = ['tag', 'inventory', 'templates', 'interface'];
+        $allowedTypes = ['tag', 'hostgroups', 'inventory', 'templates', 'interface'];
 
         foreach (array_slice($cards, 0, 30) as $index => $card) {
             if (!is_array($card)) {
@@ -39,6 +39,7 @@ final class GovernanceConfig {
             $type = strtolower(trim((string) ($card['type'] ?? 'tag')));
             $title = trim((string) ($card['title'] ?? ''));
             $tagNames = trim((string) ($card['tag_names'] ?? ''));
+            $groupNames = trim((string) ($card['group_names'] ?? ''));
 
             if (!in_array($type, $allowedTypes, true) || $title === '') {
                 continue;
@@ -46,6 +47,11 @@ final class GovernanceConfig {
 
             // Cards de tag precisam de ao menos um nome/alias.
             if ($type === 'tag' && $tagNames === '') {
+                continue;
+            }
+
+            // Cards de grupo precisam de ao menos um nome ou ID de grupo.
+            if ($type === 'hostgroups' && $groupNames === '') {
                 continue;
             }
 
@@ -62,6 +68,7 @@ final class GovernanceConfig {
                 'description' => mb_substr(trim((string) ($card['description'] ?? '')), 0, 255),
                 'tag_names' => mb_substr($tagNames, 0, 255),
                 'tag_values' => mb_substr(trim((string) ($card['tag_values'] ?? '')), 0, 255),
+                'group_names' => mb_substr($groupNames, 0, 255),
                 'include_score' => !empty($card['include_score']) ? 1 : 0
             ];
         }
@@ -71,7 +78,7 @@ final class GovernanceConfig {
 
     public static function splitList(string $value): array {
         return array_values(array_unique(array_filter(array_map(static function(string $item): string {
-            return strtolower(trim($item));
+            return mb_strtolower(trim($item), 'UTF-8');
         }, explode(',', $value)), static function(string $item): bool {
             return $item !== '';
         })));
@@ -86,6 +93,7 @@ final class GovernanceConfig {
             'description' => $description,
             'tag_names' => $tagNames,
             'tag_values' => '',
+            'group_names' => '',
             'include_score' => 1
         ];
     }

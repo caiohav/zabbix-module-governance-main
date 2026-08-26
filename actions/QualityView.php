@@ -39,6 +39,9 @@ class QualityView extends CController {
         $needsTemplates = (bool) array_filter($cards, static function(array $card): bool {
             return $card['type'] === 'templates';
         });
+        $needsGroups = (bool) array_filter($cards, static function(array $card): bool {
+            return $card['type'] === 'hostgroups';
+        });
         $options = [
             'output' => ['hostid', 'name', 'status', 'maintenance_status'],
             'selectInterfaces' => ['interfaceid', 'type', 'available', 'useip', 'ip', 'dns'],
@@ -54,6 +57,9 @@ class QualityView extends CController {
         }
         if ($needsTemplates) {
             $options['selectParentTemplates'] = ['templateid', 'name'];
+        }
+        if ($needsGroups) {
+            $options['selectGroups'] = ['groupid', 'name'];
         }
         if ($groupids) {
             $options['groupids'] = $groupids;
@@ -184,8 +190,8 @@ class QualityView extends CController {
                 $acceptedValues = GovernanceConfig::splitList($card['tag_values']);
 
                 foreach ($host['tags'] ?? [] as $tag) {
-                    $name = strtolower(trim($tag['tag'] ?? ''));
-                    $value = strtolower(trim($tag['value'] ?? ''));
+                    $name = mb_strtolower(trim($tag['tag'] ?? ''), 'UTF-8');
+                    $value = mb_strtolower(trim($tag['value'] ?? ''), 'UTF-8');
 
                     if (in_array($name, $acceptedNames, true)
                             && $value !== ''
@@ -199,6 +205,21 @@ class QualityView extends CController {
             case 'inventory':
                 foreach (['os', 'serialno_a', 'location', 'type', 'software'] as $field) {
                     if (trim($host['inventory'][$field] ?? '') !== '') {
+                        return true;
+                    }
+                }
+
+                return false;
+
+            case 'hostgroups':
+                $acceptedGroups = GovernanceConfig::splitList($card['group_names']);
+
+                foreach ($host['groups'] ?? [] as $group) {
+                    $groupId = trim((string) ($group['groupid'] ?? ''));
+                    $groupName = mb_strtolower(trim((string) ($group['name'] ?? '')), 'UTF-8');
+
+                    if (in_array($groupId, $acceptedGroups, true)
+                            || in_array($groupName, $acceptedGroups, true)) {
                         return true;
                     }
                 }
