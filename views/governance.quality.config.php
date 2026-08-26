@@ -6,9 +6,9 @@
  */
 
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$assetVersion = '?v=1.3.2';
+$assetVersion = '?v=1.3.3';
 $this->addCssFile($moduleWebPath . 'css/governance.css' . $assetVersion);
-$this->addJsFile($moduleWebPath . 'js/config.js' . $assetVersion);
+$this->includeJsFile('governance.quality.config.js.php');
 
 $isPt = $data['is_pt'];
 $widget = (new CWidget())->setTitle($data['page_title']);
