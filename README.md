@@ -54,5 +54,8 @@ gerações posteriores do frontend e faz o módulo ser ignorado pelo scanner do
 A view utiliza `CWidget`, classe disponível no frontend 6.0. `CHtmlPage` não
 existe nessa versão e causa erro HTTP 500 ao abrir a ação.
 
+O controller utiliza `disableSIDvalidation()`, que é o método existente no
+Zabbix 6.0. O método `disableCsrfValidation()` pertence a versões posteriores.
+
 O Apache ECharts é distribuído junto com o módulo sob a licença Apache 2.0. A
 cópia da licença está em `assets/js/ECHARTS-LICENSE.txt`.

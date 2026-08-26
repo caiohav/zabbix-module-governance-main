@@ -13,7 +13,9 @@ class QualityView extends CController {
      * Inicializa a ação e desabilita validações desnecessárias para views.
      */
     protected function init(): void {
-        $this->disableCsrfValidation();
+        // No Zabbix 6.0 a proteção de ações é chamada de validação de SID.
+        // disableCsrfValidation() só existe em versões posteriores.
+        $this->disableSIDvalidation();
     }
 
     /**
