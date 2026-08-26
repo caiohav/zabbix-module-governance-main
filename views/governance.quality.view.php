@@ -6,7 +6,7 @@
  */
 
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$assetVersion = '?v=1.2.0';
+$assetVersion = '?v=1.3.0';
 $this->addCssFile($moduleWebPath . 'css/governance.css' . $assetVersion);
 $this->addJsFile($moduleWebPath . 'js/echarts.min.js' . $assetVersion);
 $this->addJsFile($moduleWebPath . 'js/quality.js' . $assetVersion);
@@ -18,23 +18,71 @@ $isPt = $data['is_pt'];
 $overallScore = $data['overall_score'];
 $totalHosts = $data['total_hosts'];
 $kpis = $data['kpis'];
+$overview = $data['overview'];
 
 // Determina o status geral para o banner principal
 $overallStatus = ($overallScore >= 90) ? 'good' : (($overallScore >= 70) ? 'warning' : 'critical');
 
-// Banner de Resumo (Score Geral)
+// Resumo geral e indicadores operacionais compactos.
+$overviewItems = [
+    [
+        'label' => $isPt ? 'Ativos / monitorados' : 'Active / monitored',
+        'value' => $overview['monitored'],
+        'hint' => $overview['maintenance'] . ' ' . ($isPt ? 'em manutenção' : 'in maintenance'),
+        'status' => 'good'
+    ],
+    [
+        'label' => $isPt ? 'Inativos / desabilitados' : 'Inactive / disabled',
+        'value' => $overview['disabled'],
+        'hint' => $isPt ? 'Desabilitados' : 'Disabled',
+        'status' => 'neutral'
+    ],
+    [
+        'label' => $isPt ? 'Falha de interface' : 'Interface failure',
+        'value' => $overview['unavailable'],
+        'hint' => $isPt ? 'Hosts afetados' : 'Affected hosts',
+        'status' => $overview['unavailable'] > 0 ? 'critical' : 'good'
+    ],
+    [
+        'label' => $isPt ? 'Problemas altos/críticos' : 'High/critical problems',
+        'value' => $overview['high_problems'],
+        'hint' => $isPt ? 'Abertos e não suprimidos' : 'Open and unsuppressed',
+        'status' => $overview['high_problems'] > 0 ? 'critical' : 'good'
+    ],
+    [
+        'label' => $isPt ? 'Itens não suportados' : 'Unsupported items',
+        'value' => $overview['unsupported_items'],
+        'hint' => $isPt ? 'Itens monitorados' : 'Monitored items',
+        'status' => $overview['unsupported_items'] > 0 ? 'warning' : 'good'
+    ]
+];
+
+$overviewGrid = (new CDiv())->addClass('gov-overview-grid');
+foreach ($overviewItems as $item) {
+    $overviewGrid->addItem(
+        (new CDiv([
+            (new CDiv($item['label']))->addClass('gov-overview-label'),
+            (new CDiv((string) $item['value']))->addClass('gov-overview-value'),
+            (new CDiv($item['hint']))->addClass('gov-overview-hint')
+        ]))
+            ->addClass('gov-overview-item')
+            ->addClass('gov-overview-' . $item['status'])
+    );
+}
+
 $summaryBanner = (new CDiv())
     ->addClass('gov-summary-banner')
     ->addClass('gov-status-' . $overallStatus)
     ->addItem([
         (new CDiv([
-            (new CTag('h2', true, $isPt ? 'Índice Geral de Governança' : 'Overall Governance Score')),
-            (new CDiv($overallScore . '%'))->addClass('gov-summary-score')
+            (new CDiv($isPt ? 'Índice geral' : 'Overall score'))->addClass('gov-summary-label'),
+            (new CDiv($overallScore . '%'))->addClass('gov-summary-score'),
+            (new CDiv(
+                $totalHosts . ' / ' . $overview['registered'] . ' '
+                . ($isPt ? 'hosts analisados' : 'hosts analyzed')
+            ))->addClass('gov-summary-meta')
         ]))->addClass('gov-summary-main'),
-        (new CDiv([
-            (new CTag('span', true, ($isPt ? 'Total de Hosts Monitorados: ' : 'Total Monitored Hosts: '))),
-            (new CTag('strong', true, (string)$totalHosts))
-        ]))->addClass('gov-summary-meta')
+        $overviewGrid
     ]);
 
 // Grid Container para os Cards de KPI
@@ -62,7 +110,6 @@ if (empty($kpis)) {
             ->setAttribute('data-status', $status);
 
         $scoreDisplay = (new CDiv([
-            (new CDiv($kpi['score'] . '%'))->addClass('gov-card-score-value'),
             (new CDiv($kpi['valid_count'] . ' / ' . $kpi['total_count'] . ' ' . ($isPt ? 'em conformidade' : 'compliant')))
                 ->addClass('gov-card-score-sub'),
             (new CDiv(round(100 - $kpi['score'], 1) . '% ' . ($isPt ? 'não conformes' : 'non-compliant')))
@@ -83,8 +130,11 @@ if (empty($kpis)) {
                 $listItems[] = (new CTag('li', true, $hostLink));
             }
 
-            $exceptionsDiv = (new CDiv([
-                (new CTag('strong', true, $isPt ? 'Amostra de não conformes:' : 'Non-compliant sample:'))->addClass('gov-nc-title'),
+            $missingCount = $kpi['total_count'] - $kpi['valid_count'];
+            $exceptionsDiv = (new CTag('details', true, [
+                new CTag('summary', true,
+                    $missingCount . ' ' . ($isPt ? 'não conformes — ver amostra' : 'non-compliant — view sample')
+                ),
                 (new CTag('ul', true, $listItems))->addClass('gov-nc-list')
             ]))->addClass('gov-card-exceptions');
         } else {
@@ -102,8 +152,13 @@ if (empty($kpis)) {
     }
 }
 
+$sectionHeading = (new CDiv([
+    (new CTag('h2', true, $isPt ? 'Indicadores de conformidade' : 'Compliance indicators')),
+    (new CTag('span', true, count($kpis) . ' ' . ($isPt ? 'regras ativas' : 'active rules')))
+]))->addClass('gov-section-heading');
+
 // Monta o layout final dentro do widget do Zabbix
-$content = (new CDiv([$summaryBanner, $cardsGrid]))->addClass('gov-container');
+$content = (new CDiv([$summaryBanner, $sectionHeading, $cardsGrid]))->addClass('gov-container');
 
 if (!empty($data['is_dark'])) {
     $content->addClass('gov-theme-dark');

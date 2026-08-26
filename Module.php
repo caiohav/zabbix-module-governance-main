@@ -24,8 +24,8 @@ class Module extends CModule {
         $isPt = (strpos(strtolower($userLang), 'pt_br') !== false || strpos(strtolower($userLang), 'pt') === 0);
 
         $mainMenuTitle = $isPt ? 'Governança' : 'Governance';
-        $qualityTitle = $isPt ? 'Qualidade do monitoramento' : 'Monitoring quality';
-        $configTitle = $isPt ? 'Configuração dos cards' : 'Card configuration';
+        $qualityTitle = $isPt ? 'Visão geral' : 'Overview';
+        $configTitle = $isPt ? 'Regras e cards' : 'Rules and cards';
 
         $submenu = new CMenu([
             (new CMenuItem($qualityTitle))->setAction('governance.quality.view'),

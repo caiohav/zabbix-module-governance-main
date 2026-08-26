@@ -6,12 +6,11 @@
  */
 
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$assetVersion = '?v=1.2.0';
+$assetVersion = '?v=1.3.0';
 $this->addCssFile($moduleWebPath . 'css/governance.css' . $assetVersion);
 $this->addJsFile($moduleWebPath . 'js/config.js' . $assetVersion);
 
 $widget = (new CWidget())->setTitle($data['page_title']);
-
 $form = (new CForm())
     ->setId('gov-config-form')
     ->setAction((new CUrl('zabbix.php'))
@@ -19,18 +18,18 @@ $form = (new CForm())
         ->getUrl()
     );
 
-$table = (new CTable())
-    ->setId('gov-config-table')
-    ->addClass('gov-config-table')
-    ->setHeader([
-        'Nome do card',
-        'Descrição',
-        'Métrica',
-        'Tags / aliases',
-        'Valores aceitos',
-        'Score geral',
-        ''
-    ]);
+$help = (new CDiv([
+    new CTag('p', true,
+        'Crie cards de tags ou reutilize métricas nativas. Nomes e valores alternativos devem ser separados por vírgula.'
+    ),
+    new CTag('p', true,
+        'Se valores aceitos ficar vazio, qualquer valor não vazio será considerado conforme.'
+    )
+]))->addClass('gov-config-help');
+
+$cardList = (new CDiv())
+    ->setId('gov-config-list')
+    ->addClass('gov-config-list');
 
 foreach ($data['cards'] as $index => $card) {
     $typeSelect = (new CSelect('cards[' . $index . '][type]'))
@@ -43,47 +42,47 @@ foreach ($data['cards'] as $index => $card) {
             'interface' => 'Interface configurada'
         ]));
 
-    $table->addRow((new CRow([
-        new CCol([
+    $cardList->addItem(
+        (new CDiv([
             (new CVar('cards[' . $index . '][id]', $card['id']))->removeId(),
-            (new CTextBox('cards[' . $index . '][title]', $card['title']))
-                ->setAttribute('placeholder', 'Ex.: Tag de Unidade')
-        ]),
-        new CCol(
-            (new CTextArea('cards[' . $index . '][description]', $card['description']))
-                ->setAttribute('rows', '2')
-        ),
-        new CCol($typeSelect),
-        new CCol(
-            (new CTextBox('cards[' . $index . '][tag_names]', $card['tag_names']))
-                ->addClass('gov-tag-field')
-                ->setAttribute('placeholder', 'unidade,unit,site')
-        ),
-        new CCol(
-            (new CTextBox('cards[' . $index . '][tag_values]', $card['tag_values']))
-                ->addClass('gov-tag-field')
-                ->setAttribute('placeholder', 'Opcional: prod,homolog')
-        ),
-        new CCol(
-            (new CCheckBox('cards[' . $index . '][include_score]', 1))
-                ->setChecked((bool) $card['include_score'])
-        ),
-        new CCol(
-            (new CButton('remove_card_' . $index, 'Remover'))
-                ->setAttribute('type', 'button')
-                ->addClass('gov-remove-card')
-        )
-    ]))->addClass('gov-config-row'));
+            (new CDiv([
+                (new CTextBox('cards[' . $index . '][title]', $card['title']))
+                    ->setAttribute('placeholder', 'Nome do card'),
+                (new CButton('remove_card_' . $index, 'Remover'))
+                    ->setAttribute('type', 'button')
+                    ->addClass('gov-remove-card')
+            ]))->addClass('gov-config-card-head'),
+            (new CDiv([
+                (new CDiv([
+                    new CTag('label', true, 'Descrição'),
+                    (new CTextArea('cards[' . $index . '][description]', $card['description']))
+                        ->setAttribute('rows', '2')
+                ]))->addClass('gov-config-field')->addClass('gov-config-field-wide'),
+                (new CDiv([
+                    new CTag('label', true, 'Tipo de métrica'),
+                    $typeSelect
+                ]))->addClass('gov-config-field'),
+                (new CDiv([
+                    (new CCheckBox('cards[' . $index . '][include_score]', 1))
+                        ->setChecked((bool) $card['include_score']),
+                    new CTag('label', true, 'Participa do score geral')
+                ]))->addClass('gov-config-field')->addClass('gov-config-score-field'),
+                (new CDiv([
+                    new CTag('label', true, 'Tags / aliases'),
+                    (new CTextBox('cards[' . $index . '][tag_names]', $card['tag_names']))
+                        ->addClass('gov-tag-field')
+                        ->setAttribute('placeholder', 'unidade,unit,site')
+                ]))->addClass('gov-config-field')->addClass('gov-tag-setting'),
+                (new CDiv([
+                    new CTag('label', true, 'Valores aceitos (opcional)'),
+                    (new CTextBox('cards[' . $index . '][tag_values]', $card['tag_values']))
+                        ->addClass('gov-tag-field')
+                        ->setAttribute('placeholder', 'prod,homolog')
+                ]))->addClass('gov-config-field')->addClass('gov-tag-setting')
+            ]))->addClass('gov-config-grid')
+        ]))->addClass('gov-config-card')
+    );
 }
-
-$help = (new CDiv([
-    new CTag('p', true,
-        'Para métricas de tag, informe um ou mais nomes separados por vírgula. O card considera a tag válida quando ela possui valor.'
-    ),
-    new CTag('p', true,
-        'Valores aceitos é opcional. Quando preenchido, somente esses valores contam como conformes.'
-    )
-]))->addClass('gov-config-help');
 
 $buttons = (new CDiv([
     (new CButton('add_card', 'Adicionar card'))
@@ -92,11 +91,12 @@ $buttons = (new CDiv([
     new CSubmit('save', 'Salvar configuração')
 ]))->addClass('gov-config-actions');
 
-$form->addItem([$help, $table, $buttons]);
+$form->addItem([$help, $cardList, $buttons]);
 
 $content = (new CDiv($form))
     ->addClass('gov-container')
     ->addClass('gov-config-container');
+
 if (!empty($data['is_dark'])) {
     $content->addClass('gov-theme-dark');
 }

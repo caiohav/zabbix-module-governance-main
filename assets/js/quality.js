@@ -36,8 +36,11 @@
         governanceContainer.classList.add('gov-theme-dark');
     }
 
-    // Trilho com contraste adequado para cada tema.
-    const trackColor = isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(128, 128, 128, 0.18)';
+    // A cor vem do CSS do container e acompanha o tema sem pintar o canvas.
+    const trackColor = governanceContainer
+        ? getComputedStyle(governanceContainer).getPropertyValue('--gov-chart-track').trim()
+            || 'rgba(128, 128, 128, 0.2)'
+        : 'rgba(128, 128, 128, 0.2)';
 
     const chartContainers = document.querySelectorAll('.gov-card-chart');
     const chartInstances = [];
@@ -71,7 +74,7 @@
                 },
                 axisLine: {
                     lineStyle: {
-                        width: 9,
+                        width: 7,
                         color: [[1, trackColor]]
                     }
                 },
@@ -86,7 +89,7 @@
                     offsetCenter: [0, 0],
                     formatter: '{value}%',
                     color: activeColor,
-                    fontSize: 18,
+                    fontSize: 14,
                     fontWeight: 'bold'
                 },
                 animationDuration: 800,

@@ -39,12 +39,9 @@ class QualityView extends CController {
         $needsTemplates = (bool) array_filter($cards, static function(array $card): bool {
             return $card['type'] === 'templates';
         });
-        $needsInterfaces = (bool) array_filter($cards, static function(array $card): bool {
-            return $card['type'] === 'interface';
-        });
-
         $options = [
-            'output' => ['hostid', 'name', 'status'],
+            'output' => ['hostid', 'name', 'status', 'maintenance_status'],
+            'selectInterfaces' => ['interfaceid', 'type', 'available', 'useip', 'ip', 'dns'],
             'filter' => ['status' => HOST_STATUS_MONITORED],
             'preservekeys' => true
         ];
@@ -58,14 +55,42 @@ class QualityView extends CController {
         if ($needsTemplates) {
             $options['selectParentTemplates'] = ['templateid', 'name'];
         }
-        if ($needsInterfaces) {
-            $options['selectInterfaces'] = ['interfaceid', 'useip', 'ip', 'dns'];
-        }
         if ($groupids) {
             $options['groupids'] = $groupids;
         }
 
         $hosts = API::Host()->get($options);
+        $disabledOptions = [
+            'countOutput' => true,
+            'filter' => ['status' => HOST_STATUS_NOT_MONITORED]
+        ];
+        if ($groupids) {
+            $disabledOptions['groupids'] = $groupids;
+        }
+        $disabledHosts = (int) API::Host()->get($disabledOptions);
+        $maintenanceHosts = 0;
+        $availableHosts = 0;
+        $unavailableHosts = 0;
+
+        foreach ($hosts as $host) {
+            if ((int) ($host['maintenance_status'] ?? HOST_MAINTENANCE_STATUS_OFF)
+                    === HOST_MAINTENANCE_STATUS_ON) {
+                $maintenanceHosts++;
+            }
+
+            $interfaceAvailability = [];
+            foreach ($host['interfaces'] ?? [] as $interface) {
+                $interfaceAvailability[] = (int) ($interface['available'] ?? INTERFACE_AVAILABLE_UNKNOWN);
+            }
+
+            // Mesmo critério conservador do widget nativo Host availability.
+            if (in_array(INTERFACE_AVAILABLE_FALSE, $interfaceAvailability, true)) {
+                $unavailableHosts++;
+            } elseif (in_array(INTERFACE_AVAILABLE_TRUE, $interfaceAvailability, true)) {
+                $availableHosts++;
+            }
+        }
+
         $totalHosts = count($hosts);
         $kpis = [];
         $scoreValues = [];
@@ -107,12 +132,38 @@ class QualityView extends CController {
             ? round(array_sum($scoreValues) / count($scoreValues), 1)
             : 100.0;
 
+        $hostids = array_keys($hosts);
+        $highProblems = $hostids ? (int) API::Problem()->get([
+            'countOutput' => true,
+            'hostids' => $hostids,
+            'recent' => false,
+            'suppressed' => false,
+            'severities' => [TRIGGER_SEVERITY_HIGH, TRIGGER_SEVERITY_DISASTER]
+        ]) : 0;
+
+        $unsupportedItems = $hostids ? (int) API::Item()->get([
+            'countOutput' => true,
+            'hostids' => $hostids,
+            'monitored' => true,
+            'filter' => ['state' => ITEM_STATE_NOTSUPPORTED]
+        ]) : 0;
+
         $this->setResponse(new CControllerResponseData([
             'is_pt' => $isPt,
             'is_dark' => $isDark,
             'page_title' => $isPt ? 'Qualidade da Governança' : 'Governance Quality',
             'total_hosts' => $totalHosts,
             'overall_score' => $overallScore,
+            'overview' => [
+                'registered' => $totalHosts + $disabledHosts,
+                'monitored' => $totalHosts,
+                'disabled' => $disabledHosts,
+                'available' => $availableHosts,
+                'unavailable' => $unavailableHosts,
+                'maintenance' => $maintenanceHosts,
+                'high_problems' => $highProblems,
+                'unsupported_items' => $unsupportedItems
+            ],
             'kpis' => $kpis
         ]));
     }

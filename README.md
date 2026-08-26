@@ -22,6 +22,9 @@ Zabbix 6.0 LTS.
 - Cards configuráveis pelo frontend: nome, descrição, tipo de métrica, tags,
   valores aceitos e participação no score geral.
 - Inclusão e remoção dinâmica de cards sem editar arquivos PHP.
+- Resumo operacional compacto com hosts monitorados/desabilitados, falhas de
+  interface, problemas altos ou críticos e itens não suportados.
+- Cards compactos e responsivos, com não conformidades recolhidas por padrão.
 
 ## Pré-requisitos
 
@@ -43,7 +46,7 @@ Zabbix 6.0 LTS.
 
 ## Configuração dos cards
 
-Abra **Governança → Configuração dos cards**. Cada card permite definir:
+Abra **Governança → Regras e cards**. Cada card permite definir:
 
 - Nome e descrição apresentados no painel.
 - Tipo de métrica: tag personalizada, inventário, template ou interface.
