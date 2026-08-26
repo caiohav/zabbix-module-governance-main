@@ -17,6 +17,7 @@ Zabbix 6.0 LTS.
 - Cobertura de interfaces com IP ou DNS configurado.
 - Lista de até dez hosts não conformes por indicador.
 - Indicadores circulares renderizados com Apache ECharts 5.6.0.
+- Cores adaptáveis aos temas claro e escuro do Zabbix 6.0.
 
 ## Pré-requisitos
 

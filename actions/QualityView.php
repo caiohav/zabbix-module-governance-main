@@ -42,6 +42,8 @@ class QualityView extends CController {
     protected function doAction(): void {
         $userLang = CWebUser::getLang();
         $isPt = (strpos(strtolower($userLang), 'pt') === 0);
+        $userTheme = CWebUser::$data['theme'] ?? '';
+        $isDark = (strpos(strtolower($userTheme), 'dark') !== false);
 
         // Captura filtros opcionais
         $groupids = $this->getInput('groupids', []);
@@ -69,6 +71,7 @@ class QualityView extends CController {
         if ($totalHosts === 0) {
             $this->setResponse(new CControllerResponseData([
                 'is_pt' => $isPt,
+                'is_dark' => $isDark,
                 'page_title' => $isPt ? 'Qualidade de Governança' : 'Governance Quality',
                 'total_hosts' => 0,
                 'overall_score' => 100,
@@ -283,6 +286,7 @@ class QualityView extends CController {
         // Monta a resposta do Controller
         $this->setResponse(new CControllerResponseData([
             'is_pt' => $isPt,
+            'is_dark' => $isDark,
             'page_title' => $isPt ? 'Qualidade da Governança' : 'Governance Quality',
             'total_hosts' => $totalHosts,
             'overall_score' => $overallScore,

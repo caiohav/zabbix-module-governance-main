@@ -17,8 +17,19 @@
         critical: '#d32f2f'
     };
 
-    // Cor do trilho de fundo com opacidade para compatibilidade com temas claro e escuro
-    const trackColor = 'rgba(128, 128, 128, 0.18)';
+    const governanceContainer = document.querySelector('.gov-container');
+    const stylesheetDark = Array.from(document.styleSheets).some((stylesheet) =>
+        stylesheet.href && stylesheet.href.includes('dark-theme')
+    );
+    const isDark = governanceContainer
+        && (governanceContainer.classList.contains('gov-theme-dark') || stylesheetDark);
+
+    if (governanceContainer && isDark) {
+        governanceContainer.classList.add('gov-theme-dark');
+    }
+
+    // Trilho com contraste adequado para cada tema.
+    const trackColor = isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(128, 128, 128, 0.18)';
 
     const chartContainers = document.querySelectorAll('.gov-card-chart');
     const chartInstances = [];

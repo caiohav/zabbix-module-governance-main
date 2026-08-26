@@ -6,7 +6,7 @@
  */
 
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$assetVersion = '?v=1.1.2';
+$assetVersion = '?v=1.1.3';
 $this->addCssFile($moduleWebPath . 'css/governance.css' . $assetVersion);
 $this->addJsFile($moduleWebPath . 'js/echarts.min.js' . $assetVersion);
 $this->addJsFile($moduleWebPath . 'js/quality.js' . $assetVersion);
@@ -104,5 +104,9 @@ if (empty($kpis)) {
 
 // Monta o layout final dentro do widget do Zabbix
 $content = (new CDiv([$summaryBanner, $cardsGrid]))->addClass('gov-container');
+
+if (!empty($data['is_dark'])) {
+    $content->addClass('gov-theme-dark');
+}
 
 $widget->addItem($content)->show();

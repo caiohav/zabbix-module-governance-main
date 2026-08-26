@@ -219,6 +219,47 @@
     padding: 2px 0;
 }
 
+/* --------------------------------------------------------------------------
+   Zabbix 6.0 dark theme
+   -------------------------------------------------------------------------- */
+.gov-theme-dark {
+    color: #f2f2f2;
+}
+
+.gov-theme-dark .gov-summary-banner,
+.gov-theme-dark .gov-kpi-card,
+.gov-theme-dark .gov-no-data {
+    background: #2b2b2b;
+    border-color: #454545;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.gov-theme-dark .gov-summary-main h2,
+.gov-theme-dark .gov-card-header h3,
+.gov-theme-dark .gov-card-score-value,
+.gov-theme-dark .gov-nc-title {
+    color: #f2f2f2;
+}
+
+.gov-theme-dark .gov-summary-meta,
+.gov-theme-dark .gov-card-desc,
+.gov-theme-dark .gov-card-score-sub,
+.gov-theme-dark .gov-no-data {
+    color: #a7a7a7;
+}
+
+.gov-theme-dark .gov-card-exceptions {
+    border-top-color: #454545;
+}
+
+.gov-theme-dark .gov-nc-list a {
+    color: #4796c4;
+}
+
+.gov-theme-dark .gov-kpi-card:hover {
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
 /* Responsive adjustment */
 @media (max-width: 768px) {
     .gov-summary-banner {
