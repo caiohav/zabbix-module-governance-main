@@ -3,7 +3,8 @@
  * ECharts Card Gauge/Ring Charts Renderer
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+(() => {
+    const initializeCharts = () => {
     // Valida se a biblioteca Apache ECharts foi carregada
     if (typeof echarts === 'undefined') {
         console.error('[Governance Module] ECharts library not loaded.');
@@ -28,7 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const activeColor = colorMap[status] || colorMap.critical;
 
         // Inicializa o elemento ECharts
-        const chart = echarts.init(container);
+        const existingChart = echarts.getInstanceByDom(container);
+        const chart = existingChart || echarts.init(container);
 
         const option = {
             series: [{
@@ -60,7 +62,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     value: score
                 }],
                 detail: { 
-                    show: false 
+                    show: true,
+                    offsetCenter: [0, 0],
+                    formatter: '{value}%',
+                    color: activeColor,
+                    fontSize: 18,
+                    fontWeight: 'bold'
                 },
                 animationDuration: 800,
                 animationEasing: 'cubicOut'
@@ -79,4 +86,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
-});
+
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeCharts, { once: true });
+    } else {
+        initializeCharts();
+    }
+})();

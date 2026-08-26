@@ -50,6 +50,7 @@ class QualityView extends CController {
             'selectTags' => 'extend',
             'selectInventory' => ['os', 'serialno_a', 'location', 'type', 'software'],
             'selectParentTemplates' => ['templateid', 'name'],
+            'selectInterfaces' => ['interfaceid', 'useip', 'ip', 'dns'],
             'filter' => ['status' => HOST_STATUS_MONITORED],
             'preservekeys' => true
         ];
@@ -76,27 +77,38 @@ class QualityView extends CController {
 
         // --- Contadores de Conformidade ---
         $countTagDepartment = 0;
+        $countTagEnvironment = 0;
+        $countTagOwner = 0;
         $countInventoryComplete = 0;
         $countTemplateBound = 0;
+        $countInterfaceConfigured = 0;
 
         $nonCompliantDeptTag = [];
+        $nonCompliantEnvironmentTag = [];
+        $nonCompliantOwnerTag = [];
         $nonCompliantInventory = [];
         $nonCompliantTemplate = [];
+        $nonCompliantInterface = [];
+
+        // Uma tag só é considerada válida quando também possui valor.
+        $hasTag = static function(array $tags, array $acceptedNames): bool {
+            foreach ($tags as $tag) {
+                $tagName = strtolower(trim($tag['tag'] ?? ''));
+                $tagValue = trim($tag['value'] ?? '');
+
+                if (in_array($tagName, $acceptedNames, true) && $tagValue !== '') {
+                    return true;
+                }
+            }
+
+            return false;
+        };
 
         foreach ($hosts as $hostid => $host) {
             // Não dependa de preservekeys para obter o ID correto do host.
             $hostid = $host['hostid'];
-            // 1. KPI: Tag de Departamento
-            $hasDeptTag = false;
-            if (!empty($host['tags'])) {
-                foreach ($host['tags'] as $tag) {
-                    $tagName = strtolower(trim($tag['tag']));
-                    if (in_array($tagName, ['department', 'departamento', 'dept'])) {
-                        $hasDeptTag = true;
-                        break;
-                    }
-                }
-            }
+            // 1. KPI: Tag de Departamento.
+            $hasDeptTag = $hasTag($host['tags'] ?? [], ['department', 'departamento', 'dept']);
 
             if ($hasDeptTag) {
                 $countTagDepartment++;
@@ -104,13 +116,35 @@ class QualityView extends CController {
                 $nonCompliantDeptTag[] = ['hostid' => $hostid, 'name' => $host['name']];
             }
 
-            // 2. KPI: Preenchimento de Inventário (S.O. ou Número de Série)
+            // 2. KPI: Tag de Ambiente.
+            $hasEnvironmentTag = $hasTag($host['tags'] ?? [], ['environment', 'ambiente', 'env']);
+
+            if ($hasEnvironmentTag) {
+                $countTagEnvironment++;
+            } else {
+                $nonCompliantEnvironmentTag[] = ['hostid' => $hostid, 'name' => $host['name']];
+            }
+
+            // 3. KPI: Tag de responsável ou equipe.
+            $hasOwnerTag = $hasTag(
+                $host['tags'] ?? [],
+                ['owner', 'responsavel', 'responsável', 'responsible', 'team', 'equipe']
+            );
+
+            if ($hasOwnerTag) {
+                $countTagOwner++;
+            } else {
+                $nonCompliantOwnerTag[] = ['hostid' => $hostid, 'name' => $host['name']];
+            }
+
+            // 4. KPI: Preenchimento de Inventário.
             $hasInventory = false;
             if (!empty($host['inventory']) && is_array($host['inventory'])) {
-                $os = trim($host['inventory']['os'] ?? '');
-                $serial = trim($host['inventory']['serialno_a'] ?? '');
-                if ($os !== '' || $serial !== '') {
-                    $hasInventory = true;
+                foreach (['os', 'serialno_a', 'location', 'type', 'software'] as $inventoryField) {
+                    if (trim($host['inventory'][$inventoryField] ?? '') !== '') {
+                        $hasInventory = true;
+                        break;
+                    }
                 }
             }
 
@@ -120,21 +154,46 @@ class QualityView extends CController {
                 $nonCompliantInventory[] = ['hostid' => $hostid, 'name' => $host['name']];
             }
 
-            // 3. KPI: Vínculo de Templates
+            // 5. KPI: Vínculo de Templates.
             $hasTemplate = !empty($host['parentTemplates']);
             if ($hasTemplate) {
                 $countTemplateBound++;
             } else {
                 $nonCompliantTemplate[] = ['hostid' => $hostid, 'name' => $host['name']];
             }
+
+            // 6. KPI: Pelo menos uma interface com IP ou DNS preenchido.
+            $hasInterface = false;
+            foreach ($host['interfaces'] ?? [] as $interface) {
+                $address = ((int) ($interface['useip'] ?? 1) === 1)
+                    ? trim($interface['ip'] ?? '')
+                    : trim($interface['dns'] ?? '');
+
+                if ($address !== '') {
+                    $hasInterface = true;
+                    break;
+                }
+            }
+
+            if ($hasInterface) {
+                $countInterfaceConfigured++;
+            } else {
+                $nonCompliantInterface[] = ['hostid' => $hostid, 'name' => $host['name']];
+            }
         }
 
         // --- Cálculos de Porcentagem e Score Geral ---
         $pctDeptTag = round(($countTagDepartment / $totalHosts) * 100, 1);
+        $pctEnvironmentTag = round(($countTagEnvironment / $totalHosts) * 100, 1);
+        $pctOwnerTag = round(($countTagOwner / $totalHosts) * 100, 1);
         $pctInventory = round(($countInventoryComplete / $totalHosts) * 100, 1);
         $pctTemplate = round(($countTemplateBound / $totalHosts) * 100, 1);
+        $pctInterface = round(($countInterfaceConfigured / $totalHosts) * 100, 1);
 
-        $overallScore = round(($pctDeptTag + $pctInventory + $pctTemplate) / 3, 1);
+        $overallScore = round(
+            ($pctDeptTag + $pctEnvironmentTag + $pctOwnerTag + $pctInventory + $pctTemplate + $pctInterface) / 6,
+            1
+        );
 
         // Função auxiliar para definir severidade visual (CSS status)
         $getStatus = function(float $pct): string {
@@ -157,12 +216,36 @@ class QualityView extends CController {
                 'status' => $getStatus($pctDeptTag),
                 'non_compliant' => array_slice($nonCompliantDeptTag, 0, 10)
             ],
+            'tag_environment' => [
+                'id' => 'kpi_tag_environment',
+                'title' => $isPt ? 'Tag de Ambiente' : 'Environment Tag',
+                'description' => $isPt
+                    ? 'Hosts com tag "ambiente", "environment" ou "env" e valor preenchido.'
+                    : 'Hosts with a populated "environment" or "env" tag.',
+                'score' => $pctEnvironmentTag,
+                'valid_count' => $countTagEnvironment,
+                'total_count' => $totalHosts,
+                'status' => $getStatus($pctEnvironmentTag),
+                'non_compliant' => array_slice($nonCompliantEnvironmentTag, 0, 10)
+            ],
+            'tag_owner' => [
+                'id' => 'kpi_tag_owner',
+                'title' => $isPt ? 'Tag de Responsável/Equipe' : 'Owner/Team Tag',
+                'description' => $isPt
+                    ? 'Hosts com tag de responsável ou equipe e valor preenchido.'
+                    : 'Hosts with a populated owner, responsible or team tag.',
+                'score' => $pctOwnerTag,
+                'valid_count' => $countTagOwner,
+                'total_count' => $totalHosts,
+                'status' => $getStatus($pctOwnerTag),
+                'non_compliant' => array_slice($nonCompliantOwnerTag, 0, 10)
+            ],
             'inventory_fill' => [
                 'id' => 'kpi_inventory',
                 'title' => $isPt ? 'Preenchimento de Inventário' : 'Inventory Coverage',
                 'description' => $isPt 
-                    ? 'Hosts com dados de inventário (S.O. ou N/S) preenchidos.' 
-                    : 'Hosts with basic inventory data (O.S. or Serial No) filled.',
+                    ? 'Hosts com ao menos um campo essencial de inventário preenchido.'
+                    : 'Hosts with at least one essential inventory field populated.',
                 'score' => $pctInventory,
                 'valid_count' => $countInventoryComplete,
                 'total_count' => $totalHosts,
@@ -180,6 +263,18 @@ class QualityView extends CController {
                 'total_count' => $totalHosts,
                 'status' => $getStatus($pctTemplate),
                 'non_compliant' => array_slice($nonCompliantTemplate, 0, 10)
+            ],
+            'interface_configured' => [
+                'id' => 'kpi_interface',
+                'title' => $isPt ? 'Interface Configurada' : 'Configured Interface',
+                'description' => $isPt
+                    ? 'Hosts com ao menos uma interface contendo IP ou DNS válido.'
+                    : 'Hosts with at least one interface containing an IP or DNS address.',
+                'score' => $pctInterface,
+                'valid_count' => $countInterfaceConfigured,
+                'total_count' => $totalHosts,
+                'status' => $getStatus($pctInterface),
+                'non_compliant' => array_slice($nonCompliantInterface, 0, 10)
             ]
         ];
 

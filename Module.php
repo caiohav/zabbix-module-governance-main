@@ -4,6 +4,7 @@ namespace Modules\Governance;
 
 use Core\CModule;
 use APP;
+use CMenu;
 use CMenuItem;
 use CWebUser;
 
@@ -23,10 +24,16 @@ class Module extends CModule {
         $isPt = (strpos(strtolower($userLang), 'pt_br') !== false || strpos(strtolower($userLang), 'pt') === 0);
 
         $mainMenuTitle = $isPt ? 'Governança' : 'Governance';
-        // Um item direto usa o padrão documentado do Zabbix 6.0 e reduz os
-        // pontos de falha durante a inicialização do menu.
+        $qualityTitle = $isPt ? 'Qualidade do monitoramento' : 'Monitoring quality';
+
+        $submenu = new CMenu([
+            (new CMenuItem($qualityTitle))->setAction('governance.quality.view')
+        ]);
+
         APP::Component()->get('menu.main')->add(
-            (new CMenuItem($mainMenuTitle))->setAction('governance.quality.view')
+            (new CMenuItem($mainMenuTitle))
+                ->setIcon('icon-reports')
+                ->setSubMenu($submenu)
         );
     }
 }

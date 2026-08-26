@@ -5,6 +5,12 @@
  * @var array $data
  */
 
+$moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
+$assetVersion = '?v=1.1.0';
+$this->addCssFile($moduleWebPath . 'css/governance.css' . $assetVersion);
+$this->addJsFile($moduleWebPath . 'js/echarts.min.js' . $assetVersion);
+$this->addJsFile($moduleWebPath . 'js/quality.js' . $assetVersion);
+
 $page = (new CHtmlPage())
     ->setTitle($data['page_title']);
 
@@ -48,15 +54,19 @@ if (empty($kpis)) {
             (new CTag('p', true, $kpi['description']))->addClass('gov-card-desc')
         ]))->addClass('gov-card-header');
 
-        // Indicador circular em CSS: evita dependência externa e funciona no Zabbix 6.0.
+        // Container do indicador circular renderizado pelo Apache ECharts.
         $chartDiv = (new CDiv())
             ->setId('chart-' . $cardId)
             ->addClass('gov-card-chart')
-            ->setAttribute('style', '--gov-score: ' . min(100, max(0, (float) $kpi['score'])) . ';');
+            ->setAttribute('data-score', $kpi['score'])
+            ->setAttribute('data-status', $status);
 
         $scoreDisplay = (new CDiv([
             (new CDiv($kpi['score'] . '%'))->addClass('gov-card-score-value'),
-            (new CDiv($kpi['valid_count'] . ' / ' . $kpi['total_count'] . ' ' . ($isPt ? 'em conformidade' : 'compliant')))->addClass('gov-card-score-sub')
+            (new CDiv($kpi['valid_count'] . ' / ' . $kpi['total_count'] . ' ' . ($isPt ? 'em conformidade' : 'compliant')))
+                ->addClass('gov-card-score-sub'),
+            (new CDiv(round(100 - $kpi['score'], 1) . '% ' . ($isPt ? 'não conformes' : 'non-compliant')))
+                ->addClass('gov-card-score-missing')
         ]))->addClass('gov-card-score-box');
 
         $cardBody = (new CDiv([$chartDiv, $scoreDisplay]))->addClass('gov-card-body');
@@ -94,12 +104,5 @@ if (empty($kpis)) {
 
 // Monta o layout final dentro do widget do Zabbix
 $content = (new CDiv([$summaryBanner, $cardsGrid]))->addClass('gov-container');
-
-// O manifesto v1 do Zabbix 6.0 não possui a seção "assets". Carregar o CSS
-// aqui mantém o módulo autocontido e compatível com toda a série 6.0 LTS.
-$cssFile = dirname(__DIR__) . '/assets/css/governance.css';
-if (is_readable($cssFile)) {
-    echo '<style>', file_get_contents($cssFile), '</style>';
-}
 
 $page->addItem($content)->show();

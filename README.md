@@ -7,11 +7,16 @@ Zabbix 6.0 LTS.
 
 - Menu visível exclusivamente para usuários Super Admin.
 - Interface automática em português ou inglês.
+- Menu principal com ícone nativo e submenu para as páginas de governança.
 - Cobertura de tag de departamento (`departamento`, `department` ou `dept`).
+- Cobertura de tag de ambiente (`ambiente`, `environment` ou `env`).
+- Cobertura de tag de responsável/equipe (`owner`, `responsavel`, `team`,
+  `equipe` e equivalentes).
 - Cobertura de inventário (sistema operacional ou número de série).
 - Cobertura de vínculo com templates.
+- Cobertura de interfaces com IP ou DNS configurado.
 - Lista de até dez hosts não conformes por indicador.
-- Indicadores circulares sem bibliotecas externas.
+- Indicadores circulares renderizados com Apache ECharts 5.6.0.
 
 ## Pré-requisitos
 
@@ -45,3 +50,6 @@ Zabbix 6.0 LTS.
 O manifesto usa a versão `1.0`, exigida pelo Zabbix 6.0. O formato `2.0` é de
 gerações posteriores do frontend e faz o módulo ser ignorado pelo scanner do
 6.0.
+
+O Apache ECharts é distribuído junto com o módulo sob a licença Apache 2.0. A
+cópia da licença está em `assets/js/ECHARTS-LICENSE.txt`.
