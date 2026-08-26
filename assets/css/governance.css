@@ -1,0 +1,241 @@
+/* ==========================================================================
+   Governance & Quality Audit Module Styles
+   Zabbix 6.x Frontend
+   ========================================================================== */
+
+/* Main Layout Container */
+.gov-container {
+    padding: 15px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   Summary Banner (Overall Score)
+   -------------------------------------------------------------------------- */
+.gov-summary-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 25px;
+    border-radius: 8px;
+    background: var(--ui-bg-color, #f0f3f6);
+    border: 1px solid var(--ui-border-color, #dfe4e8);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.gov-summary-banner.gov-status-good {
+    border-left: 6px solid #2e7d32;
+}
+
+.gov-summary-banner.gov-status-warning {
+    border-left: 6px solid #f57c00;
+}
+
+.gov-summary-banner.gov-status-critical {
+    border-left: 6px solid #d32f2f;
+}
+
+.gov-summary-main h2 {
+    margin: 0 0 5px 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--ui-font-color, #1f2c33);
+}
+
+.gov-summary-score {
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.gov-status-good .gov-summary-score { color: #2e7d32; }
+.gov-status-warning .gov-summary-score { color: #f57c00; }
+.gov-status-critical .gov-summary-score { color: #d32f2f; }
+
+.gov-summary-meta {
+    font-size: 0.95rem;
+    color: var(--ui-font-color-light, #768d99);
+}
+
+/* --------------------------------------------------------------------------
+   KPI Grid & Cards
+   -------------------------------------------------------------------------- */
+.gov-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+.gov-no-data {
+    grid-column: 1 / -1;
+    padding: 30px;
+    text-align: center;
+    font-size: 1rem;
+    color: var(--ui-font-color-light, #768d99);
+    background: var(--ui-bg-color, #ffffff);
+    border: 1px dashed var(--ui-border-color, #dfe4e8);
+    border-radius: 6px;
+}
+
+/* Individual KPI Card */
+.gov-kpi-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: var(--ui-bg-color, #ffffff);
+    border: 1px solid var(--ui-border-color, #dfe4e8);
+    border-radius: 8px;
+    padding: 18px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.gov-kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Card Status Accent Top Border */
+.gov-kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+}
+
+.gov-card-status-good::before { background-color: #2e7d32; }
+.gov-card-status-warning::before { background-color: #f57c00; }
+.gov-card-status-critical::before { background-color: #d32f2f; }
+
+/* Card Header */
+.gov-card-header h3 {
+    margin: 0 0 4px 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--ui-font-color, #1f2c33);
+}
+
+.gov-card-desc {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--ui-font-color-light, #768d99);
+    line-height: 1.35;
+    min-height: 2.7em;
+}
+
+/* Card Body (Chart & Score display) */
+.gov-card-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 15px 0;
+    padding: 10px 0;
+}
+
+.gov-card-chart {
+    width: 110px;
+    height: 110px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: conic-gradient(
+        var(--gov-chart-color, #d32f2f) calc(var(--gov-score) * 1%),
+        rgba(128, 128, 128, 0.18) 0
+    );
+    position: relative;
+}
+
+.gov-card-chart::after {
+    content: '';
+    position: absolute;
+    inset: 9px;
+    border-radius: 50%;
+    background: var(--ui-bg-color, #fff);
+}
+
+.gov-card-status-good { --gov-chart-color: #2e7d32; }
+.gov-card-status-warning { --gov-chart-color: #f57c00; }
+.gov-card-status-critical { --gov-chart-color: #d32f2f; }
+
+.gov-card-score-box {
+    text-align: right;
+    flex-grow: 1;
+    padding-left: 10px;
+}
+
+.gov-card-score-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--ui-font-color, #1f2c33);
+}
+
+.gov-card-score-sub {
+    font-size: 0.8rem;
+    color: var(--ui-font-color-light, #768d99);
+    margin-top: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   Exceptions / Non-compliant Sample List
+   -------------------------------------------------------------------------- */
+.gov-card-exceptions {
+    margin-top: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--ui-border-color, #edf2f5);
+    font-size: 0.82rem;
+}
+
+.gov-nc-title {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--ui-font-color, #1f2c33);
+    font-size: 0.8rem;
+}
+
+.gov-nc-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.gov-nc-list li {
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gov-nc-list a {
+    color: var(--ui-link-color, #0275d8);
+    text-decoration: none;
+}
+
+.gov-nc-list a:hover {
+    text-decoration: underline;
+}
+
+.gov-nc-success {
+    color: #2e7d32;
+    font-weight: 600;
+    display: inline-block;
+    padding: 2px 0;
+}
+
+/* Responsive adjustment */
+@media (max-width: 768px) {
+    .gov-summary-banner {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+}
