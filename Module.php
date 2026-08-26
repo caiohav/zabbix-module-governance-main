@@ -34,7 +34,7 @@ class Module extends CModule {
 
         APP::Component()->get('menu.main')->add(
             (new CMenuItem($mainMenuTitle))
-                ->setIcon('icon-reports')
+                ->setIcon('icon-dashboard')
                 ->setSubMenu($submenu)
         );
     }
