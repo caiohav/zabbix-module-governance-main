@@ -6,7 +6,7 @@
  */
 
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$assetVersion = '?v=1.1.3';
+$assetVersion = '?v=1.1.4';
 $this->addCssFile($moduleWebPath . 'css/governance.css' . $assetVersion);
 $this->addJsFile($moduleWebPath . 'js/echarts.min.js' . $assetVersion);
 $this->addJsFile($moduleWebPath . 'js/quality.js' . $assetVersion);

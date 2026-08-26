@@ -21,8 +21,16 @@
     const stylesheetDark = Array.from(document.styleSheets).some((stylesheet) =>
         stylesheet.href && stylesheet.href.includes('dark-theme')
     );
+    const bodyColorParts = getComputedStyle(document.body).backgroundColor.match(/[\d.]+/g) || [];
+    const bodyLuminance = bodyColorParts.length >= 3
+        ? (0.2126 * Number(bodyColorParts[0]))
+            + (0.7152 * Number(bodyColorParts[1]))
+            + (0.0722 * Number(bodyColorParts[2]))
+        : 255;
     const isDark = governanceContainer
-        && (governanceContainer.classList.contains('gov-theme-dark') || stylesheetDark);
+        && (governanceContainer.classList.contains('gov-theme-dark')
+            || stylesheetDark
+            || bodyLuminance < 140);
 
     if (governanceContainer && isDark) {
         governanceContainer.classList.add('gov-theme-dark');
@@ -44,6 +52,7 @@
         const chart = existingChart || echarts.init(container);
 
         const option = {
+            backgroundColor: 'transparent',
             series: [{
                 type: 'gauge',
                 startAngle: 90,

@@ -18,6 +18,7 @@ Zabbix 6.0 LTS.
 - Lista de até dez hosts não conformes por indicador.
 - Indicadores circulares renderizados com Apache ECharts 5.6.0.
 - Cores adaptáveis aos temas claro e escuro do Zabbix 6.0.
+- Cards translúcidos e canvas ECharts transparente, sem fallback branco.
 
 ## Pré-requisitos
 
