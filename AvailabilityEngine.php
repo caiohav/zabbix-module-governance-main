@@ -72,9 +72,9 @@ final class AvailabilityEngine {
         if ($interval[1] <= $interval[0]) { return; }
         $last = count($result) - 1;
         if ($last >= 0 && $result[$last][1] === $interval[0]
-                && abs($result[$last][2] - $interval[2]) < 1e-10
-                && abs($result[$last][3] - $interval[3]) < 1e-10
-                && abs($result[$last][4] - $interval[4]) < 1e-10) {
+                && $result[$last][2] == $interval[2]
+                && $result[$last][3] == $interval[3]
+                && $result[$last][4] == $interval[4]) {
             $result[$last][1] = $interval[1];
         }
         else { $result[] = $interval; }
@@ -87,26 +87,31 @@ final class AvailabilityEngine {
         $total = 0.0;
         foreach ($series as $index => $intervals) {
             $weight = $mode === 'mean' ? ($weights[$index] ?? 1.0) : 1.0;
+            if ($weight <= 0) { continue; }
             $total += $weight;
             foreach ($intervals ?: self::unknown($from, $to) as $interval) {
                 if ($interval[1] <= $interval[0]) { continue; }
                 foreach ([$interval[0] => 1, $interval[1] => -1] as $clock => $sign) {
-                    if (!isset($events[$clock])) { $events[$clock] = [0.0, 0.0, 0.0]; }
-                    for ($s = 0; $s < 3; $s++) { $events[$clock][$s] += $sign * $weight * $interval[$s + 2]; }
+                    if (!isset($events[$clock])) { $events[$clock] = [0.0, 0.0, 0.0, 0, 0, 0]; }
+                    for ($s = 0; $s < 3; $s++) {
+                        $events[$clock][$s] += $sign * $weight * $interval[$s + 2];
+                        $events[$clock][$s + 3] += $interval[$s + 2] > 0 ? $sign : 0;
+                    }
                 }
             }
         }
         if ($total <= 0) { return self::unknown($from, $to); }
         ksort($events, SORT_NUMERIC);
         $current = [0.0, 0.0, 0.0];
+        $active = [0, 0, 0];
         $cursor = $from;
         $result = [];
         foreach ($events as $clock => $delta) {
             $end = min($to, (int) $clock);
             if ($end > $cursor) {
                 if ($mode === 'any_down') {
-                    $down = $current[1] > 1e-8;
-                    $unknown = !$down && $current[2] > 1e-8;
+                    $down = $active[1] > 0;
+                    $unknown = !$down && $active[2] > 0;
                     $fractions = [$down || $unknown ? 0.0 : 1.0, $down ? 1.0 : 0.0, $unknown ? 1.0 : 0.0];
                 }
                 else {
@@ -115,24 +120,46 @@ final class AvailabilityEngine {
                 self::append($result, [$cursor, $end, $fractions[0], $fractions[1], $fractions[2]]);
                 $cursor = $end;
             }
-            for ($s = 0; $s < 3; $s++) { $current[$s] += $delta[$s]; }
+            for ($s = 0; $s < 3; $s++) {
+                $current[$s] += $delta[$s];
+                $active[$s] += $delta[$s + 3];
+                // Remove arithmetic residue only when no actual source has this state.
+                // An epsilon here would erase real gaps/outages of low-weight children.
+                if ($active[$s] === 0) { $current[$s] = 0.0; }
+            }
         }
         return $result;
     }
 
     public static function summary(array $series, int $from, int $to): array {
         $durations = [0.0, 0.0, 0.0];
+        $covered = 0;
         foreach ($series as $interval) {
             $seconds = max(0, min($to, $interval[1]) - max($from, $interval[0]));
+            $covered += $seconds;
             for ($s = 0; $s < 3; $s++) { $durations[$s] += $seconds * $interval[$s + 2]; }
         }
         $total = $to - $from;
+        if ($total > $covered) { $durations[2] += $total - $covered; }
         $known = $durations[0] + $durations[1];
+        $complete = $covered === $total;
+        $lower = $total > 0 ? self::percentage($durations[0], $durations[1] + $durations[2], $total, $complete) : null;
         return ['up' => $durations[0], 'down' => $durations[1], 'unknown' => $durations[2],
-            'score' => $total > 0 && $durations[2] < 1e-6 ? 100 * $durations[0] / $total : null,
-            'observed' => $known > 0 ? 100 * $durations[0] / $known : null,
-            'coverage' => $total > 0 ? 100 * $known / $total : 0,
-            'lower' => $total > 0 ? 100 * $durations[0] / $total : null,
-            'upper' => $total > 0 ? 100 * ($durations[0] + $durations[2]) / $total : null];
+            'score' => $total > 0 && $complete && $durations[2] === 0.0 ? $lower : null,
+            'observed' => $known > 0 ? self::percentage($durations[0], $durations[1], $known) : null,
+            'coverage' => $total > 0 ? self::percentage($known, $durations[2], $total, $complete) : 0,
+            'lower' => $lower,
+            'upper' => $total > 0 ? self::percentage($durations[0] + $durations[2], $durations[1], $total, $complete) : null];
+    }
+
+    private static function percentage(float $included, float $excluded, float $total, bool $complete = true): float {
+        // Use the smaller component: subtraction near zero loses precision, while a
+        // sum near 100% can retain rounding residue from many weighted intervals.
+        $percentage = 100 * ($complete && $included > $excluded
+            ? 1 - $excluded / $total : $included / $total);
+        $percentage = max(0.0, min(100.0, $percentage));
+        // A real nonzero excluded duration must never become a displayed 100%,
+        // even when its percentage is smaller than one IEEE-754 step below 100.
+        return $excluded > 0.0 ? min(99.99999999999999, $percentage) : $percentage;
     }
 }

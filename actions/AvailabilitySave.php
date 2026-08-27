@@ -42,7 +42,7 @@ class AvailabilitySave extends CController {
         catch (\Exception $e) {
             CMessageHelper::setErrorTitle($isPt ? 'As regras não foram salvas.' : 'Rules were not saved.');
             CMessageHelper::addError($e->getMessage());
-            $redirect->setFormData(['availability_json' => $json]);
+            $redirect->setFormData(['availability_json' => $json, 'config_revision' => $this->getInput('config_revision')]);
         }
         $this->setResponse($redirect);
     }

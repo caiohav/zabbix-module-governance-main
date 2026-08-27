@@ -51,13 +51,17 @@ final class AvailabilityConfig {
                 $tech = ['name' => self::text($technology['name'] ?? '', 100),
                     'weight' => self::number($technology['weight'] ?? null, 0.001, 100000),
                     'target' => self::number($technology['target'] ?? null, 0, 100),
-                    'groups' => $groups, 'mode' => $mode,
-                    'max_age' => (int) self::number($technology['max_age'] ?? null, 1, 86400), 'checks' => []];
+                    'groups' => $groups, 'mode' => $mode, 'checks' => []];
+                // Keep legacy technology-wide policies until the user explicitly selects auto per check.
+                $legacyAge = isset($technology['max_age']) ? self::seconds($technology['max_age']) : null;
+                if ($legacyAge !== null) { $tech['max_age'] = $legacyAge; }
                 foreach ($checks as $check) {
                     if (!is_array($check)) {
                         throw new InvalidArgumentException('Invalid check / Verificação inválida.');
                     }
+                    $age = array_key_exists('max_age', $check) ? $check['max_age'] : $legacyAge;
                     $tech['checks'][] = ['key' => self::text($check['key'] ?? '', 2048),
+                        'max_age' => $age === null ? null : self::seconds($age),
                         'up' => self::condition($check['up'] ?? null),
                         'down' => isset($check['down']) ? self::condition($check['down']) : null];
                 }
@@ -66,6 +70,14 @@ final class AvailabilityConfig {
             $result['departments'][] = $node;
         }
         return $result;
+    }
+
+    private static function seconds($value): int {
+        $seconds = self::number($value, 1, 86400);
+        if (floor($seconds) !== $seconds) {
+            throw new InvalidArgumentException('Sample validity must be whole seconds / A validade da amostra deve ser um número inteiro de segundos.');
+        }
+        return (int) $seconds;
     }
 
     private static function condition($input): array {

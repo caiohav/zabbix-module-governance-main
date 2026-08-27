@@ -7,13 +7,16 @@ class CController {
     public $input = [], $response, $type = 3;
     protected function getUserType() { return $this->type; }
     protected function getInput($key, $default = null) { return $this->input[$key] ?? $default; }
+    protected function hasInput($key) { return array_key_exists($key, $this->input); }
     protected function setResponse($value) { $this->response = $value; }
     protected function validateInput($rules) { return true; }
 }
 class CControllerResponseFatal {}
+class CControllerResponseData { public $data; public function __construct($data) { $this->data = $data; } }
 class CControllerResponseRedirect { public $data; public function __construct($url) {} public function setFormData($d) { $this->data = $d; } }
 class CUrl { public function __construct($url) {} public function setArgument($a, $b) { return $this; } }
-class CWebUser { public static function getLang() { return 'pt_BR'; } }
+class CWebUser { public static $data = ['theme' => 'blue-theme']; public static function getLang() { return 'pt_BR'; } }
+function getUserTheme($data) { return $data['theme'] ?? 'blue-theme'; }
 class CMessageHelper {
     public static $error = '', $success = '';
     public static function setErrorTitle($v) { self::$error = $v; }
@@ -27,8 +30,10 @@ class TestModule {
     public function update($values) { if ($this->fail) { return false; } $this->writes++; $this->config = $values[0]['config']; return ['moduleids' => ['1']]; }
 }
 require __DIR__ . '/../actions/AvailabilitySave.php';
+require __DIR__ . '/../actions/AvailabilityConfigView.php';
 require __DIR__ . '/../actions/QualityConfigUpdate.php';
 class SaveHarness extends Modules\Governance\Actions\AvailabilitySave { public function run() { if ($this->checkPermissions()) { $this->doAction(); } } }
+class ConfigHarness extends Modules\Governance\Actions\AvailabilityConfigView { public function run() { if ($this->checkPermissions()) { $this->doAction(); } } }
 class QualityHarness extends Modules\Governance\Actions\QualityConfigUpdate { public function run() { if ($this->checkPermissions()) { $this->doAction(); } } }
 $count = 0;
 function assertAction($value, $message) { global $count; $count++; if (!$value) { throw new RuntimeException($message); } }
@@ -58,4 +63,49 @@ $quality = new QualityHarness(); $quality->input = ['cards' => []]; $quality->ru
 assertAction(API::$module->writes === 2, 'quality save works');
 assertAction(API::$module->config['availability'] === $defaults, 'quality save preserves availability');
 assertAction(API::$module->config['other_setting'] === 42, 'quality save preserves other settings');
+
+// A failed save must retain the revision that was actually reviewed. Replacing it
+// with the current stored revision would silently authorize a stale draft on retry.
+API::$module = new TestModule();
+API::$module->config = ['cards' => [['name' => 'Existing card']], 'availability' => $defaults, 'other_setting' => 42];
+$tabA = new ConfigHarness(); $tabA->run();
+$tabB = new ConfigHarness(); $tabB->run();
+$initialRevision = $tabA->response->data['revision'];
+assertAction($tabB->response->data['revision'] === $initialRevision, 'both tabs start from the same revision');
+$draftA = array_replace($defaults, ['timezone' => 'UTC']);
+$draftB = array_replace($defaults, ['timezone' => 'Europe/Lisbon']);
+$saveA = new SaveHarness();
+$saveA->input = ['availability_json' => json_encode($draftA), 'config_revision' => $initialRevision];
+$saveA->run();
+assertAction(API::$module->writes === 1 && API::$module->config['availability'] === $draftA, 'first tab saves its own revision');
+$saveB = new SaveHarness();
+$saveB->input = ['availability_json' => json_encode($draftB), 'config_revision' => $initialRevision];
+$saveB->run();
+assertAction(API::$module->writes === 1, 'second tab cannot overwrite the first tab');
+assertAction($saveB->response->data['availability_json'] === json_encode($draftB), 'conflicting draft is preserved for recovery');
+assertAction(($saveB->response->data['config_revision'] ?? null) === $initialRevision, 'conflict redirect preserves the reviewed revision');
+$conflictView = new ConfigHarness();
+$conflictView->input = $saveB->response->data;
+$conflictView->run();
+assertAction($conflictView->response->data['config'] === $draftB, 'conflict view retains unsaved changes');
+assertAction($conflictView->response->data['revision'] === $initialRevision, 'conflict view does not promote a stale draft to the latest revision');
+$retry = new SaveHarness();
+$retry->input = ['availability_json' => json_encode($conflictView->response->data['config']),
+    'config_revision' => $conflictView->response->data['revision']];
+$retry->run();
+assertAction(API::$module->writes === 1, 'clicking save again after a conflict remains blocked');
+assertAction(API::$module->config['availability'] === $draftA, 'first tab data survives repeated stale submissions');
+$reload = new ConfigHarness(); $reload->run();
+assertAction($reload->response->data['config'] === $draftA, 'fresh navigation loads the actual stored configuration');
+assertAction($reload->response->data['revision'] === hash('sha256', json_encode($draftA)), 'fresh navigation obtains the current revision');
+assertAction($reload->response->data['revision'] !== $initialRevision, 'fresh revision differs after a rules change');
+// Changes to unrelated module features must not be lost while availability rules
+// are being edited, and must not cause false availability conflicts.
+API::$module->config['cards'][0]['name'] = 'Concurrent card change';
+$reviewed = new SaveHarness();
+$reviewed->input = ['availability_json' => json_encode($draftB), 'config_revision' => $reload->response->data['revision']];
+$reviewed->run();
+assertAction(API::$module->writes === 2 && API::$module->config['availability'] === $draftB, 'reviewed current revision can be saved');
+assertAction(API::$module->config['cards'][0]['name'] === 'Concurrent card change', 'availability save preserves newly updated quality cards');
+assertAction(API::$module->config['other_setting'] === 42, 'concurrent availability save preserves unrelated settings');
 echo 'PASS: ' . $count . " action assertions\n";

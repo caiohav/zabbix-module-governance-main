@@ -3,9 +3,11 @@
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 require __DIR__ . '/../AvailabilityConfig.php';
 require __DIR__ . '/../AvailabilityEngine.php';
+require __DIR__ . '/../AvailabilityFreshness.php';
 require __DIR__ . '/../AvailabilityReport.php';
 use Modules\Governance\AvailabilityConfig as Config;
 use Modules\Governance\AvailabilityEngine as Engine;
+use Modules\Governance\AvailabilityFreshness as Freshness;
 use Modules\Governance\AvailabilityReport as Report;
 $assertions = 0;
 function check($truth, $message) { global $assertions; $assertions++; if (!$truth) { throw new RuntimeException($message); } }
@@ -42,6 +44,47 @@ check(Engine::summary([], 0, 0)['score'] === null, 'empty period is not 100');
 $zeroLength = Engine::combine([[[0, 10, 1, 0, 0], [10, 10, 0, 1, 0], [10, 20, 1, 0, 0]]], 'mean', 0, 20);
 near(Engine::summary($zeroLength, 0, 20)['coverage'], 100, 'zero-length interval cannot corrupt coverage');
 near(Engine::summary($zeroLength, 0, 20)['down'], 0, 'zero-length outage has no duration');
+
+// Weighted intervals must not turn arithmetic residue into data gaps, or erase real small gaps.
+$precisionEnd = 2678400;
+$precisionSeries = [];
+$precisionGaps = [];
+foreach ([[195563, 195847], [1009565, 1009686], [1587501, 1588095]] as $outage) {
+    $precisionSeries[] = [[0, $outage[0], 1, 0, 0], [$outage[0], $outage[1], 0, 1, 0], [$outage[1], $precisionEnd, 1, 0, 0]];
+    $precisionGaps[] = [[0, $outage[0], 1, 0, 0], [$outage[0], $outage[1], 0, 0, 1], [$outage[1], $precisionEnd, 1, 0, 0]];
+}
+$precisionSummary = Engine::summary(Engine::combine($precisionSeries, 'mean', 0, $precisionEnd, [4, 2, 1]), 0, $precisionEnd);
+check($precisionSummary['coverage'] === 100.0 && $precisionSummary['unknown'] === 0.0, 'complete weighted coverage is exactly 100 percent');
+near($precisionSummary['score'], 99.98948199351423, 'weighted score keeps full precision');
+check($precisionSummary['lower'] === $precisionSummary['upper'] && $precisionSummary['score'] === $precisionSummary['lower'], 'complete bounds and score agree');
+$precisionSummary = Engine::summary(Engine::combine($precisionGaps, 'mean', 0, $precisionEnd, [4, 2, 1]), 0, $precisionEnd);
+check($precisionSummary['upper'] === 100.0 && $precisionSummary['down'] === 0.0, 'no confirmed outage means an exact 100 percent upper bound');
+check($precisionSummary['score'] === null && $precisionSummary['coverage'] < 100.0, 'weighted gaps remain incomplete');
+$alwaysUp = [[0, $precisionEnd, 1, 0, 0]];
+foreach (['unknown' => [0, .005], 'down' => [.005, 0]] as $kind => $fractions) {
+    // One affected server out of 200, in a technology of weight .001 against weight 100000.
+    $tinySeries = [[0, 1, 1, 0, 0], [1, 2, .995, $fractions[0], $fractions[1]], [2, $precisionEnd, 1, 0, 0]];
+    $tinyCombined = Engine::combine([$tinySeries, $alwaysUp], 'mean', 0, $precisionEnd, [.001, 100000]);
+    $tinySummary = Engine::summary($tinyCombined, 0, $precisionEnd);
+    check($tinySummary[$kind] > 0 && $tinySummary[$kind] < 1e-6, 'a tiny real weighted ' . $kind . ' interval is preserved');
+    check($kind === 'unknown' ? $tinySummary['score'] === null && $tinySummary['coverage'] < 100.0 : $tinySummary['score'] < 100.0,
+        'a tiny ' . $kind . ' cannot silently publish 100 percent');
+    $afterTiny = Engine::summary($tinyCombined, 2, $precisionEnd);
+    check($afterTiny['unknown'] === 0.0 && $afterTiny['down'] === 0.0 && $afterTiny['score'] === 100.0,
+        'after the ' . $kind . ' interval there is no floating point residue');
+}
+$fractionalSeries = [];
+foreach ([1, 2, 3] as $end) { $fractionalSeries[] = [[0, $end, 0, 0, 1], [$end, 10, 1, 0, 0]]; }
+$fractionalCombined = Engine::combine($fractionalSeries, 'mean', 0, 10, [.1, .2, .3]);
+$knownTail = Engine::summary($fractionalCombined, 3, 10);
+check($knownTail['unknown'] === 0.0 && $knownTail['score'] === 100.0, 'fractional weight cancellations do not invalidate a known later period');
+check(Engine::summary(Engine::combine([$alwaysUp, Engine::unknown(0, $precisionEnd)], 'mean', 0, $precisionEnd, [1, 0]), 0, $precisionEnd)['score'] === 100.0,
+    'zero-weight children cannot introduce residual gaps');
+check(Engine::summary([], 0, 60)['score'] === null && Engine::summary([], 0, 60)['unknown'] === 60.0,
+    'missing timeline coverage stays unknown rather than becoming a final score');
+$lowScore = Engine::summary([[0, 1, 1e-16, 1 - 1e-16, 0]], 0, 1)['score'];
+check($lowScore > 0 && $lowScore < 1e-12, 'very low nonzero availability is preserved');
+
 // Randomized one-second oracle checks both aggregation modes and total duration conservation.
 mt_srand(42);
 for ($trial = 0; $trial < 80; $trial++) {
@@ -74,6 +117,71 @@ foreach (['weight' => 0, 'target' => 101, 'max_age' => 0, 'groups' => ',,', 'mod
 $invalid = $config; $invalid['timezone'] = 'not/timezone';
 rejects(static function() use ($invalid) { Config::validate($invalid); }, 'timezone validation');
 check(Config::groups('Equipes/, Área, área') === ['equipes', 'área'], 'unicode, trailing slash, unique groups');
+
+// Per-check validity and migration: opening/saving old rules must not silently change policy.
+$normalized = Config::validate($config);
+check($normalized['departments'][0]['technologies'][0]['checks'][0]['max_age'] === 3600, 'legacy validity becomes per-check manual policy');
+check(Config::validate($normalized) === $normalized, 'legacy configuration roundtrip is stable');
+$mixed = $config;
+$mixed['departments'][0]['technologies'][0]['checks'][0]['max_age'] = null;
+$mixed['departments'][0]['technologies'][0]['checks'][1]['max_age'] = 180;
+$mixed = Config::validate($mixed);
+check($mixed['departments'][0]['technologies'][0]['checks'][0]['max_age'] === null, 'explicit auto overrides legacy technology policy');
+check($mixed['departments'][0]['technologies'][0]['checks'][1]['max_age'] === 180, 'manual per-check override');
+unset($mixed['departments'][0]['technologies'][0]['max_age']);
+check(Config::validate($mixed) === $mixed, 'new per-check configuration needs no technology-wide validity');
+$newConfig = $config;
+unset($newConfig['departments'][0]['technologies'][0]['max_age']);
+check(Config::validate($newConfig)['departments'][0]['technologies'][0]['checks'][0]['max_age'] === null, 'new rule defaults to auto');
+foreach ([0, -1, 0.5, 180.1, 86401, '', true, []] as $value) {
+    $invalid = $config;
+    $invalid['departments'][0]['technologies'][0]['checks'][0]['max_age'] = $value;
+    rejects(static function() use ($invalid) { Config::validate($invalid); }, 'invalid per-check validity');
+}
+$invalid = $config; $invalid['departments'][0]['technologies'][0]['max_age'] = 180.5;
+rejects(static function() use ($invalid) { Config::validate($invalid); }, 'fractional legacy validity rejected');
+
+$pollItem = ['type' => '3', 'delay' => '1m', 'key_' => 'icmpping', 'preprocessing' => []];
+$pgKey = 'pgsql.ping["{$PG.URI}","{$PG.USER}","{$PG.PASSWORD}"]';
+$pgItem = array_replace($pollItem, ['type' => '0', 'key_' => $pgKey,
+    'preprocessing' => [['type' => '20', 'params' => '1h']]]);
+$pollAge = Freshness::resolve($pollItem, null);
+$pgAge = Freshness::resolve($pgItem, null);
+check($pollAge['max_age'] === 180 && $pollAge['freshness_source'] === 'interval', '60-second polling keeps its own 180-second validity');
+check($pgAge['max_age'] === 3720 && $pgAge['freshness_source'] === 'heartbeat', 'hourly heartbeat accounts for next and delayed collection');
+check($pgAge['interval_seconds'] === 60 && $pgAge['heartbeat_seconds'] === 3600, 'numeric audit metadata');
+check($pgAge['warnings'] === [], 'ordinary heartbeat is resolvable');
+$override = Freshness::resolve($pgItem, 180);
+check($override['max_age'] === 180 && $override['freshness_mode'] === 'manual', 'legacy or explicit override is preserved');
+check(count($override['warnings']) === 1, 'short manual policy warns about heartbeat');
+check(Freshness::resolve($pgItem, 4000)['warnings'] === [], 'long enough manual override does not warn');
+check(count(Freshness::resolve(array_replace($pgItem, ['delay' => '{$PG.UPDATE.INTERVAL}']), 180)['warnings']) === 1,
+    'known heartbeat warns about short manual age even when polling is a macro');
+check(Freshness::resolve(array_replace($pgItem, ['delay' => '300']), null)['max_age'] === 4200, 'heartbeat margin follows actual polling interval');
+check(Freshness::resolve(array_replace($pollItem, ['delay' => '2h']), null)['max_age'] === 21600, 'time suffix accepted');
+check(Freshness::resolve(array_replace($pgItem, ['preprocessing' => [['type' => 20, 'params' => '30s']]]), null)['max_age'] === 180, 'short heartbeat cannot shorten polling grace');
+foreach ([
+    array_replace($pollItem, ['delay' => '{$UPDATE.INTERVAL}']),
+    array_replace($pollItem, ['delay' => '60;30/1-5,09:00-18:00']),
+    array_replace($pollItem, ['delay' => '0']),
+    array_replace($pollItem, ['delay' => '1d']),
+    array_replace($pollItem, ['delay' => '1000000000000000w']),
+    array_replace($pollItem, ['type' => '2']),
+    array_replace($pollItem, ['type' => '17']),
+    array_replace($pollItem, ['type' => '18']),
+    array_replace($pollItem, ['type' => '999']),
+    array_replace($pollItem, ['type' => '7', 'key_' => 'mqtt.get[broker,topic]']),
+    array_replace($pgItem, ['preprocessing' => [['type' => 20, 'params' => '{$HEARTBEAT}']]]),
+    array_replace($pgItem, ['preprocessing' => [['type' => 20, 'params' => '0']]]),
+    array_replace($pollItem, ['preprocessing' => [['type' => 19, 'params' => '']]]),
+    array_replace($pollItem, ['preprocessing' => null]),
+    ['delay' => '60', 'type' => 0]
+] as $unsafe) {
+    $result = Freshness::resolve($unsafe, null);
+    check($result['max_age'] === null && $result['freshness_source'] === 'unresolved' && count($result['warnings']) > 0,
+        'unsupported cadence must not invent validity');
+    check(Freshness::resolve($unsafe, 600)['max_age'] === 600, 'explicit manual policy can resolve unsupported cadence');
+}
 
 class API {
     public static $handlers = [];
@@ -136,4 +244,51 @@ API::$handlers['History.get'] = static function($o) { throw new Exception('Simul
 $report = (new Report())->build(Config::validate($config), '2026-05', $from + 1800);
 check($report['departments'][0]['summary']['score'] === null, 'API exception makes score incomplete');
 check($report['departments'][0]['technologies'][0]['warnings'][0] === 'Simulated API failure', 'API exception visible in warnings');
+
+// Integration: PostgreSQL's heartbeat fixes only its own timeline, never the ICMP freshness.
+$config = ['timezone' => 'UTC', 'departments' => [['name' => 'Database', 'target' => 99.9, 'technologies' => [
+    array_replace($technology, ['max_age' => 180, 'checks' => [
+        array_replace($binary, ['key' => $pgKey, 'max_age' => null]),
+        array_replace($binary, ['key' => 'icmpping', 'max_age' => null])]])]]]];
+API::$handlers['Host.get'] = static function($o) { return [['hostid' => '1', 'name' => 'Database A', 'status' => '0']]; };
+$actualPgItem = array_replace($pgItem, ['itemid' => 'pg', 'hostid' => '1', 'value_type' => '3', 'status' => '0']);
+$actualPollItem = array_replace($pollItem, ['itemid' => 'icmp', 'hostid' => '1', 'value_type' => '3', 'status' => '0']);
+API::$handlers['Item.get'] = static function($o) use ($pgKey, &$actualPgItem, $actualPollItem) {
+    check($o['filter']['key_'] === [$pgKey, 'icmpping'], 'item key macros and quotes remain exact, never expanded');
+    check(in_array('delay', $o['output'], true) && in_array('type', $o['output'], true)
+        && $o['selectPreprocessing'] === ['type', 'params'], 'only cadence metadata is requested');
+    check(!in_array('password', $o['output'], true), 'no credential fields requested');
+    return [$actualPgItem, $actualPollItem];
+};
+$historyIds = []; $withGap = false;
+API::$handlers['History.get'] = static function($o) use ($from, $sample, &$historyIds, &$withGap) {
+    $id = $o['itemids'][0]; $historyIds[] = $id; $samples = [];
+    for ($clock = $from; $clock < $from + 7200; $clock += $id === 'pg' ? 3600 : 60) {
+        if ($withGap && $id === 'icmp' && $clock >= $from + 1800 && $clock < $from + 2400) { continue; }
+        $samples[] = $sample($clock, $withGap && $id === 'icmp' && $clock === $from + 3000 ? 0 : 1);
+    }
+    return array_values(array_filter($samples, static function($s) use ($o) { return $s['clock'] >= $o['time_from'] && $s['clock'] <= $o['time_till']; }));
+};
+$report = (new Report())->build(Config::validate($config), '2026-05', $from + 7200);
+$tech = $report['departments'][0]['technologies'][0];
+near($tech['summary']['score'], 100, 'hourly PG plus minute ICMP remain fully available');
+near($tech['summary']['unknown'], 0, 'hourly heartbeat does not create artificial gaps');
+check($tech['hosts'][0]['sources'][0]['max_age'] === 3720 && $tech['hosts'][0]['sources'][1]['max_age'] === 180,
+    'each item exports its own resolved policy');
+$withGap = true;
+$report = (new Report())->build(Config::validate($config), '2026-05', $from + 7200);
+$summary = $report['departments'][0]['summary'];
+near($summary['unknown'], 480, 'missing ICMP samples expire on ICMP policy, not PostgreSQL heartbeat');
+near($summary['down'], 60, 'confirmed ICMP outage is preserved');
+check($summary['score'] === null, 'real missing data prevents a final percentage');
+$actualPgItem['delay'] = '{$PG.UPDATE.INTERVAL}'; $withGap = false; $historyIds = [];
+$report = (new Report())->build(Config::validate($config), '2026-05', $from + 7200);
+$tech = $report['departments'][0]['technologies'][0];
+near($tech['summary']['unknown'], 7200, 'unresolved automatic policy stays unknown');
+check($historyIds === ['icmp'], 'unresolved cadence never fetches history under invented TTL');
+check($tech['hosts'][0]['sources'][0]['max_age'] === null && count($tech['hosts'][0]['sources'][0]['warnings']) === 1,
+    'unresolved source carries actionable warning');
+$config['departments'][0]['technologies'][0]['checks'][0]['max_age'] = 4000;
+$report = (new Report())->build(Config::validate($config), '2026-05', $from + 7200);
+near($report['departments'][0]['summary']['score'], 100, 'explicit manual check resolves a macro-driven cadence');
 echo 'PASS: ' . $assertions . " assertions\n";

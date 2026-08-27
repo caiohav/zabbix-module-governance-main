@@ -31,7 +31,7 @@ Zabbix 6.0 LTS.
 - Painel mensal de disponibilidade por departamento, com tecnologias ponderadas,
   metas, histórico diário em ECharts e memória de cálculo exportável.
 
-## Disponibilidade mensal (v1.5.0)
+## Disponibilidade mensal (v1.5.1)
 
 Abra **Governança → Disponibilidade → Configurar indicadores**. Cadastre um
 departamento e suas tecnologias/serviços. Para reproduzir o exemplo do banco,
@@ -49,8 +49,32 @@ Cada tecnologia permite configurar:
 - Condição de disponibilidade: igual, diferente, maior/menor, maior/menor ou
   igual, ou intervalo inclusivo. A indisponibilidade pode ser qualquer outro
   valor válido ou uma condição explícita.
-- Validade da última amostra em segundos: use uma margem acima do intervalo
-  normal de coleta. Depois desse prazo, o estado passa a desconhecido.
+- Validade da última amostra **por item**, automática ou manual em segundos.
+  Depois desse prazo, o estado passa a desconhecido.
+
+### Validade automática e heartbeat
+
+Cada verificação pode usar **Automática por item**. O módulo consulta o intervalo
+de coleta e o pré-processamento, sem expandir macros de conexão ou senhas.
+Para itens com intervalo simples, usa três intervalos de coleta como validade.
+Com “Descartar inalterado com heartbeat”, usa o maior valor entre três intervalos
+de coleta e `heartbeat + 2 × intervalo de coleta`.
+
+Exemplo: `pgsql.ping` coletado a cada 60 s, com heartbeat de 1 h, recebe validade
+de 3720 s. `icmpping` coletado a cada 60 s, sem esse pré-processamento, mantém
+validade de 180 s. Assim, o heartbeat do PostgreSQL não estende a validade do ICMP.
+As validades resolvidas e os avisos aparecem nos detalhes dos itens e no JSON.
+
+O automático **não interpreta macros de intervalo, agendamentos personalizados,
+itens dependentes/trapper nem descarte inalterado sem heartbeat**. Nessas situações,
+é necessário definir uma validade manual por item; até isso ser feito, a
+verificação fica desconhecida com aviso. A validade máxima é de 86400 s.
+Uma política manual abaixo do heartbeat gera aviso, sem ser alterada silenciosamente.
+
+Ao atualizar da 1.5.0, as validades existentes são preservadas como manuais.
+Para corrigir o caso PostgreSQL + ICMP, abra as regras, selecione **Automática por
+item** em cada uma dessas verificações e salve. Apenas copiar os arquivos não
+muda as políticas já salvas nem a retenção de histórico do Zabbix.
 
 Todas as verificações de um host são obrigatórias. Uma falha confirmada deixa
 o host indisponível, mesmo se outra verificação estiver sem dados. No modo
@@ -69,6 +93,17 @@ baixar um JSON com regras e memória de cálculo e imprimir/salvar PDF pelo
 navegador. As listas de intervalos, inclusive no JSON, mostram até os primeiros
 200 por tecnologia; os totais consideram todos os intervalos processados.
 
+O resumo mostra os departamentos no relatório, tecnologias, metas atendidas e
+indicadores incompletos. A cobertura do departamento e os tempos equivalentes
+são **ponderados**, não a contagem de hosts disponíveis nem a soma das quedas.
+O mês em andamento é identificado como parcial, e metas atendidas são mostradas
+como “Na meta até agora”. Fórmulas, gráficos diários e diagnóstico ficam em
+seções recolhíveis. Não há um índice global misturando departamentos sem pesos definidos.
+
+O editor resolve o tema efetivo do Zabbix (inclusive quando herdado do padrão),
+estiliza também campos de texto e mês e adapta a largura somente nas páginas de
+disponibilidade. Não muda o tema ou o layout das outras páginas do frontend.
+
 ### Escopo e limites desta versão
 
 - Calendário 24×7, com fuso configurável; o mês atual considera apenas o tempo
@@ -85,11 +120,20 @@ navegador. As listas de intervalos, inclusive no JSON, mostram até os primeiros
   com limite de 60 mil amostras por bloco e 3 milhões por relatório.
   Há uma guarda de tempo de 18 segundos entre etapas; uma chamada de API em
   andamento continua sujeita ao timeout do PHP/servidor.
+- O orçamento de memória respeita o limite PHP (até um teto interno de 256 MiB),
+  com reserva de 16 MiB. Consultas podem usar menos de 60 mil amostras por bloco
+  conforme a memória disponível. Consolidações têm limite de complexidade de
+  200 mil intervalos; cache limitado a 25 mil intervalos. Falhas preventivas
+  deixam o resultado incompleto, com aviso, em vez de publicar totais truncados.
+  O número de “hosts avaliados” pode ser menor que o escopo quando uma consulta
+  é interrompida por esses limites.
 - Limites ou erros de consulta tornam a tecnologia incompleta e geram aviso;
   não se apresenta um resultado truncado como completo. Reduza o escopo pelo
   filtro de departamento quando necessário.
 - Acesso restrito a Super Admin. Regras persistem no registro do módulo,
   preservando a configuração dos cards de qualidade.
+- Conflitos entre abas/sessões não sobrescrevem regras salvas. O rascunho é
+  preservado e continua bloqueado até recarregar a versão atual pelo link da tela.
 
 ### Testes locais
 
@@ -97,6 +141,20 @@ Execute `php tests/availability.php` e `php tests/actions.php` com a extensão
 `mbstring` habilitada.
 Os testes cobrem intervalos, sobreposições, lacunas, limiares, pesos e consultas
 simuladas à API. Não substituem a validação no frontend Zabbix instalado.
+
+Para regressões de memória, execute `php tests/availability-memory.php technology`,
+`php tests/availability-memory.php host` e `php tests/availability-memory.php department`.
+Esses testes usam 128 MiB, histórico mensal e valores alternando a cada minuto.
+
+No código-fonte há também `tests/browser-preview.php`, um ambiente de demonstração
+para as views e os scripts reais, sem banco/API/credenciais e sem persistência.
+Execute com `php -S 127.0.0.1:8768 tests/browser-preview.php` e abra o endereço local.
+O arquivo não acompanha o pacote de produção e só aceita o servidor embutido do
+PHP com cliente loopback. Para testar com CSS nativo, disponibilize `dark-theme.css`
+e `blue-theme.css` oficiais em `governance-zabbix6-css` dentro do diretório temporário
+do sistema. Teste idioma, temas, cadastro de verificações, macros, modo automático,
+campos numéricos e larguras reduzidas. O botão de conferir rascunho mostra apenas
+os dados fictícios do teste; salvar valida o JSON sem modificar qualquer módulo.
 
 ## Pré-requisitos
 

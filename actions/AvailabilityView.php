@@ -43,7 +43,7 @@ class AvailabilityView extends CController {
         catch (\Exception $e) { $error = $e->getMessage(); }
         $this->setResponse(new CControllerResponseData([
             'page_title' => $isPt ? 'Disponibilidade por departamento' : 'Department availability',
-            'is_pt' => $isPt, 'is_dark' => strpos(CWebUser::$data['theme'] ?? '', 'dark') !== false,
+            'is_pt' => $isPt, 'is_dark' => strpos(strtolower(getUserTheme(CWebUser::$data)), 'dark') !== false,
             'config' => $config, 'report' => $report, 'error' => $error, 'month' => $month, 'department' => $department
         ]));
     }
