@@ -2,12 +2,24 @@
   "manifest_version": 1.0,
   "id": "zabbix_module_governance",
   "name": "Governance & Quality Audit",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "namespace": "Governance",
   "author": "Governance Module Team",
   "url": "https://github.com/seu-usuario/zabbix-module-governance",
   "description": "Módulo de governança e auditoria de qualidade de dados (cobertura de tags, inventário e padronização) para Zabbix 6.",
   "actions": {
+    "governance.availability.view": {
+      "class": "AvailabilityView",
+      "view": "governance.availability.view"
+    },
+    "governance.availability.config": {
+      "class": "AvailabilityConfigView",
+      "view": "governance.availability.config"
+    },
+    "governance.availability.save": {
+      "class": "AvailabilitySave",
+      "layout": null
+    },
     "governance.quality.view": {
       "class": "QualityView",
       "view": "governance.quality.view"
@@ -22,6 +34,10 @@
     }
   },
   "config": {
-    "cards": []
+    "cards": [],
+    "availability": {
+      "timezone": "America/Cuiaba",
+      "departments": []
+    }
   }
 }

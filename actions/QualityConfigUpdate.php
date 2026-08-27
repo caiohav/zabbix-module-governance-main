@@ -36,7 +36,7 @@ class QualityConfigUpdate extends CController {
         );
 
         $modules = API::Module()->get([
-            'output' => ['moduleid'],
+            'output' => ['moduleid', 'config'],
             'filter' => ['id' => 'zabbix_module_governance']
         ]);
 
@@ -50,9 +50,11 @@ class QualityConfigUpdate extends CController {
         }
 
         $cards = GovernanceConfig::normalizeCards($this->getInput('cards', []));
+        $config = $modules[0]['config'];
+        $config['cards'] = $cards;
         $result = API::Module()->update([[
             'moduleid' => $modules[0]['moduleid'],
-            'config' => ['cards' => $cards]
+            'config' => $config
         ]]);
 
         if ($result) {

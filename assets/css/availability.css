@@ -1,0 +1,82 @@
+.gav { --gav-accent: #4796c4; --gav-good: #2e8b57; --gav-bad: #cf4949; --gav-unknown: #a77718; gap: 16px; }
+.gav h2, .gav h3, .gav h4 { color: inherit; margin: 0 0 5px; line-height: 1.3; }
+.gav h2 { font-size: 1.2rem; }
+.gav h3 { font-size: 1rem; }
+.gav [hidden] { display: none !important; }
+.gav button, .gav input, .gav select { max-width: 100%; }
+.gav a.btn-alt { display: inline-block; padding: 7px 12px; white-space: nowrap; text-decoration: none; }
+.gav-toolbar, .gav-chart-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.gav-eyebrow { display: block; color: var(--gov-muted); font-size: .66rem; letter-spacing: .1em; margin-bottom: 5px; }
+.gav-muted { color: var(--gov-muted); font-size: .8rem; line-height: 1.5; }
+.gav-warning { color: var(--gav-unknown); }
+.gav-notice { border-left: 3px solid var(--gav-accent); background: var(--gov-surface); padding: 11px 14px; font-size: .8rem; line-height: 1.5; }
+.gav-error { border-color: var(--gav-bad); }
+.gav-empty { border: 1px dashed var(--gov-border); border-radius: 6px; padding: 32px; text-align: center; }
+.gav-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.gav-field > span { color: var(--gov-muted); font-size: .76rem; }
+.gav-field input, .gav-field select { width: 100%; box-sizing: border-box; min-height: 30px; }
+.gav-timezone { max-width: 340px; }
+.gav-filters { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; background: var(--gov-surface); padding: 14px; border: 1px solid var(--gov-border); border-radius: 6px; }
+.gav-period { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: .8rem; }
+.gav-period > strong { font-size: 1.25rem; }
+.gav-badge { padding: 4px 9px; border-radius: 4px; background: var(--gov-surface-strong); font-size: .7rem; }
+.gav-department { border: 1px solid var(--gov-border); border-radius: 7px; border-top: 3px solid var(--gav-good); background: var(--gov-surface); overflow: hidden; }
+.gav-department.gav-bad { border-top-color: var(--gav-bad); }
+.gav-department.gav-unknown { border-top-color: var(--gav-unknown); }
+.gav-dept-header { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 20px; }
+.gav-score { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
+.gav-score strong { font-size: 1.9rem; line-height: 1.25; font-variant-numeric: tabular-nums; color: var(--gav-good); }
+.gav-bad > .gav-dept-header .gav-score strong { color: var(--gav-bad); }
+.gav-unknown > .gav-dept-header .gav-score strong { color: var(--gav-unknown); }
+.gav-score span { font-size: .75rem; color: var(--gov-muted); }
+.gav-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--gov-border); border-bottom: 1px solid var(--gov-border); }
+.gav-metrics > div { padding: 12px 16px; border-right: 1px solid var(--gov-border); min-width: 0; }
+.gav-metrics > div:last-child { border: none; }
+.gav-metrics span, .gav-metrics strong { display: block; }
+.gav-metrics span { color: var(--gov-muted); font-size: .72rem; margin-bottom: 5px; }
+.gav-metrics strong { font-size: .85rem; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.gav-chart-header { padding: 16px 20px 0; }
+.gav-chart { height: 230px; width: 100%; }
+.gav-chart canvas { background: transparent !important; }
+.gav-table-scroll { overflow-x: auto; }
+.gav-table { border-collapse: collapse; width: 100%; font-size: .8rem; text-align: left; }
+.gav-table th, .gav-table td { padding: 11px 14px; border-bottom: 1px solid var(--gov-border); vertical-align: top; }
+.gav-table thead { background: var(--gov-surface-strong); }
+.gav-table tbody th { font-weight: 500; }
+.gav-table small { display: block; color: var(--gov-muted); margin-top: 4px; }
+.gav-table code { overflow-wrap: anywhere; white-space: normal; }
+.gav-value { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }
+.gav-value.gav-good { color: var(--gav-good); }
+.gav-value.gav-bad { color: var(--gav-bad); }
+.gav-value.gav-unknown { color: var(--gav-unknown); }
+.gav-footnote { padding: 0 14px; }
+.gav-details { margin: 12px 14px; border: 1px solid var(--gov-border); border-radius: 4px; }
+.gav-details > summary { cursor: pointer; padding: 10px; font-size: .82rem; }
+.gav-details > p, .gav-details > h4 { padding: 0 10px; }
+.gav-formula { overflow-wrap: anywhere; }
+.gav-interval-table { max-height: 300px; overflow-y: auto; }
+.gav-department-editor { background: var(--gov-surface); border: 1px solid var(--gov-border); border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+.gav-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; margin: 12px 0; }
+.gav-technology { margin: 14px 0; border: 1px solid var(--gov-border); border-radius: 4px; background: var(--gov-surface); }
+.gav-technology > summary { padding: 12px; cursor: pointer; }
+.gav-technology > summary span { float: right; }
+.gav-tech-content { padding: 0 14px 14px; }
+.gav-check { border-left: 3px solid var(--gav-accent); padding: 12px; margin: 12px 0; background: var(--gov-surface-strong); }
+.gav-check > .gav-toolbar > .gav-field { flex: 1; }
+.gav-check-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 12px; }
+.gav-check-grid strong { font-size: .78rem; font-weight: 500; }
+.gav-rule { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.gav-theme-dark, .gov-theme-dark.gav { --gav-good: #72c8a3; --gav-bad: #f08e8e; --gav-unknown: #e2b964; }
+@media (max-width: 1100px) { .gav-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) {
+    .gav-config-grid, .gav-check-grid { grid-template-columns: 1fr; }
+    .gav-dept-header { align-items: flex-start; flex-direction: column; }
+    .gav-score { align-items: flex-start; }
+    .gav-table { min-width: 690px; }
+}
+@media print {
+    .gav-no-print { display: none !important; }
+    .gav { color: #111 !important; --gov-surface: #fff; --gov-surface-strong: #f4f4f4; --gov-muted: #444; --gov-border: #bbb; }
+    .gav-department { break-inside: avoid; }
+    .gav-table-scroll { overflow: visible; }
+}

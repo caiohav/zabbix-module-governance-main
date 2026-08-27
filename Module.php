@@ -29,6 +29,9 @@ class Module extends CModule {
 
         $submenu = new CMenu([
             (new CMenuItem($qualityTitle))->setAction('governance.quality.view'),
+            (new CMenuItem($isPt ? 'Disponibilidade' : 'Availability'))
+                ->setAction('governance.availability.view')
+                ->setAliases(['governance.availability.config']),
             (new CMenuItem($configTitle))->setAction('governance.quality.config')
         ]);
 
