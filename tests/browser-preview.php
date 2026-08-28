@@ -2,6 +2,11 @@
 // Local-only development harness. No Zabbix access or credentials. Temporary fake jobs only.
 // php -S 127.0.0.1:8768 tests/browser-preview.php
 if (PHP_SAPI !== 'cli-server' || !in_array($_SERVER['REMOTE_ADDR'], ['127.0.0.1', '::1'], true)) { http_response_code(404); exit; }
+if (in_array($_GET['action'] ?? '', ['governance.quality.view', 'governance.quality.run'], true)
+        || (isset($_GET['quality']) && !isset($_GET['edit']) && !isset($_GET['action']))) {
+    require __DIR__ . '/quality-preview.php';
+    exit;
+}
 $root = dirname(__DIR__);
 $url = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 if (preg_match('~^/modules/[^/]+/assets/(.+)$~', $url, $matches) || preg_match('~^/assets/(.+)$~', $url, $matches)) {

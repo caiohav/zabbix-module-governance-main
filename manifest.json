@@ -2,7 +2,7 @@
   "manifest_version": 1.0,
   "id": "zabbix_module_governance",
   "name": "Governance & Quality Audit",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "namespace": "Governance",
   "author": "Governance Module Team",
   "url": "https://github.com/seu-usuario/zabbix-module-governance",
@@ -27,6 +27,10 @@
     "governance.quality.view": {
       "class": "QualityView",
       "view": "governance.quality.view"
+    },
+    "governance.quality.run": {
+      "class": "QualityRun",
+      "layout": "layout.json"
     },
     "governance.quality.config": {
       "class": "QualityConfig",

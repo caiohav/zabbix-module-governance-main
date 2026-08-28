@@ -276,27 +276,23 @@ qualityAssert($save->response->url->args['page'] === 'groups', 'save redirects t
 $view = new QualityViewHarness(); $view->input = ['page' => 'groups', 'groupids' => ['10']]; $view->run();
 $viewData = $view->response->data;
 qualityAssert($viewData['selected_page'] === 'groups' && $viewData['page_name'] === 'Equipes', 'dashboard selects the requested page');
-qualityAssert(array_keys($viewData['kpis']) === ['groups'] && $viewData['cards_count'] === 1, 'dashboard calculates only selected page cards');
-qualityAssert($viewData['overall_score'] === 100.0, 'parent host group includes matching subgroups');
-qualityAssert(isset(API::$host->calls[0]['selectGroups']) && !isset(API::$host->calls[0]['selectTags']), 'API selects only card data required for the active page');
-qualityAssert($viewData['groupids'] === ['10'] && API::$host->calls[0]['groupids'] === ['10'] && API::$host->calls[1]['groupids'] === ['10'], 'group scope survives page links and monitored/disabled queries');
-qualityAssert($viewData['overview']['registered'] === 3 && $viewData['overview']['monitored'] === 2
-    && $viewData['overview']['disabled'] === 1 && $viewData['overview']['maintenance'] === 1, 'operational overview stays scoped and independent of page cards');
+qualityAssert(array_column($viewData['cards'], 'id') === ['groups'] && $viewData['cards_count'] === 1, 'shell contains only selected page cards');
+qualityAssert(!isset($viewData['kpis'], $viewData['overall_score']), 'GET never pretends metrics have been calculated');
+qualityAssert(API::$host->calls === [] && API::$problem->calls === [] && API::$item->calls === [], 'GET performs zero heavy metric API calls');
+qualityAssert($viewData['groupids'] === ['10'], 'group scope preserved for asynchronous request');
+qualityAssert($viewData['revision'] === GovernanceConfig::qualityRevision(API::$module->config), 'shell pins configuration revision');
 qualityAssert($viewData['is_dark'] === true, 'dashboard respects inherited default dark theme');
 $view->input = ['page' => 'missing']; $view->run();
-qualityAssert($view->response->data['selected_page'] === 'main' && $view->response->data['overall_score'] === 50.0, 'removed or unknown page falls back to first page');
+qualityAssert($view->response->data['selected_page'] === 'main', 'removed or unknown page falls back to first page');
 $view->input = ['page' => 'empty']; $view->run();
-qualityAssert($view->response->data['overall_score'] === null && $view->response->data['cards_count'] === 0
-    && $view->response->data['kpis'] === [], 'empty page has no invented compliance index');
+qualityAssert($view->response->data['cards_count'] === 0 && $view->response->data['cards'] === [], 'empty page shell stays empty');
 API::$module->config['quality_pages'][0]['cards'][0]['include_score'] = 0;
 $view->input = ['page' => 'main']; $view->run();
-qualityAssert($view->response->data['overall_score'] === null && count($view->response->data['kpis']) === 1, 'excluded cards remain visible without inventing an overall index');
+qualityAssert($view->response->data['cards'][0]['include_score'] === 0, 'shell preserves score participation');
 API::$host->hosts = [];
-API::$problem->calls = API::$item->calls = [];
 $view->run();
-qualityAssert($view->response->data['overall_score'] === null && $view->response->data['cards_count'] === 1
-    && $view->response->data['kpis'] === [], 'no hosts is distinct from an empty card configuration');
-qualityAssert(API::$problem->calls === [] && API::$item->calls === [], 'empty host scope cannot accidentally query all hosts');
+qualityAssert($view->response->data['cards_count'] === 1, 'shell is independent of host availability');
+qualityAssert(API::$problem->calls === [] && API::$item->calls === [], 'GET cannot accidentally query all items/problems');
 API::$module->config['quality_pages'] = [];
 $view->run();
 qualityAssert($view->response->data['pages'] === [] && $view->response->data['selected_page'] === '', 'zero pages does not restore defaults');

@@ -1,0 +1,142 @@
+# Diagnóstico de disponibilidade — julho/2026
+
+Data da avaliação: 28/08/2026, America/Cuiaba.
+
+Status: somente diagnóstico; implementação pendente de solicitação do usuário.
+
+## Escopo e procedimento
+
+Solicitação: testar julho no navegador, avaliar a relação entre retenção/estatísticas e o resultado sem dados, sem modificar a aplicação ou as configurações. Este arquivo é a única alteração local desta avaliação.
+
+Foi utilizado o navegador autenticado em `https://zabbix.tjmt.jus.br`. Não foram alterados itens, grupos, regras, retenção, pré-processamento ou código; nenhum pacote foi implantado. Foram usados filtros de consulta, abertos detalhes e iniciado um único cálculo de julho pelo botão normal do painel. O cálculo gera seu checkpoint temporário habitual, não um fechamento mensal permanente.
+
+Reprodução:
+
+1. Abrir Governança → Disponibilidade (`zabbix.php?action=governance.availability.view`).
+2. Selecionar competência `2026-07`, todos os departamentos, e Calcular mês.
+3. Abrir “PostgreSQL · 25 hosts avaliados”.
+4. Consultar Configurar disponibilidade, Administração → Geral → Limpeza de dados e o item PostgreSQL: Ping de `dbd-apolo-p`, sem salvar.
+
+Ambiente observado: Zabbix 6.0.36. Código local: manifest 1.7.1. A versão implantada do módulo não foi conferida na lista de módulos; a interface em produção apresenta o cálculo em etapas e os diagnósticos por fonte.
+
+## Resultado efetivamente observado
+
+- Departamento DABD; tecnologia PostgreSQL; peso 1; meta 99,9%; grupo `DABD/PostgreSQL`.
+- Consolidação: indisponível se qualquer host cair (`any_down`).
+- Duas verificações obrigatórias: `icmpping` e `pgsql.ping["{$PG.URI}","{$PG.USER}","{$PG.PASSWORD}"]`.
+- Ambas: disponível se valor = 1; outro valor válido = indisponível; validade manual 3600 segundos.
+- Período: 01/07/2026 00:00:00 até 01/08/2026 00:00:00, fim exclusivo, calendário 24×7.
+- Início: 28/08/2026 11:13:39. Conclusão: 11:14:02.
+- 25 hosts avaliados; 50 verificações previstas; 262 chamadas à API; 139.733 linhas lidas, incluindo possíveis repetições da paginação; 23 segundos totais e 3 segundos ativos informados pelo painel.
+- Índice final: inconclusivo, “Dados incompletos”; cobertura consolidada 0%; tempo desconhecido 744h; indisponibilidade confirmada 0h; faixa possível 0%–100%.
+
+O processamento terminou normalmente. Não houve erro 500 ou interrupção observada neste teste. Zero horas de queda confirmada NÃO comprova disponibilidade de 100%: faltam evidências para classificar o mês.
+
+## Causa 1: retenção efetiva de histórico insuficiente
+
+Configurações observadas na limpeza de dados:
+
+| Configuração | Valor observado |
+| --- | --- |
+| Limpeza interna do histórico | Ativada |
+| Substituir o período de histórico do item | Ativado |
+| Retenção global de histórico | 30d |
+| Limpeza interna de estatísticas | Ativada |
+| Substituir a retenção das estatísticas | Ativado |
+| Retenção global de estatísticas | 365d |
+| Compressão de histórico e tendências | Ativada; registros mais antigos que 7d |
+
+O item PostgreSQL: Ping de `dbd-apolo-p` (host 21622, item 1929954) mostra histórico 7d, estatísticas 365d, coleta 1m, tipo numérico inteiro sem sinal e descarte de inalterados com heartbeat 1h. Porém, a substituição global faz prevalecer 30d sobre os 7d desse item. A documentação explica a prioridade global e a exceção para itens configurados para não armazenar histórico/estatísticas. [Zabbix 6.0 — Housekeeper](https://www.zabbix.com/documentation/6.0/en/manual/web_interface/frontend_sections/administration/general#housekeeper)
+
+Os 7d da compressão são outra configuração; não representam conversão do histórico em estatísticas. Não há evidência de falha de leitura por compressão neste teste. [Zabbix 6.0 — TimescaleDB](https://www.zabbix.com/documentation/6.0/en/manual/appendix/install/timescaledb)
+
+O código oficial da API `history.get`, no caminho SQL da versão 6.0.36, limita `time_from` a `max(time_from, time() - hk_history + 1)` quando a substituição global está ativada. Portanto, não basta que alguma partição antiga ainda exista fisicamente: a API aplica o corte. [CHistory.php, linhas 144–148](https://github.com/zabbix/zabbix/blob/6.0.36/ui/include/classes/api/services/CHistory.php#L144-L148)
+
+Em 28/08, 30 dias alcançam aproximadamente 29/07 às 11:13. Isso coincide com as primeiras amostras retornadas. Exemplo diretamente do relatório:
+
+| Fonte de dbd-apolo-p | Amostras em julho | Primeira amostra | Última amostra | Cobertura da fonte |
+| --- | ---: | --- | --- | ---: |
+| icmpping, ID 1929914 | 7292 | 29/07 11:14:08 | 31/07 23:59:38 | 8,167264% |
+| pgsql.ping, ID 1929954 | 61 | 29/07 11:27:54 | 31/07 23:27:54 | 8,136425% |
+
+Conclusão: a retenção impede calcular julho inteiro com o histórico consultável. Não foi feita inspeção direta do banco, nem de backups, portanto não afirmar que todo dado anterior foi fisicamente eliminado. Aumentar retenção agora não recria registros já removidos.
+
+## Causa 2: hosts sem evidência no escopo explicam a cobertura de 0%
+
+Dos 25 hosts, 19 apresentaram amostras do fim de julho. Seis apresentaram zero amostras nas duas verificações e aviso de host atualmente desabilitado:
+
+| Host | ICMP (ID) | PostgreSQL (ID) |
+| --- | --- | --- |
+| dbd-pje1-backup | 182061 | 184956 |
+| dbd-pje1-master-p | 2465009 | Não localizado |
+| dbd-pje2-master-p | 2482615 | Não localizado |
+| pje2-logs | 95154 | 95192 |
+| pje2-slave4 | 107368 | 107406 |
+| pje2-slave5 | 102889 | 102927 |
+
+Nos dois masters, a interface informa “Item ausente ou não numérico” e ID vazio para a chave PostgreSQL.
+
+O motor inclui hosts atualmente desabilitados para não descartar automaticamente seu possível histórico. Em `any_down`, uma queda confirmada prevalece; sem queda confirmada, uma fonte obrigatória desconhecida impede afirmar que todos estão disponíveis. Assim, esses hosts tornam todo o mês desconhecido na consolidação, mesmo havendo leituras nos demais.
+
+Não está demonstrado quando esses hosts foram desabilitados, nem se deveriam compor o serviço em julho. A composição é a atual, não uma composição histórica versionada. Excluir desabilitados automaticamente pode apagar participantes válidos de um mês passado. Mudar para média também não recupera os dados ausentes e altera o significado do indicador.
+
+## Causa 3: validade manual e heartbeat
+
+A validade manual de 3600s é igual ao heartbeat. O relatório alerta que a estimativa automática seria 3720s nos itens PostgreSQL compatíveis (heartbeat + duas coletas de 60s). Foram observados intervalos de 1h01m20s em `dbd-dpf-p-01` e 1h01m11s em `srv-dbd-pgdiversos`.
+
+Pequenos atrasos podem criar lacunas dentro do trecho ainda retido. Este fator é secundário: não explica sozinho a ausência de quase todo julho e não resolve os seis hosts sem evidência. Não aumentar arbitrariamente a validade nem prolongar a última leitura por semanas para obter 100%.
+
+## Por que não substituir automaticamente por estatísticas
+
+O Zabbix gera estatísticas horárias com mínimo, máximo, média e quantidade; elas não são uma conversão tardia aos sete dias. Além disso, a documentação 6.0 registra perda de precisão da média em itens inteiros sem sinal, inclusive valores 0/1. [Zabbix 6.0 — History and trends](https://www.zabbix.com/documentation/6.0/en/manual/config/items/history_and_trends)
+
+Inferência para este painel: esses agregados não preservam os instantes e a sobreposição entre quedas de hosts/itens. Com descarte de inalterados, média de amostras tampouco equivale necessariamente a tempo disponível. Portanto, `trendavg × 100` não substitui fielmente este cálculo temporal, nem permite recompor a união das quedas em `any_down`.
+
+Não foi verificada a existência de estatísticas de julho para cada item: retenção configurada de 365d não comprova que elas foram coletadas. Uma eventual análise aproximada deve ser separada do índice oficial, com método e limitações explícitos.
+
+## Proposta para implementação futura — não executada
+
+### 1. Diagnóstico e clareza do painel
+
+- Consultar retenção efetiva (global versus item), respeitando permissões e macros não resolvidas; nunca presumir retenção quando indisponível.
+- Registrar no cálculo a política consultada, instante do diagnóstico e limites estimados. A retenção continua avançando enquanto um trabalho fica pausado; não prometer congelamento físico do histórico.
+- Mostrar alerta de período anterior ao histórico consultável, distinguindo política de retenção, item inexistente, host desabilitado, ausência sem causa determinada e expiração por validade.
+- Exibir “estado consolidado desconhecido” e explicar por que pode coexistir com milhares de amostras. Separar cobertura por fonte da cobertura do serviço; destacar os hosts que impedem a conclusão.
+- Manter índice oficial inconclusivo com lacunas; preservar quedas confirmadas e limites possíveis. Falha de processamento deve continuar separada de ausência de dados.
+- Não bloquear todo processamento só pelo alerta de retenção: ainda pode haver informação parcial útil.
+
+### 2. Composição e validade com política explícita
+
+- Oferecer prévia do escopo: grupos/subgrupos, hosts incluídos, atualmente desabilitados e verificações ausentes.
+- Definir com o usuário seleção/exclusões auditáveis e, idealmente, vigência de participação por host. Não usar o status atual como prova do estado em julho.
+- Permitir revisão consciente da validade automática/manual e mostrar o impacto, sem mudança silenciosa de regras.
+
+### 3. Preservação para relatórios mensais confiáveis
+
+- Dimensionar retenção necessária pelo início do mês a apurar, prazo de fechamento/revisão e leitura anterior necessária para estabelecer o estado inicial. Trinta dias não garantem sequer um mês de 31 dias ao fechar no mês seguinte.
+- Avaliar preservação dedicada das transições/intervalos usados pelos indicadores, com coleta incremental, lacunas, recuperação de interrupções, regras e composição versionadas; fechar e armazenar relatórios auditáveis antes da expiração das fontes.
+- Checkpoints atuais são temporários e não substituem arquivo mensal. Guardar apenas percentuais individuais também não permite refazer a união temporal de quedas.
+- Não ampliar retenção global indiscriminadamente. Neste ambiente há override e compressão: mudar apenas o item para retenção maior não basta; desabilitar override sem avaliar TimescaleDB pode afetar a limpeza. Decidir com a administração uma arquitetura de armazenamento compatível e dimensionada.
+- Para recuperar julho, verificar posteriormente, com autorização, se há backup/exportação confiável com histórico bruto suficiente. Sem isso, manter o mês inconclusivo; não inventar resultados a partir das estatísticas.
+
+### Pontos do código a revisar quando solicitado
+
+- `AvailabilityCalculation.php`: `scopeHosts()` (linha 137), `scopeItems()` (174), `historyPage()` (237), diagnósticos e metadados do relatório.
+- `AvailabilityEngine.php`: `combine()` (84) e `summary()` (134); preservar a semântica de desconhecido e a precedência de queda confirmada.
+- `AvailabilityFreshness.php`: `resolve()` (9); compatibilidade com heartbeat/intervalos e validade manual.
+- `views/governance.availability.view.php` e `assets/js/availability-view.js`: alertas, cobertura e explicações.
+- `AvailabilityConfig.php`, `views/governance.availability.config.php`, `assets/js/availability-config.js`: eventual política explícita de composição/validade.
+- `AvailabilityJobStore.php`: distinguir a vida do checkpoint de um futuro armazenamento mensal persistente.
+
+### Testes mínimos para a futura alteração
+
+1. Item 7d com override 30d, override ausente, retenção zero, macro não resolvida e acesso restrito.
+2. Mês inteiro expirado, corte no meio do mês e margem para amostra anterior ao início.
+3. Reproduzir julho: 19 hosts parcialmente cobertos + seis sem evidência; explicar o 0% consolidado sem atribuir indisponibilidade de 100%.
+4. Host desabilitado hoje com histórico válido no mês passado; exclusões somente explícitas/versionadas.
+5. Queda confirmada em um host com outro desconhecido; sobreposição entre ICMP e PostgreSQL sem contagem duplicada.
+6. Heartbeat 3600s com atrasos, regras manuais preservadas, ausência prolongada nunca preenchida artificialmente.
+7. Trends 0/1 inteiras, amostragem irregular e quedas simultâneas versus alternadas: nenhuma substituição silenciosa por média horária.
+8. Limite de retenção avançando durante pausa, paginação, retomada e fechamento imutável/versionado se implementado.
+
+Nenhuma dessas propostas foi implementada nesta avaliação. Antes de alterar políticas de escopo ou armazenamento, confirmar os critérios com o usuário.

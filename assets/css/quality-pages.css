@@ -194,6 +194,22 @@ main:has(.gqp) { min-width: 0; }
 .gqp .gqp-card-footer > button { flex: 0 0 auto; }
 .gqp .gqp-danger { color: var(--gqp-danger); }
 .gqp .gqp-danger:disabled { color: var(--gov-muted); }
+.gqp .gqp-load-panel { padding: 12px 14px; border: 1px solid var(--gov-border); border-radius: 6px; background: var(--gov-surface); }
+.gqp .gqp-load-actions { display: flex; align-items: center; gap: 10px; }
+.gqp .gqp-load-actions p { flex: 1; margin: 0; line-height: 1.5; }
+.gqp #gqp-progress-wrap { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.gqp #gqp-progress { width: min(340px, 65%); height: 8px; accent-color: var(--gov-link); }
+.gqp #gqp-progress-text, .gqp #gqp-timing { color: var(--gov-muted); font-size: .75rem; }
+.gqp #gqp-timing:empty { display: none; }
+.gqp .gqp-chart-placeholder { display: flex; align-items: center; justify-content: center; color: var(--gov-muted); font-weight: 600; }
+.gqp .gqp-card-loading { border-top-color: var(--gov-border); }
+.gqp .gqp-card-loading .gov-card-body { opacity: .65; }
+.gqp .gov-card-exceptions details { width: 100%; }
+.gqp .gov-card-exceptions summary { cursor: pointer; }
+@media (max-width: 760px) {
+    .gqp .gqp-load-actions { flex-wrap: wrap; }
+    .gqp .gqp-load-actions p { flex-basis: 100%; }
+}
 .gqp .gqp-empty { padding: 27px 18px; border: 1px dashed var(--gov-border); border-radius: 6px; text-align: center; }
 .gqp .gqp-empty p { margin: 0; line-height: 1.5; }
 .gqp .gqp-editor-footer {

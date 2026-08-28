@@ -3,6 +3,55 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Novidades 1.8.0 — Qualidade sem bloquear a página
+
+A Qualidade agora entrega primeiro o cabeçalho, as abas e os espaços dos cards.
+A análise começa automaticamente por POST, com progresso e lotes de até 100 hosts,
+sem exigir um clique em Calcular. O GET inicial consulta somente a configuração.
+Todos os cards da página compartilham a leitura de cada lote; percentuais e índice
+só aparecem depois da avaliação completa dos hosts. Os critérios e o arredondamento
+dos indicadores permanecem iguais.
+
+As contagens de problemas e itens não suportados são etapas independentes.
+Falha em uma dessas consultas não apaga cards concluídos nem aparece como zero.
+**Tentar novamente** recupera o andamento após erro de comunicação; **Atualizar**
+inicia uma análise nova após conclusão/falha confirmada. Não há atualização periódica.
+Sair da página impede novas etapas, mas não cancela uma consulta PHP/SQL em execução.
+O ECharts é carregado após os resultados; se a biblioteca falhar, os números continuam
+visíveis. Tema claro/escuro e português/inglês são preservados.
+
+### Limites e operação
+
+- A descoberta inicial retorna apenas IDs/status, limitada a 50.000 hosts no escopo
+  (incluindo desabilitados); acima disso há erro explícito, nunca truncamento silencioso.
+- Itens não suportados são contados por lotes disjuntos. Problemas usam uma contagem
+  única do escopo para não duplicar eventos de triggers associadas a vários hosts.
+  Uma API individual ainda pode ser lenta: o novo fluxo não substitui o diagnóstico SQL.
+- O escopo e as regras são capturados no início. Alterações detectadas de status/remoção
+  de host durante a leitura impedem publicar um índice com denominador reduzido.
+  A consulta é do estado atual ao longo da execução, não um snapshot transacional.
+- Checkpoints da Qualidade são privados por usuário/instalação, separados da
+  Disponibilidade, em `zabbix-governance-quality-*` no diretório temporário do PHP.
+  Expiram após 5 minutos sem avanço ou 15 minutos absolutos. Limites: 8 por usuário,
+  32 por instalação e 4 MiB por checkpoint. Trabalhos ativos não são expulsos;
+  navegações rápidas abandonadas podem exigir aguardar a expiração. Resultados
+  concluídos podem liberar vagas do próprio usuário. Não é um cache compartilhado.
+- O usuário do PHP precisa de diretório temporário privado gravável, `flock()` e
+  renomeação atômica. Com múltiplos frontends, usar afinidade de sessão ou armazenamento
+  compatível; os arquivos locais não são replicados automaticamente.
+- Nenhuma alteração de retenção, regras ou cálculo da Disponibilidade faz parte desta versão.
+
+### Validação local da Qualidade
+
+Execute `php tests/quality-pages.php`, `php tests/quality-calculation.php`,
+`php tests/quality-jobs.php`, `php tests/quality-view.php`, `php tests/quality-scale.php`
+e `node tests/quality-view.js`.
+O PHP deve ter `mbstring`. Para revisão visual com dados simulados, execute
+`php -S 127.0.0.1:8770 tests/quality-preview.php` e abra o endereço local.
+Os links de demonstração exercitam carregamento lento, tema claro/inglês,
+falha operacional e escopo vazio. Nenhum teste acessa o Zabbix de produção.
+Os arquivos `tests/` e as notas locais não acompanham o ZIP de produção.
+
 ## Correção 1.7.1
 
 Corrige o aviso `Undefined index: quality_json` ao abrir a configuração dos

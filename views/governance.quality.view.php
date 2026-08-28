@@ -1,209 +1,60 @@
 <?php
-
-/**
- * @var CView $this
- * @var array $data
- */
-
-$moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$assetVersion = '?v=1.7.0';
-$this->addCssFile($moduleWebPath . 'css/governance.css' . $assetVersion);
-$this->addCssFile($moduleWebPath . 'css/quality-pages.css' . $assetVersion);
+$base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
+$this->addCssFile($base . 'css/governance.css?v=1.8.0');
+$this->addCssFile($base . 'css/quality-pages.css?v=1.8.0');
 $this->includeJsFile('governance.quality.view.js.php');
-
-$widget = (new CWidget())
-    ->setTitle($data['page_title']);
-
-$isPt = $data['is_pt'];
-$overallScore = $data['overall_score'];
-$totalHosts = $data['total_hosts'];
-$kpis = $data['kpis'];
-$overview = $data['overview'];
-$pages = $data['pages'];
-$selectedPage = $data['selected_page'];
-$pageName = $isPt ? 'Qualidade' : 'Quality';
-$pageTabs = (new CTag('nav', true))->addClass('gqp-pages')
-    ->setAttribute('aria-label', $isPt ? 'Páginas de qualidade' : 'Quality pages');
-foreach ($pages as $page) {
-    $name = $page['name'] !== '' ? $page['name'] : ($isPt ? 'Qualidade' : 'Quality');
-    $url = (new CUrl('zabbix.php'))->setArgument('action', 'governance.quality.view')->setArgument('page', $page['id']);
-    if (!empty($data['groupids'])) { $url->setArgument('groupids', $data['groupids']); }
-    $link = (new CLink($name, $url->getUrl()))->addClass('gqp-page-link');
-    if ($page['id'] === $selectedPage) { $link->setAttribute('aria-current', 'page'); $pageName = $name; }
-    $pageTabs->addItem($link);
-}
-$configUrl = (new CUrl('zabbix.php'))->setArgument('action', 'governance.quality.config')->setArgument('page', $selectedPage)->getUrl();
-$pageHeading = (new CDiv([
-    (new CDiv([
-        new CTag('h2', true, $isPt ? 'Qualidade do monitoramento' : 'Monitoring quality'),
-        new CTag('p', true, $isPt ? 'Organize os indicadores em páginas, cada uma com seus próprios cards e índice.' : 'Organize indicators into pages, each with its own cards and score.')
-    ]))->addClass('gqp-heading-text'),
-    (new CLink($isPt ? 'Configurar páginas e cards' : 'Configure pages and cards', $configUrl))->addClass('btn-alt')
-]))->addClass('gqp-page-heading');
-
-// Determina o status geral para o banner principal
-$overallStatus = $overallScore === null ? 'neutral' : (($overallScore >= 90) ? 'good' : (($overallScore >= 70) ? 'warning' : 'critical'));
-
-// Resumo geral e indicadores operacionais compactos.
-$overviewItems = [
-    [
-        'label' => $isPt ? 'Ativos / monitorados' : 'Active / monitored',
-        'value' => $overview['monitored'],
-        'hint' => $overview['maintenance'] . ' ' . ($isPt ? 'em manutenção' : 'in maintenance'),
-        'status' => 'good'
-    ],
-    [
-        'label' => $isPt ? 'Inativos / desabilitados' : 'Inactive / disabled',
-        'value' => $overview['disabled'],
-        'hint' => $isPt ? 'Desabilitados' : 'Disabled',
-        'status' => 'neutral'
-    ],
-    [
-        'label' => $isPt ? 'Falha de interface' : 'Interface failure',
-        'value' => $overview['unavailable'],
-        'hint' => $isPt ? 'Hosts afetados' : 'Affected hosts',
-        'status' => $overview['unavailable'] > 0 ? 'critical' : 'good'
-    ],
-    [
-        'label' => $isPt ? 'Problemas altos/críticos' : 'High/critical problems',
-        'value' => $overview['high_problems'],
-        'hint' => $isPt ? 'Abertos e não suprimidos' : 'Open and unsuppressed',
-        'status' => $overview['high_problems'] > 0 ? 'critical' : 'good'
-    ],
-    [
-        'label' => $isPt ? 'Itens não suportados' : 'Unsupported items',
-        'value' => $overview['unsupported_items'],
-        'hint' => $isPt ? 'Itens monitorados' : 'Monitored items',
-        'status' => $overview['unsupported_items'] > 0 ? 'warning' : 'good'
-    ]
+$pt = $data['is_pt'];
+$t = static function($a, $b) use ($pt) { return $pt ? $a : $b; };
+$e = static function($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
+$url = static function(string $action, string $page, array $groups = []): string {
+    $args = ['action' => $action, 'page' => $page];
+    if ($groups) { $args['groupids'] = $groups; }
+    return 'zabbix.php?' . http_build_query($args);
+};
+$metrics = [
+    'monitored' => $t('Ativos / monitorados', 'Active / monitored'),
+    'disabled' => $t('Inativos / desabilitados', 'Inactive / disabled'),
+    'unavailable' => $t('Falha de interface', 'Interface failure'),
+    'high_problems' => $t('Problemas altos/críticos', 'High/critical problems'),
+    'unsupported_items' => $t('Itens não suportados', 'Unsupported items')
 ];
-
-$overviewGrid = (new CDiv())->addClass('gov-overview-grid');
-foreach ($overviewItems as $item) {
-    $overviewGrid->addItem(
-        (new CDiv([
-            (new CDiv($item['label']))->addClass('gov-overview-label'),
-            (new CDiv((string) $item['value']))->addClass('gov-overview-value'),
-            (new CDiv($item['hint']))->addClass('gov-overview-hint')
-        ]))
-            ->addClass('gov-overview-item')
-            ->addClass('gov-overview-' . $item['status'])
-    );
-}
-
-$summaryBanner = (new CDiv())
-    ->addClass('gov-summary-banner')
-    ->addClass('gov-status-' . $overallStatus)
-    ->addItem([
-        (new CDiv([
-            (new CDiv($isPt ? 'Índice da página' : 'Page score'))->addClass('gov-summary-label'),
-            (new CDiv($overallScore === null ? '—' : $overallScore . '%'))->addClass('gov-summary-score'),
-            (new CDiv(
-                $totalHosts . ' / ' . $overview['registered'] . ' '
-                . ($isPt ? 'hosts analisados' : 'hosts analyzed')
-            ))->addClass('gov-summary-meta')
-        ]))->addClass('gov-summary-main'),
-        $overviewGrid
-    ]);
-
-// Grid Container para os Cards de KPI
-$cardsGrid = (new CDiv())->addClass('gov-kpi-grid');
-
-if (empty($kpis)) {
-    $noDataMsg = empty($data['cards_count'])
-        ? ($isPt ? 'Esta página ainda não possui cards. Abra a configuração para adicionar indicadores.' : 'This page has no cards yet. Open configuration to add indicators.')
-        : ($isPt ? 'Nenhum host monitorado encontrado para análise.' : 'No monitored hosts found for analysis.');
-    $cardsGrid->addItem((new CDiv($noDataMsg))->addClass('gov-no-data'));
-} else {
-    foreach ($kpis as $kpi) {
-        $cardId = $kpi['id'];
-        $status = $kpi['status'];
-
-        // Cabeçalho do Card
-        $cardHeader = (new CDiv([
-            (new CTag('h3', true, $kpi['title'])),
-            (new CTag('p', true, $kpi['description']))->addClass('gov-card-desc')
-        ]))->addClass('gov-card-header');
-
-        // Container do indicador circular renderizado pelo Apache ECharts.
-        $chartDiv = (new CDiv())
-            ->setId('chart-' . $cardId)
-            ->addClass('gov-card-chart')
-            ->setAttribute('data-score', $kpi['score'])
-            ->setAttribute('data-status', $status);
-
-        $scoreDisplay = (new CDiv([
-            (new CDiv($kpi['valid_count'] . ' / ' . $kpi['total_count'] . ' ' . ($isPt ? 'em conformidade' : 'compliant')))
-                ->addClass('gov-card-score-sub'),
-            (new CDiv(round(100 - $kpi['score'], 1) . '% ' . ($isPt ? 'não conformes' : 'non-compliant')))
-                ->addClass('gov-card-score-missing')
-        ]))->addClass('gov-card-score-box');
-
-        $cardBody = (new CDiv([$chartDiv, $scoreDisplay]))->addClass('gov-card-body');
-
-        // Lista de Exceções (Amostra de Hosts Não Conformes)
-        if (!empty($kpi['non_compliant'])) {
-            $listItems = [];
-            foreach ($kpi['non_compliant'] as $item) {
-                // Link direto para a tela nativa de edição do Host no Zabbix
-                $hostLink = (new CLink($item['name'], 'zabbix.php?action=host.edit&hostid=' . $item['hostid']))
-                    ->setAttribute('target', '_blank')
-                    ->setTitle($isPt ? 'Editar Host' : 'Edit Host');
-
-                $listItems[] = (new CTag('li', true, $hostLink));
-            }
-
-            $missingCount = $kpi['total_count'] - $kpi['valid_count'];
-            $exceptionsDiv = (new CTag('details', true, [
-                new CTag('summary', true,
-                    $missingCount . ' ' . ($isPt ? 'não conformes — ver amostra' : 'non-compliant — view sample')
-                ),
-                (new CTag('ul', true, $listItems))->addClass('gov-nc-list')
-            ]))->addClass('gov-card-exceptions');
-        } else {
-            $exceptionsDiv = (new CDiv(
-                (new CTag('span', true, $isPt ? '100% de conformidade!' : '100% compliant!'))->addClass('gov-nc-success')
-            ))->addClass('gov-card-exceptions');
-        }
-
-        // Estrutura do Card individual
-        $card = (new CDiv([$cardHeader, $cardBody, $exceptionsDiv]))
-            ->addClass('gov-kpi-card')
-            ->addClass('gov-card-status-' . $status);
-
-        $cardsGrid->addItem($card);
-    }
-}
-
-$cardCount = (int) $data['cards_count'];
-$cardCountLabel = $isPt
-    ? ($cardCount === 1 ? 'indicador configurado' : 'indicadores configurados')
-    : ($cardCount === 1 ? 'configured indicator' : 'configured indicators');
-$sectionHeading = (new CDiv([
-    (new CTag('h2', true, $pageName)),
-    (new CTag('span', true, $cardCount . ' ' . $cardCountLabel))
-]))->addClass('gov-section-heading');
-
-// Monta o layout final dentro do widget do Zabbix
-$scoreHelpText = $isPt
-    ? 'O índice considera somente os cards desta página marcados para participar. O resumo operacional representa os hosts do escopo atual.'
-    : 'The score uses only the participating cards on this page. The operational summary represents hosts in the current scope.';
-if ($overallScore === null) {
-    if ($cardCount === 0) {
-        $scoreHelpText = $isPt ? 'Adicione cards para calcular o índice desta página.' : 'Add cards to calculate this page score.';
-    }
-    elseif ($totalHosts === 0) {
-        $scoreHelpText = $isPt ? 'O índice não é calculado sem hosts monitorados no escopo.' : 'The score is not calculated without monitored hosts in scope.';
-    }
-    else {
-        $scoreHelpText = $isPt ? 'Nenhum card desta página está marcado para participar do índice.' : 'No card on this page is marked to participate in the score.';
-    }
-}
-$scoreHelp = (new CTag('p', true, $scoreHelpText))->addClass('gqp-score-help');
-$content = (new CDiv([$pageHeading, $pageTabs, $summaryBanner, $scoreHelp, $sectionHeading, $cardsGrid]))->addClass('gov-container')->addClass('gqp');
-
-if (!empty($data['is_dark'])) {
-    $content->addClass('gov-theme-dark');
-}
-
-$widget->addItem($content)->show();
+ob_start();
+?>
+<div class="gov-container gqp <?= $data['is_dark'] ? 'gov-theme-dark' : '' ?>" id="gqp-dashboard" data-lang="<?= $pt ? 'pt' : 'en' ?>" data-echarts="<?= $e($base) ?>js/echarts.min.js?v=1.8.0">
+    <div class="gqp-page-heading"><div class="gqp-heading-text"><h2><?= $e($data['page_title']) ?></h2>
+        <p><?= $t('Indicadores por página. A análise carrega em etapas, sem bloquear a navegação.', 'Indicators by page. Analysis loads in stages without blocking navigation.') ?></p></div>
+        <a class="btn-alt" href="<?= $e($url('governance.quality.config', $data['selected_page'])) ?>"><?= $t('Configurar páginas e cards', 'Configure pages and cards') ?></a></div>
+    <nav class="gqp-pages" aria-label="<?= $t('Páginas de qualidade', 'Quality pages') ?>">
+        <?php foreach ($data['pages'] as $page): ?>
+        <a class="gqp-page-link" href="<?= $e($url('governance.quality.view', $page['id'], $data['groupids'])) ?>" <?= $page['id'] === $data['selected_page'] ? 'aria-current="page"' : '' ?>><?= $e($page['name'] !== '' ? $page['name'] : $t('Qualidade', 'Quality')) ?></a>
+        <?php endforeach ?>
+    </nav>
+    <?php echo (new CForm())->setId('gqp-token')->setAction('zabbix.php?action=governance.quality.run')->setAttribute('hidden', 'hidden'); ?>
+    <section class="gqp-load-panel" aria-label="<?= $t('Carregamento da qualidade', 'Quality loading') ?>">
+        <div class="gqp-load-actions"><p id="gqp-message" role="status" aria-live="polite" aria-atomic="true"><?= $e($data['error'] ?? $t('Carregando indicadores… Você pode continuar navegando.', 'Loading indicators… You can continue navigating.')) ?></p>
+            <button type="button" id="gqp-retry" hidden><?= $t('Tentar novamente', 'Retry') ?></button>
+            <button type="button" id="gqp-refresh" disabled><?= $t('Atualizar', 'Refresh') ?></button></div>
+        <div id="gqp-progress-wrap"><progress id="gqp-progress" aria-label="<?= $t('Hosts analisados', 'Hosts analyzed') ?>"></progress><span id="gqp-progress-text"></span></div>
+        <p class="gqp-muted" id="gqp-timing"></p>
+    </section>
+    <noscript><p class="gqp-notice gqp-error"><?= $t('Ative o JavaScript para consultar os indicadores. Nenhuma análise é executada ao abrir esta página.', 'Enable JavaScript to load indicators. Opening this page does not run the analysis.') ?></p></noscript>
+    <div class="gov-summary-banner gov-status-neutral" id="gqp-summary" aria-busy="true">
+        <div class="gov-summary-main"><div class="gov-summary-label"><?= $t('Índice da página', 'Page score') ?></div><div class="gov-summary-score" id="gqp-score">—</div><div class="gov-summary-meta" id="gqp-hosts"><?= $t('Aguardando análise', 'Waiting for analysis') ?></div></div>
+        <div class="gov-overview-grid"><?php foreach ($metrics as $key => $label): ?>
+            <div class="gov-overview-item gov-overview-neutral" id="gqp-metric-<?= $key ?>" aria-busy="true"><div class="gov-overview-label"><?= $label ?></div><div class="gov-overview-value">—</div><div class="gov-overview-hint"><?= $t('Aguardando', 'Waiting') ?></div></div>
+        <?php endforeach ?></div>
+    </div>
+    <p class="gqp-score-help" id="gqp-score-help"><?= $t('O índice será exibido após concluir todos os cards participantes.', 'The score will appear after all participating cards are complete.') ?></p>
+    <div class="gov-section-heading"><h2><?= $e($data['page_name'] !== '' ? $data['page_name'] : $t('Qualidade', 'Quality')) ?></h2><span><?= $data['cards_count'] ?> <?= $t('indicadores configurados', 'configured indicators') ?></span></div>
+    <div class="gov-kpi-grid" id="gqp-cards" aria-busy="true">
+        <?php foreach ($data['cards'] as $card): ?>
+        <article class="gov-kpi-card gqp-card-loading" data-card-id="<?= $e($card['id']) ?>"><div class="gov-card-header"><h3><?= $e($card['title']) ?></h3><p class="gov-card-desc"><?= $e($card['description']) ?></p></div>
+            <div class="gov-card-body"><div class="gov-card-chart gqp-chart-placeholder" role="img" aria-label="<?= $t('Aguardando resultado', 'Waiting for result') ?>">—</div><div class="gov-card-score-box"><div class="gov-card-score-sub"><?= $t('Carregando…', 'Loading…') ?></div><div class="gov-card-score-missing"></div></div></div><div class="gov-card-exceptions"></div></article>
+        <?php endforeach ?>
+    </div>
+    <p class="gov-no-data" id="gqp-empty" <?= $data['cards_count'] ? 'hidden' : '' ?>><?= $t('Esta página ainda não possui cards. Abra a configuração para adicionar indicadores.', 'This page has no cards yet. Open configuration to add indicators.') ?></p>
+    <p class="gqp-score-help"><?= $t('Leitura do estado atual ao longo da consulta, não um retrato transacional. As regras e os hosts do início orientam esta análise. Sair interrompe novas etapas, não a consulta já enviada.', 'Current state read over the query interval, not a transactional snapshot. Initial rules and hosts define this analysis. Leaving stops new stages, not an already submitted query.') ?></p>
+    <script type="application/json" id="gqp-input"><?= json_encode(['page' => $data['selected_page'], 'revision' => $data['revision'], 'groupids' => array_values($data['groupids']), 'error' => $data['error']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+</div>
+<?php
+(new CWidget())->setTitle($data['page_title'])->addItem(new CObject(ob_get_clean()))->show();
