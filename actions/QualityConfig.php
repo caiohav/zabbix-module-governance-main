@@ -71,7 +71,8 @@ class QualityConfig extends CController {
             'revision' => $reviewedRevision,
             'selected_page' => $selectedPage,
             'conflict' => !hash_equals($revision, $reviewedRevision),
-            'draft_json' => $this->getInput('quality_json', null),
+            // In Zabbix 6 a null default still reads the index directly.
+            'draft_json' => $this->hasInput('quality_json') ? $this->getInput('quality_json') : null,
             'is_pt' => $isPt,
             'is_dark' => self::isDarkTheme()
         ]));

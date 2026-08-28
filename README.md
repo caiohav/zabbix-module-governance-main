@@ -3,6 +3,14 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Correção 1.7.1
+
+Corrige o aviso `Undefined index: quality_json` ao abrir a configuração dos
+cards e a mesma leitura insegura de campos opcionais no salvamento.
+As páginas, cards, revisões de edição e regras de disponibilidade são preservados.
+Os testes agora reproduzem o comportamento nativo do `getInput()` do Zabbix 6.0:
+um valor padrão `null` não protege o acesso a um campo ausente.
+
 ## Funcionalidades
 
 - Menu visível exclusivamente para usuários Super Admin.

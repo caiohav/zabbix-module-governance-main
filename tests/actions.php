@@ -6,7 +6,11 @@ define('USER_TYPE_SUPER_ADMIN', 3);
 class CController {
     public $input = [], $response, $type = 3;
     protected function getUserType() { return $this->type; }
-    protected function getInput($key, $default = null) { return $this->input[$key] ?? $default; }
+    // Match Zabbix 6: null is not a fallback for an absent input.
+    protected function getInput($key, $default = null) {
+        return $default === null ? $this->input[$key]
+            : (array_key_exists($key, $this->input) ? $this->input[$key] : $default);
+    }
     protected function hasInput($key) { return array_key_exists($key, $this->input); }
     protected function setResponse($value) { $this->response = $value; }
     protected function validateInput($rules) { return true; }
@@ -36,6 +40,9 @@ class SaveHarness extends Modules\Governance\Actions\AvailabilitySave { public f
 class ConfigHarness extends Modules\Governance\Actions\AvailabilityConfigView { public function run() { if ($this->checkPermissions()) { $this->doAction(); } } }
 class QualityHarness extends Modules\Governance\Actions\QualityConfigUpdate { public function run() { if ($this->checkPermissions()) { $this->doAction(); } } }
 $count = 0;
+set_error_handler(static function($severity, $message, $file, $line) {
+    throw new ErrorException($message, 0, $severity, $file, $line);
+}, E_WARNING | E_NOTICE);
 function assertAction($value, $message) { global $count; $count++; if (!$value) { throw new RuntimeException($message); } }
 API::$module = new TestModule();
 API::$module->config = ['cards' => [['name' => 'Existing card']], 'other_setting' => 42];

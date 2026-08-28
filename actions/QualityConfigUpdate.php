@@ -41,8 +41,9 @@ class QualityConfigUpdate extends CController {
             $url->setArgument('page', $selectedPage);
         }
         $redirect = new CControllerResponseRedirect($url);
-        $json = $this->getInput('quality_json', null);
-        $revision = $this->getInput('quality_revision', null);
+        // Check optional inputs explicitly: getInput(..., null) is not a safe fallback in Zabbix 6.
+        $json = $this->hasInput('quality_json') ? $this->getInput('quality_json') : null;
+        $revision = $this->hasInput('quality_revision') ? $this->getInput('quality_revision') : null;
 
         try {
             // Read the latest full configuration immediately before merging so

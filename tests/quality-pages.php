@@ -155,7 +155,11 @@ class CController {
     public $input = [], $response, $type = 3, $sidValidation = true;
     protected function init(): void {}
     protected function getUserType() { return $this->type; }
-    protected function getInput($key, $default = null) { return $this->input[$key] ?? $default; }
+    // Match Zabbix 6: null is not a fallback for an absent input.
+    protected function getInput($key, $default = null) {
+        return $default === null ? $this->input[$key]
+            : (array_key_exists($key, $this->input) ? $this->input[$key] : $default);
+    }
     protected function hasInput($key) { return array_key_exists($key, $this->input); }
     protected function setResponse($value) { $this->response = $value; }
     protected function validateInput($rules) { return true; }
@@ -237,11 +241,27 @@ API::$host->hosts = [
         'groups' => [['groupid' => '11', 'name' => 'Equipes/Conectividade']]]
 ];
 
+// Native notices must fail these tests instead of being hidden by a permissive mock.
+set_error_handler(static function($severity, $message, $file, $line) {
+    throw new ErrorException($message, 0, $severity, $file, $line);
+}, E_WARNING | E_NOTICE);
 $editor = new QualityConfigHarness(); $editor->run();
 qualityAssert($editor->response->data['pages'] === $migrated && $editor->response->data['selected_page'] === 'main', 'editor loads the migrated main page');
 qualityAssert($editor->response->data['revision'] === $revision && !$editor->response->data['conflict'], 'editor starts with the reviewed revision');
 qualityAssert($editor->response->data['is_dark'] === true, 'editor respects the inherited default dark theme');
 qualityAssert(API::$module->writes === 0, 'opening editor does not write a migration');
+qualityAssert($editor->response->data['draft_json'] === null, 'GET without a submitted draft returns null without reading a missing input');
+$revisionOnly = new QualityConfigHarness(); $revisionOnly->input = ['quality_revision' => $revision]; $revisionOnly->run();
+qualityAssert($revisionOnly->response->data['draft_json'] === null && !$revisionOnly->response->data['conflict'], 'optional revision does not require a draft');
+$pageOnly = new QualityConfigHarness(); $pageOnly->input = ['page' => 'main']; $pageOnly->run();
+qualityAssert($pageOnly->response->data['selected_page'] === 'main' && $pageOnly->response->data['draft_json'] === null, 'opening a page without draft or revision is safe');
+$draftView = new QualityConfigHarness();
+$draftView->input = ['quality_json' => json_encode($pages), 'quality_revision' => $revision, 'page' => 'groups']; $draftView->run();
+qualityAssert($draftView->response->data['draft_json'] === json_encode($pages) && $draftView->response->data['pages'] === $pages, 'submitted draft is preserved verbatim');
+qualityAssert($draftView->response->data['selected_page'] === 'groups', 'draft retains selected page');
+$draftView->input = ['quality_json' => json_encode($pages)]; $draftView->run();
+qualityAssert($draftView->response->data['conflict'] && $draftView->response->data['revision'] === '', 'draft without revision remains blocked without an undefined input');
+qualityAssert(API::$module->writes === 0 && API::$module->config === $legacy, 'all editor openings preserve stored cards and settings');
 
 $save = new QualitySaveHarness();
 $save->input = ['quality_json' => json_encode($pages), 'quality_revision' => $revision, 'page' => 'groups'];
