@@ -10,6 +10,7 @@ use CMessageHelper;
 use CUrl;
 use CWebUser;
 use Modules\Governance\AvailabilityConfig;
+use Modules\Governance\GovernanceConfig;
 
 class AvailabilitySave extends CController {
     // Keep the native Zabbix 6 SID validation enabled for this mutation.
@@ -34,6 +35,7 @@ class AvailabilitySave extends CController {
                 throw new \RuntimeException('Rules changed in another session. Review before saving / Regras alteradas em outra sessão. Revise antes de salvar.');
             }
             $merged['availability'] = $config;
+            GovernanceConfig::assertModuleConfigSize($merged);
             if (!API::Module()->update([['moduleid' => $modules[0]['moduleid'], 'config' => $merged]])) {
                 throw new \RuntimeException('Could not save / Não foi possível salvar.');
             }

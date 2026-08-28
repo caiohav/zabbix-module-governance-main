@@ -1,7 +1,7 @@
 <?php
 $base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$this->addCssFile($base . 'css/governance.css?v=1.5.1');
-$this->addCssFile($base . 'css/availability.css?v=1.5.1');
+$this->addCssFile($base . 'css/governance.css?v=1.7.0');
+$this->addCssFile($base . 'css/availability.css?v=1.7.0');
 $this->includeJsFile('governance.availability.view.js.php');
 $pt = $data['is_pt'];
 $t = static function($a, $b) use ($pt) { return $pt ? $a : $b; };
@@ -20,23 +20,28 @@ $status = static function($summary, $target) {
     return $summary['score'] === null ? 'unknown' : ($summary['score'] >= $target ? 'good' : 'bad');
 };
 $report = $data['report'];
+$job = $data['job'] ?? null;
 $message = static function($value) use ($pt) {
     $parts = explode(' / ', $value, 2);
     return $pt && count($parts) === 2 ? $parts[1] : $parts[0];
 };
-$timezone = new DateTimeZone($data['config']['timezone']);
+$timezoneName = $report['timezone'] ?? ($job['snapshot']['timezone'] ?? '');
+// A rejected start or a busy GET has no confirmed snapshot timezone yet.
+$timezone = new DateTimeZone($timezoneName !== '' ? $timezoneName : $data['config']['timezone']);
 $date = static function($clock) use ($timezone, $pt) {
     return (new DateTimeImmutable('@' . $clock))->setTimezone($timezone)->format($pt ? 'd/m/Y H:i:s' : 'Y-m-d H:i:s');
 };
 ob_start();
 ?>
-<div class="gov-container gav <?= !empty($data['is_dark']) ? 'gov-theme-dark' : '' ?>" id="gav-dashboard" data-lang="<?= $pt ? 'pt' : 'en' ?>">
+<div class="gov-container gav <?= !empty($data['is_dark']) ? 'gov-theme-dark' : '' ?>" id="gav-dashboard" data-lang="<?= $pt ? 'pt' : 'en' ?>" data-timezone="<?= $e($data['config']['timezone']) ?>">
     <div class="gav-toolbar gav-page-heading gav-no-print">
         <div><span class="gav-eyebrow"><?= $t('GOVERNANÇA / INDICADORES MENSAIS', 'GOVERNANCE / MONTHLY INDICATORS') ?></span>
             <h2><?= $t('Disponibilidade dos serviços', 'Service availability') ?></h2><p class="gav-muted"><?= $t('Indicadores mensais por departamento, ponderados por tecnologia.', 'Monthly department indicators, weighted by technology.') ?></p></div>
         <a class="btn-alt" href="zabbix.php?action=governance.availability.config"><?= $t('Configurar indicadores', 'Configure indicators') ?></a>
     </div>
-    <form method="get" action="zabbix.php" class="gav-filters gav-no-print">
+    <?php // A separate native POST form supplies Zabbix 6's SID; never nest it in the GET filters.
+    echo (new CForm())->setId('gav-job-token')->setAction('zabbix.php?action=governance.availability.run')->setAttribute('hidden', 'hidden'); ?>
+    <form method="get" action="zabbix.php" class="gav-filters gav-no-print" id="gav-filters">
         <input type="hidden" name="action" value="governance.availability.view">
         <label class="gav-field"><span><?= $t('Competência', 'Month') ?></span><input type="month" name="month" required value="<?= $e($data['month']) ?>"></label>
         <label class="gav-field gav-department-filter"><span><?= $t('Departamento', 'Department') ?></span><select name="department">
@@ -45,20 +50,45 @@ ob_start();
             <option value="<?= $id ?>" <?= $data['department'] === $id ? 'selected' : '' ?>><?= $e($department['name']) ?></option>
             <?php endforeach ?>
         </select></label>
-        <button type="submit"><?= $t('Calcular mês', 'Calculate month') ?></button>
+        <button type="submit" id="gav-calculate" disabled><?= $t('Calcular mês', 'Calculate month') ?></button>
         <?php if ($report): ?>
-        <div class="gav-filter-actions"><button type="button" id="gav-export" class="btn-alt" disabled><?= $t('Exportar memória (JSON)', 'Export details (JSON)') ?></button>
+        <div class="gav-filter-actions" id="gav-filter-actions"><button type="button" id="gav-export" class="btn-alt" disabled><?= $t('Exportar memória (JSON)', 'Export details (JSON)') ?></button>
         <button type="button" id="gav-print" class="btn-alt" disabled><?= $t('Imprimir / PDF', 'Print / PDF') ?></button>
         </div>
         <?php endif ?>
     </form>
-    <?php if ($data['error']): ?><div class="gav-notice gav-error" role="alert"><?= $e($message($data['error'])) ?></div><?php endif ?>
-    <?php if (!$data['config']['departments']): ?>
+    <noscript><p class="gav-notice gav-error"><?= $t('Ative o JavaScript para iniciar ou continuar o cálculo em etapas. Abrir esta página não inicia consultas ao histórico.', 'Enable JavaScript to start or resume the staged calculation. Opening this page does not start history queries.') ?></p></noscript>
+    <?php if ($data['error']): ?><div class="gav-notice gav-error" id="gav-page-error" role="alert"><?= $e($message($data['error'])) ?>
+        <?php if (!$job): ?><a href="zabbix.php?action=governance.availability.view"><?= $t('Voltar à seleção do período', 'Return to period selection') ?></a><?php endif ?>
+    </div><?php endif ?>
+    <p class="gav-notice gav-no-print" id="gav-idle-help" <?= $report || $job || !$data['config']['departments'] ? 'hidden' : '' ?>><?= $t('Selecione a competência e clique em Calcular mês. O histórico será consultado em etapas curtas; o relatório só será exibido quando o processamento terminar.', 'Select the month and click Calculate month. History will be queried in short stages; the report will only appear after processing is complete.') ?></p>
+    <section class="gav-job gav-no-print" id="gav-job" aria-labelledby="gav-job-title" hidden>
+        <div class="gav-toolbar"><h3 id="gav-job-title"><?= $t('Cálculo em etapas', 'Staged calculation') ?></h3><span class="gav-badge" id="gav-job-state"></span></div>
+        <div class="gav-job-snapshot"><span class="gav-eyebrow"><?= $t('RETRATO DESTE CÁLCULO', 'THIS CALCULATION SNAPSHOT') ?></span><strong id="gav-job-snapshot"></strong>
+            <p class="gav-muted" id="gav-job-period"></p><p class="gav-muted" id="gav-job-snapshot-note"><?= $t('Regras e período fixados ao iniciar. Nenhum resultado parcial será publicado.', 'Rules and period are fixed at the start. No partial result will be published.') ?></p></div>
+        <p class="gav-job-message" id="gav-job-message" role="status" aria-live="polite" aria-atomic="true"></p>
+        <div class="gav-job-progress-heading" aria-live="polite" aria-atomic="true"><span id="gav-job-stage"></span><strong id="gav-job-percent">—</strong></div>
+        <progress id="gav-job-progress" max="100" value="0" aria-label="<?= $t('Progresso do processamento', 'Processing progress') ?>" aria-describedby="gav-job-counts"></progress>
+        <dl class="gav-job-counts" id="gav-job-counts">
+            <div><dt><?= $t('Hosts concluídos / total', 'Hosts completed / total') ?></dt><dd id="gav-job-hosts">—</dd></div>
+            <div><dt><?= $t('Verificações concluídas / total', 'Checks completed / total') ?></dt><dd id="gav-job-checks">—</dd></div>
+            <div><dt><?= $t('Linhas de histórico lidas', 'History rows read') ?></dt><dd id="gav-job-rows">—</dd></div>
+            <div><dt><?= $t('Chamadas à API', 'API calls') ?></dt><dd id="gav-job-calls">—</dd></div>
+        </dl>
+        <p class="gav-muted gav-job-context" id="gav-job-context"></p>
+        <div class="gav-job-actions"><button type="button" id="gav-job-pause" class="btn-alt" hidden><?= $t('Pausar', 'Pause') ?></button>
+            <button type="button" id="gav-job-resume" hidden><?= $t('Continuar cálculo', 'Resume calculation') ?></button>
+            <a id="gav-job-new" href="zabbix.php?action=governance.availability.view" hidden><?= $t('Escolher outro período', 'Choose another period') ?></a></div>
+        <p class="gav-muted gav-job-pause-help"><?= $t('Pausar ou sair impede novas etapas nesta aba, mas não interrompe uma consulta já enviada ao servidor. Reabra o endereço deste cálculo para continuar enquanto ele estiver disponível.', 'Pausing or leaving prevents new stages in this tab, but does not stop a query already sent to the server. Reopen this calculation’s address to resume while it remains available.') ?></p>
+    </section>
+    <script type="application/json" id="gav-job-data"><?= json_encode($job, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+    <?php if (!$data['config']['departments'] && !$job && !$data['error']): ?>
     <div class="gav-empty"><h3><?= $t('Seu primeiro indicador começa pelas regras', 'Your first indicator starts with its rules') ?></h3>
         <p><?= $t('Cadastre um departamento, suas tecnologias e os itens que representam host e serviço disponíveis.', 'Add a department, its technologies and the items that represent host and service availability.') ?></p>
         <a href="zabbix.php?action=governance.availability.config"><?= $t('Criar indicadores de disponibilidade', 'Create availability indicators') ?></a></div>
     <?php endif ?>
     <?php if ($report): ?>
+    <div class="gav-report" id="gav-report">
     <div class="gav-period"><strong><?= $e($report['month']) ?></strong>
         <span><?= $e($report['timezone']) ?> · 24×7 · <?= $e($date($report['from'])) ?> → <?= $e($date($report['to'])) ?></span>
         <span class="gav-badge <?= $report['partial'] ? 'gav-unknown' : '' ?>"><?= $report['partial'] ? $t('Mês em andamento', 'Month in progress') : $t('Mês encerrado · recalculado', 'Past month · recalculated') ?></span>
@@ -80,7 +110,7 @@ ob_start();
     <details class="gav-help"><summary><?= $t('Como interpretar o relatório', 'How to interpret the report') ?></summary><ul>
         <li><?= $t('O índice do departamento é a média ponderada das tecnologias; não é a disponibilidade simultânea de todos os serviços.', 'The department index is a weighted mean of technologies, not the simultaneous availability of all services.') ?></li>
         <li><?= $t('Cobertura ponderada indica a parcela do período com estado conhecido, considerando os pesos. Qualquer lacuna impede publicar um índice final.', 'Weighted coverage is the share of the period with a known state, taking weights into account. Any gap prevents a final index from being published.') ?></li>
-        <li><?= $t('Calendário 24×7, sem desconto de manutenções. Regras e composição de grupos são as atuais; meses passados são recalculados, sem fechamento imutável.', '24×7 calendar, with no maintenance exclusions. Rules and group membership are current; past months are recalculated, with no immutable monthly close.') ?></li>
+        <li><?= $t('Calendário 24×7, sem desconto de manutenções. Usa as regras do início do cálculo e a composição atual dos grupos; meses passados são recalculados, sem fechamento imutável.', '24×7 calendar, with no maintenance exclusions. Uses rules from the start of the calculation and current group membership; past months are recalculated, with no immutable monthly close.') ?></li>
         <li><?= $t('O histórico bruto deve cobrir todo o mês. Dados removidos pela retenção não podem ser recuperados das trends para reconstruir as quedas.', 'Raw history must cover the entire month. Data removed by retention cannot be recovered from trends to reconstruct outages.') ?></li>
     </ul></details>
     <?php foreach ($report['departments'] as $di => $department): $ds = $department['summary']; ?>
@@ -138,6 +168,9 @@ ob_start();
             <div class="gav-table-scroll"><table class="gav-table"><thead><tr><th>Host</th><th><?= $t('Disponibilidade', 'Availability') ?></th><th><?= $t('Indisponível', 'Down') ?></th><th><?= $t('Desconhecido', 'Unknown') ?></th><th><?= $t('Itens / observações', 'Items / notes') ?></th></tr></thead><tbody>
                 <?php foreach ($tech['hosts'] as $host): $sourceWarnings = []; ?><tr><th><?= $e($host['name']) ?></th><td><?= $e($percent($host['summary']['score'])) ?></td><td><?= $e($duration($host['summary']['down'])) ?></td><td><?= $e($duration($host['summary']['unknown'])) ?></td><td>
                     <?php foreach ($host['sources'] as $source): ?><div class="gav-source"><code><?= $e($source['key']) ?></code><small>ID <?= $e($source['itemid'] ?? '—') ?> · <?= ($source['freshness_mode'] ?? 'manual') === 'auto' ? $t('Validade automática', 'Automatic validity') : $t('Validade manual', 'Manual validity') ?>: <?= isset($source['max_age']) ? $e($source['max_age']) . 's' : $t('não resolvida', 'unresolved') ?><?php if (!empty($source['interval_seconds'])): ?> · <?= $t('coleta', 'polling') ?> <?= $e($source['interval_seconds']) ?>s<?php endif ?><?php if (!empty($source['heartbeat_seconds'])): ?> · heartbeat <?= $e($source['heartbeat_seconds']) ?>s<?php endif ?></small>
+                        <?php if (isset($source['sample_count']) || array_key_exists('max_gap_seconds', $source)): ?><small class="gav-source-diagnostics"><?php if (isset($source['sample_count'])): ?><?= $t('Amostras no período:', 'Samples in period:') ?> <?= $e($source['sample_count']) ?><?php endif ?><?php if (array_key_exists('max_gap_seconds', $source)): ?><?= isset($source['sample_count']) ? ' · ' : '' ?><?= $t('Maior intervalo entre amostras:', 'Longest interval between samples:') ?> <?= isset($source['max_gap_seconds']) ? $e($duration($source['max_gap_seconds'])) : '—' ?><?php endif ?></small><?php endif ?>
+                        <?php if (array_key_exists('first_clock', $source) || array_key_exists('last_clock', $source)): ?><small><?= $t('Primeira / última amostra:', 'First / last sample:') ?> <?= isset($source['first_clock']) ? $e($date($source['first_clock'])) : '—' ?> / <?= isset($source['last_clock']) ? $e($date($source['last_clock'])) : '—' ?></small><?php endif ?>
+                        <?php if (isset($source['summary']['coverage']) || isset($source['summary']['unknown'])): ?><small><?= $t('Cobertura da fonte:', 'Source coverage:') ?> <?= $e($percent($source['summary']['coverage'] ?? null)) ?><?php if (isset($source['summary']['unknown'])): ?> · <?= $t('Tempo sem estado conhecido:', 'Time with unknown state:') ?> <?= $e($duration($source['summary']['unknown'])) ?><?php endif ?></small><?php endif ?>
                         <?php foreach ($source['warnings'] ?? [] as $warning): $sourceWarnings[$warning] = true; $sourceWarnings[$source['key'] . ': ' . $warning] = true; ?><small class="gav-warning"><?= $e($message($warning)) ?></small><?php endforeach ?>
                     </div><?php endforeach ?>
                     <?php foreach ($host['warnings'] as $warning): if (isset($sourceWarnings[$warning])) { continue; } ?><small class="gav-warning"><?= $e($message($warning)) ?></small><?php endforeach ?>
@@ -155,10 +188,16 @@ ob_start();
         <?php endforeach ?>
     </section>
     <?php endforeach ?>
-    <p class="gav-muted gav-report-footer"><?= $t('Calculado em', 'Calculated at') ?> <?= $e($date($report['generated_at'])) ?> · <?= $e($report['rows']) ?> <?= $t('amostras lidas', 'samples read') ?>.
-        <?= $t('Histórico bruto, resolução de 1 segundo, sem fallback para trends. Configuração e composição atuais; não é um fechamento imutável. Selecione um departamento para reduzir o processamento.',
-            'Raw history, 1-second resolution, no trends fallback. Current rules and membership; not an immutable monthly close. Select one department to reduce processing.') ?></p>
+    <?php $processing = $report['processing'] ?? []; if ($processing): ?>
+    <p class="gav-muted gav-processing"><?php $processedHosts = $processing['hosts_done'] ?? null; ?>
+        <?= $t('Processamento concluído', 'Processing completed') ?><?php if (isset($processing['completed_at'])): ?> <?= $e($date($processing['completed_at'])) ?><?php endif ?><?php if ($processedHosts !== null): ?> · <?= $e($processedHosts) ?> <?= $t('hosts avaliados', 'hosts assessed') ?><?php endif ?><?php if (isset($processing['api_calls'])): ?> · <?= $e($processing['api_calls']) ?> <?= $t('chamadas à API', 'API calls') ?><?php endif ?><?php if (isset($processing['working_seconds'])): ?> · <?= $t('tempo ativo', 'active time') ?> <?= $e($duration($processing['working_seconds'])) ?><?php endif ?><?php if (isset($processing['elapsed_seconds'])): ?> · <?= $t('tempo total, incluindo pausas', 'total time, including pauses') ?> <?= $e($duration($processing['elapsed_seconds'])) ?><?php endif ?>.
+    </p>
+    <?php endif ?>
+    <p class="gav-muted gav-report-footer"><?= $t('Recorte fixado em', 'Cutoff fixed at') ?> <?= $e($date($report['generated_at'])) ?> · <?= $e($report['rows']) ?> <?= $t('linhas lidas (incluindo amostras anteriores ao período e repetidas na paginação)', 'rows read (including pre-period samples and pagination duplicates)') ?>.
+        <?= $t('Histórico bruto, resolução de 1 segundo, sem fallback para trends. Regras do início do cálculo e composição atual; não é um fechamento imutável. Selecione um departamento para reduzir o processamento.',
+            'Raw history, 1-second resolution, no trends fallback. Rules from the start of the calculation and current membership; not an immutable monthly close. Select one department to reduce processing.') ?></p>
     <script type="application/json" id="gav-report-data"><?= json_encode($report, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+    </div>
     <?php endif ?>
 </div>
 <?php (new CWidget())->setTitle($data['page_title'])->addItem(new CObject(ob_get_clean()))->show();

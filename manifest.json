@@ -2,7 +2,7 @@
   "manifest_version": 1.0,
   "id": "zabbix_module_governance",
   "name": "Governance & Quality Audit",
-  "version": "1.5.1",
+  "version": "1.7.0",
   "namespace": "Governance",
   "author": "Governance Module Team",
   "url": "https://github.com/seu-usuario/zabbix-module-governance",
@@ -11,6 +11,10 @@
     "governance.availability.view": {
       "class": "AvailabilityView",
       "view": "governance.availability.view"
+    },
+    "governance.availability.run": {
+      "class": "AvailabilityRun",
+      "layout": "layout.json"
     },
     "governance.availability.config": {
       "class": "AvailabilityConfigView",

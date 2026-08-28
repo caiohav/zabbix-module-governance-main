@@ -1,7 +1,7 @@
 <?php
 $base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$this->addCssFile($base . 'css/governance.css?v=1.5.1');
-$this->addCssFile($base . 'css/availability.css?v=1.5.1');
+$this->addCssFile($base . 'css/governance.css?v=1.7.0');
+$this->addCssFile($base . 'css/availability.css?v=1.7.0');
 $this->includeJsFile('governance.availability.config.js.php');
 $pt = $data['is_pt'];
 $t = static function($ptText, $enText) use ($pt) { return $pt ? $ptText : $enText; };

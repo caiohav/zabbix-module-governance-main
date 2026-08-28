@@ -108,4 +108,26 @@ $reviewed->run();
 assertAction(API::$module->writes === 2 && API::$module->config['availability'] === $draftB, 'reviewed current revision can be saved');
 assertAction(API::$module->config['cards'][0]['name'] === 'Concurrent card change', 'availability save preserves newly updated quality cards');
 assertAction(API::$module->config['other_setting'] === 42, 'concurrent availability save preserves unrelated settings');
+
+// All features share the native module.config column. A valid availability
+// document may still exceed that limit once merged with saved quality pages.
+API::$module = new TestModule();
+API::$module->config = ['availability' => $defaults,
+    'quality_pages' => [['id' => 'main', 'name' => '', 'cards' => Modules\Governance\GovernanceConfig::getDefaultCards()]],
+    'other_setting' => 42, 'padding' => ''];
+API::$module->config['padding'] = str_repeat('x', 65535 - 512 - strlen(json_encode(API::$module->config)));
+$nearCapacityConfig = API::$module->config;
+assertAction(strlen(json_encode($nearCapacityConfig)) === 65535 - 512, 'shared-storage fixture fits the existing native column');
+$largerAvailability = $defaults;
+$largerAvailability['departments'] = [['name' => 'Database', 'target' => 99.9, 'technologies' => [[
+    'name' => 'PostgreSQL', 'weight' => 1, 'target' => 99.9, 'mode' => 'any_down', 'groups' => 'Equipes',
+    'checks' => [['key' => str_repeat('k', 2048), 'max_age' => null, 'up' => ['op' => 'eq', 'a' => 1], 'down' => null]]
+]]]];
+$oversizeSave = new SaveHarness();
+$oversizeSave->input = ['availability_json' => json_encode($largerAvailability), 'config_revision' => hash('sha256', json_encode($defaults))];
+$oversizeSave->run();
+assertAction(API::$module->writes === 0 && API::$module->config === $nearCapacityConfig, 'oversized merged availability cannot truncate stored quality or issue a write');
+assertAction(strpos(CMessageHelper::$error, 'share this limit') !== false, 'availability storage error explains shared capacity');
+assertAction($oversizeSave->response->data['availability_json'] === json_encode($largerAvailability), 'storage failure preserves the availability draft');
+assertAction($oversizeSave->response->data['config_revision'] === hash('sha256', json_encode($defaults)), 'storage failure preserves the availability revision');
 echo 'PASS: ' . $count . " action assertions\n";

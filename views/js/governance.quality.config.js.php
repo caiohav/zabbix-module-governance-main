@@ -2,4 +2,4 @@
 
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__, 2))) . '/assets/';
 ?>
-<script type="text/javascript" src="<?= $moduleWebPath ?>js/config.js?v=1.4.1"></script>
+<script type="text/javascript" src="<?= $moduleWebPath ?>js/config.js?v=1.7.0"></script>

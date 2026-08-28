@@ -24,15 +24,16 @@ class Module extends CModule {
         $isPt = (strpos(strtolower($userLang), 'pt_br') !== false || strpos(strtolower($userLang), 'pt') === 0);
 
         $mainMenuTitle = $isPt ? 'Governança' : 'Governance';
-        $qualityTitle = $isPt ? 'Visão geral' : 'Overview';
-        $configTitle = $isPt ? 'Regras e cards' : 'Rules and cards';
+        $qualityTitle = $isPt ? 'Qualidade' : 'Quality';
+        $configTitle = $isPt ? 'Configurar qualidade' : 'Configure quality';
 
         $submenu = new CMenu([
             (new CMenuItem($qualityTitle))->setAction('governance.quality.view'),
             (new CMenuItem($isPt ? 'Disponibilidade' : 'Availability'))
-                ->setAction('governance.availability.view')
-                ->setAliases(['governance.availability.config']),
-            (new CMenuItem($configTitle))->setAction('governance.quality.config')
+                ->setAction('governance.availability.view'),
+            (new CMenuItem($configTitle))->setAction('governance.quality.config'),
+            (new CMenuItem($isPt ? 'Configurar disponibilidade' : 'Configure availability'))
+                ->setAction('governance.availability.config')
         ]);
 
         APP::Component()->get('menu.main')->add(

@@ -94,6 +94,34 @@ main:has(.gav) { min-width: 0; }
 .gav-filters .gav-field { width: 170px; }
 .gav-filters .gav-field.gav-department-filter { width: 260px; }
 .gav-filter-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.gav-report { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.gav .gav-job { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--gov-border); border-top: 3px solid var(--gav-accent); border-radius: 6px; background: var(--gov-surface); }
+.gav .gav-job.gav-job-has-error { border-top-color: var(--gav-unknown); }
+.gav .gav-job.gav-job-failed { border-top-color: var(--gav-bad); }
+.gav .gav-job-snapshot { padding: 11px 13px; background: var(--gov-surface-strong); border-radius: 4px; overflow-wrap: anywhere; }
+.gav .gav-job-snapshot > strong { display: block; font-size: .9rem; }
+.gav .gav-job-snapshot > p { margin-top: 4px; font-size: .72rem; }
+.gav .gav-job-message { font-size: .8rem; overflow-wrap: anywhere; }
+.gav .gav-job-has-error .gav-job-message { color: var(--gav-unknown); }
+.gav .gav-job-failed .gav-job-message { color: var(--gav-bad); }
+.gav .gav-job-progress-heading { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; font-size: .76rem; }
+.gav .gav-job-progress-heading > span { color: var(--gov-muted); }
+.gav .gav-job-progress-heading > strong { font-variant-numeric: tabular-nums; }
+.gav #gav-job-progress { appearance: none; display: block; width: 100%; height: 9px; margin: -3px 0 0; overflow: hidden; border: 0; border-radius: 5px; background: var(--gov-surface-strong); color: var(--gav-accent); accent-color: var(--gav-accent); }
+.gav #gav-job-progress::-webkit-progress-bar { background: var(--gov-surface-strong); border-radius: 5px; }
+.gav #gav-job-progress::-webkit-progress-value { background: var(--gav-accent); border-radius: 5px; }
+.gav #gav-job-progress::-moz-progress-bar { background: var(--gav-accent); border-radius: 5px; }
+.gav .gav-job-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; padding: 0; border: 1px solid var(--gov-border); border-radius: 4px; }
+.gav .gav-job-counts > div { min-width: 0; padding: 10px 12px; border-right: 1px solid var(--gov-border); }
+.gav .gav-job-counts > div:last-child { border-right: 0; }
+.gav .gav-job-counts dt { display: block; margin: 0; padding: 0; color: var(--gov-muted); font-size: .7rem; line-height: 1.4; }
+.gav .gav-job-counts dd { display: block; margin: 4px 0 0; padding: 0; font-size: 1rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.gav .gav-job-context { overflow-wrap: anywhere; }
+.gav .gav-job-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.gav .gav-job-actions > a { margin-left: auto; color: var(--gav-accent); font-size: .76rem; }
+.gav .gav-job-pause-help { font-size: .71rem; }
+.gav .gav-source-diagnostics { font-variant-numeric: tabular-nums; }
+.gav .gav-processing { padding: 10px 12px; border: 1px solid var(--gov-border); border-radius: 4px; }
 .gav-period { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .76rem; color: var(--gov-muted); }
 .gav-period > strong { color: inherit; font-size: 1.05rem; }
 .gav-badge { display: inline-flex; padding: 4px 8px; border-radius: 4px; background: var(--gov-surface-strong); font-size: .7rem; font-weight: 500; }
@@ -158,6 +186,11 @@ main:has(.gav) { min-width: 0; }
     .gav-department-content { padding: 0 10px 10px; } .gav-tech-content { padding: 0 10px 10px; }
     .gav-summary-meta { font-size: .66rem; }
     .gav-filter-actions { margin-left: 0; }
+    .gav .gav-job { padding: 12px; }
+    .gav .gav-job-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .gav .gav-job-counts > div:nth-child(2) { border-right: 0; }
+    .gav .gav-job-counts > div:nth-child(-n+2) { border-bottom: 1px solid var(--gov-border); }
+    .gav .gav-job-actions > a { margin-left: 0; }
     .gav-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .gav-overview > div:nth-child(2) { border-right: 0; }
     .gav-overview > div:nth-child(-n+2) { border-bottom: 1px solid var(--gov-border); }

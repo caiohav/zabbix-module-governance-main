@@ -20,16 +20,26 @@ class QualityView extends CController {
 
     protected function checkInput(): bool {
         return $this->validateInput([
-            'groupids' => 'array_db hstgrp.groupid'
+            'groupids' => 'array_db hstgrp.groupid',
+            'page' => 'string'
         ]);
     }
 
     protected function doAction(): void {
         $isPt = (strpos(strtolower(CWebUser::getLang()), 'pt') === 0);
-        $isDark = (strpos(strtolower(CWebUser::$data['theme'] ?? ''), 'dark') !== false);
+        $isDark = (strpos(strtolower(getUserTheme(CWebUser::$data)), 'dark') !== false);
         $groupids = $this->getInput('groupids', []);
 
-        $cards = $this->loadCards();
+        $pages = $this->loadPages();
+        $selected = $pages[0] ?? ['id' => '', 'name' => '', 'cards' => []];
+        $requestedPage = $this->getInput('page', '');
+        foreach ($pages as $page) {
+            if ($page['id'] === $requestedPage) {
+                $selected = $page;
+                break;
+            }
+        }
+        $cards = $selected['cards'];
         $needsTags = (bool) array_filter($cards, static function(array $card): bool {
             return $card['type'] === 'tag';
         });
@@ -101,7 +111,8 @@ class QualityView extends CController {
         $kpis = [];
         $scoreValues = [];
 
-        foreach ($cards as $card) {
+        // No hosts is an empty scope, not evidence of 100% compliance.
+        foreach ($totalHosts ? $cards : [] as $card) {
             $validCount = 0;
             $nonCompliant = [];
 
@@ -116,7 +127,7 @@ class QualityView extends CController {
                 }
             }
 
-            $score = ($totalHosts > 0) ? round(($validCount / $totalHosts) * 100, 1) : 100.0;
+            $score = round(($validCount / $totalHosts) * 100, 1);
 
             if ($card['include_score']) {
                 $scoreValues[] = $score;
@@ -136,7 +147,7 @@ class QualityView extends CController {
 
         $overallScore = $scoreValues
             ? round(array_sum($scoreValues) / count($scoreValues), 1)
-            : 100.0;
+            : null;
 
         $hostids = array_keys($hosts);
         $highProblems = $hostids ? (int) API::Problem()->get([
@@ -157,7 +168,12 @@ class QualityView extends CController {
         $this->setResponse(new CControllerResponseData([
             'is_pt' => $isPt,
             'is_dark' => $isDark,
-            'page_title' => $isPt ? 'Qualidade da Governança' : 'Governance Quality',
+            'page_title' => $isPt ? 'Qualidade do monitoramento' : 'Monitoring quality',
+            'pages' => $pages,
+            'selected_page' => $selected['id'],
+            'page_name' => $selected['name'] !== '' ? $selected['name'] : ($isPt ? 'Qualidade' : 'Quality'),
+            'cards_count' => count($cards),
+            'groupids' => $groupids,
             'total_hosts' => $totalHosts,
             'overall_score' => $overallScore,
             'overview' => [
@@ -174,13 +190,13 @@ class QualityView extends CController {
         ]));
     }
 
-    private function loadCards(): array {
+    private function loadPages(): array {
         $modules = API::Module()->get([
             'output' => ['config'],
             'filter' => ['id' => 'zabbix_module_governance']
         ]);
 
-        return GovernanceConfig::normalizeCards($modules ? ($modules[0]['config']['cards'] ?? []) : []);
+        return GovernanceConfig::getQualityPages($modules ? $modules[0]['config'] : []);
     }
 
     private function isHostCompliant(array $host, array $card): bool {

@@ -5,6 +5,11 @@
 
 (() => {
     const initializeCharts = () => {
+    const root = document.querySelector('.gov-container.gqp');
+    const main = root && root.closest('main');
+    const layout = root && root.closest('.wrapper');
+    if (main) main.classList.add('gqp-page');
+    if (layout) layout.classList.add('gqp-layout');
     // Valida se a biblioteca Apache ECharts foi carregada
     if (typeof echarts === 'undefined') {
         console.error('[Governance Module] ECharts library not loaded.');

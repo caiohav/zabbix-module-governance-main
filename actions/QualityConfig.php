@@ -5,6 +5,7 @@ namespace Modules\Governance\Actions;
 use API;
 use CController;
 use CControllerResponseData;
+use CControllerResponseFatal;
 use CWebUser;
 use Modules\Governance\GovernanceConfig;
 
@@ -15,7 +16,15 @@ class QualityConfig extends CController {
     }
 
     protected function checkInput(): bool {
-        return true;
+        $valid = $this->validateInput([
+            'quality_json' => 'string',
+            'quality_revision' => 'string',
+            'page' => 'string'
+        ]);
+        if (!$valid) {
+            $this->setResponse(new CControllerResponseFatal());
+        }
+        return $valid;
     }
 
     protected function checkPermissions(): bool {
@@ -29,17 +38,46 @@ class QualityConfig extends CController {
             'filter' => ['id' => 'zabbix_module_governance']
         ]);
 
-        $storedCards = $modules ? ($modules[0]['config']['cards'] ?? []) : [];
+        $config = $modules ? $modules[0]['config'] : [];
+        $pages = GovernanceConfig::getQualityPages($config);
+        $revision = GovernanceConfig::qualityRevision($config);
 
+        // Return the draft and the revision the user actually reviewed. Granting
+        // the current revision to a stale draft would bypass the conflict check.
+        if ($this->hasInput('quality_json')) {
+            $json = $this->getInput('quality_json');
+            if (strlen($json) <= 3000000 && substr(ltrim($json), 0, 1) === '[') {
+                $draft = json_decode($json, true);
+                if (is_array($draft) && array_values($draft) === $draft) {
+                    $pages = $draft;
+                }
+            }
+        }
+
+        $requestedPage = $this->getInput('page', '');
+        $selectedPage = isset($pages[0]) && is_array($pages[0]) && is_string($pages[0]['id'] ?? null)
+            ? $pages[0]['id'] : '';
+        foreach ($pages as $page) {
+            if (is_array($page) && ($page['id'] ?? null) === $requestedPage) {
+                $selectedPage = $requestedPage;
+                break;
+            }
+        }
+
+        $reviewedRevision = $this->getInput('quality_revision', $this->hasInput('quality_json') ? '' : $revision);
         $this->setResponse(new CControllerResponseData([
-            'page_title' => $isPt ? 'Configuração dos Cards de Governança' : 'Governance Card Configuration',
-            'cards' => GovernanceConfig::normalizeCards($storedCards),
+            'page_title' => $isPt ? 'Páginas e cards de qualidade' : 'Quality pages and cards',
+            'pages' => $pages,
+            'revision' => $reviewedRevision,
+            'selected_page' => $selectedPage,
+            'conflict' => !hash_equals($revision, $reviewedRevision),
+            'draft_json' => $this->getInput('quality_json', null),
             'is_pt' => $isPt,
             'is_dark' => self::isDarkTheme()
         ]));
     }
 
     private static function isDarkTheme(): bool {
-        return (strpos(strtolower(CWebUser::$data['theme'] ?? ''), 'dark') !== false);
+        return (strpos(strtolower(getUserTheme(CWebUser::$data)), 'dark') !== false);
     }
 }
