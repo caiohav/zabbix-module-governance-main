@@ -7,7 +7,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use RuntimeException;
 
-/** Read-only history adapter. No trends fallback: hourly averages cannot reconstruct outages. */
+/** Legacy strict-only adapter retained for regression tests. Live pages use AvailabilityCalculation. */
 final class AvailabilityReport {
     const MAX_HOSTS = 200;
     const MAX_ROWS = 3000000;
@@ -24,6 +24,9 @@ final class AvailabilityReport {
     private $memoryLimit;
 
     public function build(array $config, string $month, ?int $now = null): array {
+        if (($config['data_policy'] ?? 'strict') !== 'strict') {
+            throw new RuntimeException('Available-data policies require the staged calculation / Políticas sobre dados disponíveis exigem o cálculo em etapas.');
+        }
         if (!preg_match('/^20\d{2}-(0[1-9]|1[0-2])$/', $month)) {
             throw new RuntimeException('Invalid month / Mês inválido.');
         }

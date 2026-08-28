@@ -140,6 +140,7 @@ main:has(.gav) { min-width: 0; }
 .gav-score strong { font-size: 1.9rem; line-height: 1.25; font-variant-numeric: tabular-nums; color: var(--gav-good); }
 .gav-bad > .gav-dept-header .gav-score strong { color: var(--gav-bad); } .gav-unknown > .gav-dept-header .gav-score strong { color: var(--gav-unknown); }
 .gav-score span { font-size: .75rem; color: var(--gov-muted); }
+.gav-score small { font-size: .7rem; margin-top: 3px; }
 .gav-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--gov-border); border-bottom: 1px solid var(--gov-border); }
 .gav-metrics > div { padding: 11px 16px; border-right: 1px solid var(--gov-border); min-width: 0; }
 .gav-metrics > div:last-child { border-right: 0; }
@@ -163,6 +164,8 @@ main:has(.gav) { min-width: 0; }
 .gav-table a { color: var(--gav-accent); }
 .gav-table code { overflow-wrap: anywhere; white-space: normal; font-size: .75rem; }
 .gav-value { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }
+.gav-value small { white-space: normal; font-weight: normal; }
+.gav-data-quality { font-size: .78rem; }
 .gav-value.gav-good { color: var(--gav-good); } .gav-value.gav-bad { color: var(--gav-bad); } .gav-value.gav-unknown { color: var(--gav-unknown); }
 .gav-footnote { padding: 10px 14px; font-size: .7rem; }
 .gav-details { margin: 10px 14px; border: 1px solid var(--gov-border); border-radius: 4px; }

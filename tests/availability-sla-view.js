@@ -167,14 +167,14 @@ const tests = [
         assert.equal(option.tooltip.renderMode, 'richText');
         assert.equal(p.network, 0);
     }],
-    ['JSON export v2 preserves explicit sources, null durations and original precision', async () => {
+    ['JSON export v3 preserves explicit sources, null durations and original precision', async () => {
         for (const name of ['native', 'mixed', 'unavailable', 'timezone', 'calendar', 'item_unknown', 'escaped', 'items_only']) {
             const report = reports[name], p = page(report);
             assert.equal(p.nodes['gav-export'].disabled, false);
             p.nodes['gav-export'].fire('click');
             assert.equal(p.blobs.length, 1); assert.equal(p.blobs[0].type, 'application/json');
             const payload = JSON.parse(await p.blobs[0].text());
-            assert.equal(payload.format, 'governance-availability-v2'); assert.equal(payload.module_version, '1.9.0');
+            assert.equal(payload.format, 'governance-availability-v3'); assert.equal(payload.module_version, '1.10.0');
             assert.equal(payload.assumptions.automatic_source_fallback, false);
             assert.equal(payload.assumptions.immutable_close, false);
             assert.equal(payload.assumptions.sla.daily_timeline_available, false);

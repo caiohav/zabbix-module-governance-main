@@ -5,6 +5,8 @@ namespace Modules\Governance;
 /** Resolve a separate, auditable validity policy for every selected item; never expand macros. */
 final class AvailabilityFreshness {
     const MAX_AGE = 86400;
+    const MAX_DELAY_LENGTH = 4096;
+    const MAX_FLEXIBLE_INTERVALS = 128;
 
     public static function resolve(array $item, ?int $manualAge): array {
         $automatic = self::automatic($item);
@@ -32,8 +34,9 @@ final class AvailabilityFreshness {
     }
 
     private static function automatic(array $item): array {
+        $polling = self::polling($item['delay'] ?? null);
         $result = ['max_age' => null, 'freshness_mode' => 'auto', 'freshness_source' => 'unresolved',
-            'interval_seconds' => self::duration($item['delay'] ?? null), 'heartbeat_seconds' => null, 'warnings' => []];
+            'interval_seconds' => $polling['seconds'], 'heartbeat_seconds' => null, 'warnings' => []];
         if (!array_key_exists('preprocessing', $item) || !is_array($item['preprocessing'])) {
             return self::unresolved($result,
                 'Preprocessing metadata unavailable; set manual validity / Pré-processamento não disponível; defina a validade manual.');
@@ -66,7 +69,7 @@ final class AvailabilityFreshness {
         }
         if ($result['interval_seconds'] === null) {
             return self::unresolved($result,
-                'Update interval is missing, a macro or a custom schedule; set manual validity / Intervalo de coleta ausente, macro ou agendamento personalizado; defina a validade manual.');
+                'Update interval is missing, invalid, a macro, includes a disabled period or a scheduling expression; set manual validity / Intervalo de coleta ausente, inválido, com macro, período desabilitado ou expressão de agendamento; defina a validade manual.');
         }
 
         // Heartbeat fires at a collected value, not on a separate timer. Two polling intervals cover
@@ -78,8 +81,54 @@ final class AvailabilityFreshness {
                 'Automatic validity exceeds 86400 s; review collection or set a manual policy / Validade automática excede 86400 s; revise a coleta ou defina uma política manual.');
         }
         $result['max_age'] = $age;
-        $result['freshness_source'] = $heartbeatCount ? 'heartbeat' : 'interval';
+        $result['freshness_source'] = $polling['flexible']
+            ? ($heartbeatCount ? 'heartbeat_flexible_interval' : 'flexible_interval')
+            : ($heartbeatCount ? 'heartbeat' : 'interval');
         return $result;
+    }
+
+    /**
+     * Numeric subset of the Zabbix 6.0 delay syntax: base;interval/day[-day],time-time.
+     * Every period must be valid and every interval positive. A zero base or zero
+     * flexible interval can suspend polling; neither has a safe automatic bound here.
+     * Overlapping flex periods select the smallest interval in Zabbix. Taking the
+     * largest positive interval (including the base) is a conservative cadence bound
+     * without evaluating today's calendar or inferring policy from stored samples.
+     */
+    private static function polling($value): array {
+        $unresolved = ['seconds' => null, 'flexible' => false];
+        if ((!is_string($value) && !is_int($value))
+                || strlen((string) $value) > self::MAX_DELAY_LENGTH) { return $unresolved; }
+        $value = trim((string) $value);
+        if (strpos($value, ';') === false) {
+            return ['seconds' => self::duration($value), 'flexible' => false];
+        }
+        $parts = explode(';', $value);
+        if (count($parts) > self::MAX_FLEXIBLE_INTERVALS + 1
+                || !preg_match('/^[1-9][0-9]*[smhdw]?$/D', $parts[0])) { return $unresolved; }
+        $maximum = self::duration(array_shift($parts));
+        if ($maximum === null) { return $unresolved; }
+        foreach ($parts as $part) {
+            // A scheduling expression, macro, empty/trailing segment or extra slash
+            // cannot be ignored just because the base interval was understandable.
+            if (!preg_match('/^([1-9][0-9]*[smhdw]?)\/(.+)$/D', $part, $match)
+                    || !self::flexiblePeriod($match[2])) { return $unresolved; }
+            $seconds = self::duration($match[1]);
+            if ($seconds === null) { return $unresolved; }
+            $maximum = max($maximum, $seconds);
+        }
+        return ['seconds' => $maximum, 'flexible' => true];
+    }
+
+    /** Match the numeric CTimePeriodParser grammar and its weekday/time bounds. */
+    private static function flexiblePeriod(string $period): bool {
+        if (!preg_match('/^([1-7])(?:-([1-7]))?,([0-9]{1,2}):([0-9]{2})-([0-9]{1,2}):([0-9]{2})$/D',
+                $period, $parts)) { return false; }
+        if (($parts[2] !== '' && (int) $parts[1] > (int) $parts[2])
+                || (int) $parts[4] > 59 || (int) $parts[6] > 59) { return false; }
+        $from = (int) $parts[3] * 60 + (int) $parts[4];
+        $to = (int) $parts[5] * 60 + (int) $parts[6];
+        return $from < $to && $to <= 24 * 60;
     }
 
     private static function unresolved(array $result, string $warning): array {

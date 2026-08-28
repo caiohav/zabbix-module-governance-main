@@ -133,8 +133,10 @@ function page(config, language = 'pt') {
     };
     const root = add('gav-config'); root.dataset.lang = language;
     add('gav-timezone', 'input', root, {value: config.timezone, type: 'text', required: ''});
+    add('gav-data-policy', 'select', root, {required: ''}).innerHTML = '<option value="strict">Strict</option><option value="observed">Observed</option>';
     for (const id of ['gav-departments', 'gav-config-status', 'gav-config-empty', 'gav-config-count', 'gav-legacy-notice']) add(id, 'div', root);
     add('gav-payload', 'input', root, {type: 'hidden'});
+    add('gav-config-revision', 'input', root, {type: 'hidden', name: 'config_revision', value: 'reviewed-revision'});
     add('gav-config-data', 'script', root).textContent = JSON.stringify(config);
     for (const id of ['gav-add-department', 'gav-save']) add(id, 'button', root, {disabled: ''});
     let network = 0, navigations = 0;
@@ -156,6 +158,94 @@ function page(config, language = 'pt') {
 }
 
 const tests = [
+    ['global data policy defaults only absent legacy values to strict and roundtrips explicit choices', () => {
+        for (const policy of [undefined, 'strict', 'observed']) {
+            const config = configuration(item, sla);
+            if (policy !== undefined) config.data_policy = policy;
+            const before = JSON.stringify(config), p = page(config);
+            assert.equal(p.nodes['gav-data-policy'].value, policy ?? 'strict');
+            assert.equal(p.data().data_policy, policy ?? 'strict');
+            assert.equal(JSON.stringify(config), before, 'opening the editor must not mutate the input');
+            assert.equal(p.submit().defaultPrevented, false);
+            assert.deepEqual(page(p.data()).data(), p.data(), 'the chosen policy survives a saved JSON roundtrip');
+            assert.equal(p.data().departments[0].technologies[1].slaid, sla.slaid);
+            assert.equal(p.data().departments[0].technologies[1].serviceid, sla.serviceid);
+        }
+        const empty = page({timezone: 'UTC', departments: []});
+        assert.deepEqual(empty.data(), {timezone: 'UTC', data_policy: 'strict', departments: []});
+    }],
+    ['switching data policies preserves item and SLA drafts, validation, source and revision', () => {
+        const p = page(configuration(item, sla)), tech = p.techs()[0], native = p.techs()[1];
+        p.change(field(tech, 'max_age'), '456');
+        p.change(field(tech, 'groups'), 'Changed group');
+        p.change(field(tech, 'slaid'), '7'); p.change(field(tech, 'serviceid'), '42');
+        p.change(field(native, 'sla_url'), 'unsaved optional helper draft');
+        const original = p.data();
+        for (const policy of ['observed', 'strict', 'observed']) {
+            p.change(p.nodes['gav-data-policy'], policy);
+            assert.deepEqual(p.data(), {...original, data_policy: policy});
+            assert.equal(p.techs()[0], tech, 'policy switching does not rebuild item fields');
+            assert.equal(p.techs()[1], native, 'policy switching does not rebuild SLA fields');
+            assert.equal(field(tech, 'slaid').value, '7'); assert.equal(field(tech, 'serviceid').value, '42');
+            assert.equal(field(tech, 'slaid').disabled, true); assert.equal(field(tech, 'slaid').required, false);
+            assert.equal(field(native, 'sla_url').value, 'unsaved optional helper draft');
+            assert.equal(field(native, 'groups').disabled, true);
+            assert.equal(p.nodes['gav-config-revision'].value, 'reviewed-revision');
+            assert.match(p.nodes['gav-config-status'].textContent, /Alterações não salvas/);
+            assert.equal(p.submit().defaultPrevented, false);
+        }
+        p.change(field(tech, 'source'), 'sla');
+        assert.equal(p.data().data_policy, 'observed');
+        assert.equal(p.data().departments[0].technologies[0].slaid, '7');
+        assert.equal(p.data().departments[0].technologies[0].serviceid, '42');
+        p.change(p.nodes['gav-data-policy'], 'strict');
+        p.change(field(tech, 'source'), 'items');
+        assert.equal(p.data().data_policy, 'strict');
+        assert.deepEqual(p.data().departments, original.departments);
+        assert.equal(p.network, 0); assert.equal(p.navigations, 0);
+    }],
+    ['invalid explicit data policy stays invalid instead of silently selecting strict', () => {
+        for (const policy of [null, '', 0, 1, true, false, [], ['strict'], {}, 'STRICT', 'available', 'strict ', ' observed']) {
+            const p = page({...configuration(item, sla), data_policy: policy});
+            assert.equal(p.nodes['gav-data-policy'].value, '', JSON.stringify(policy));
+            assert.equal(p.data().data_policy, '', 'invalid drafts do not acquire a different valid policy');
+            assert.notEqual(p.nodes['gav-data-policy'].validationMessage, '');
+            assert.equal(p.submit().defaultPrevented, true);
+            assert.equal(p.submit(false).defaultPrevented, true, 'the submit guard also rejects invalid policy');
+            assert.match(p.nodes['gav-config-status'].textContent, /política de dados válida/);
+            p.change(p.nodes['gav-data-policy'], 'observed');
+            assert.equal(p.nodes['gav-data-policy'].validationMessage, '');
+            assert.equal(p.submit().defaultPrevented, false, 'an explicit correction allows the retained draft to save');
+            assert.equal(p.data().data_policy, 'observed');
+            assert.deepEqual(p.data().departments[0].technologies[1], sla);
+        }
+    }],
+    ['data policy remains validated when native form validation is bypassed', () => {
+        const p = page({...configuration(item), data_policy: 'observed'}, 'en');
+        p.nodes['gav-data-policy'].value = 'ignore';
+        assert.equal(p.submit(false).defaultPrevented, true);
+        assert.match(p.nodes['gav-config-status'].textContent, /Select a valid data policy/);
+        p.change(p.nodes['gav-data-policy'], 'strict');
+        assert.equal(p.submit().defaultPrevented, false);
+        assert.equal(p.data().data_policy, 'strict');
+    }],
+    ['observed mode keeps required item fields, manual validity and native IDs mandatory', () => {
+        const p = page({...configuration(item), data_policy: 'observed'}), tech = p.techs()[0];
+        for (const [name, invalid, valid] of [['key', '', 'ping'], ['groups', '', item.groups], ['max_age', '0', '180']]) {
+            const control = field(tech, name);
+            assert.equal(control.required, true, name + ' remains required');
+            p.change(control, invalid); assert.equal(p.submit().defaultPrevented, true);
+            p.change(control, valid); assert.equal(p.submit().defaultPrevented, false);
+        }
+        tech.querySelector('[data-action="remove-check"]').fire('click');
+        assert.equal(p.submit().defaultPrevented, true, 'observed mode still needs checks');
+        p.change(field(tech, 'source'), 'sla');
+        assert.equal(p.submit().defaultPrevented, true, 'SLA still needs both explicit IDs');
+        p.change(field(tech, 'slaid'), sla.slaid); p.change(field(tech, 'serviceid'), sla.serviceid);
+        assert.equal(p.submit().defaultPrevented, false);
+        assert.equal(p.data().data_policy, 'observed');
+        assert.equal(p.data().departments[0].technologies[0].source, 'sla');
+    }],
     ['legacy defaults to items and preserves manual validity and thresholds', () => {
         const legacy = {...item, max_age: 3600, checks: [{key: 'pgsql.ping["{$PG.URI}"]', up: {op: 'eq', a: 1}, down: null}]};
         const p = page(configuration(legacy)), tech = p.techs()[0];

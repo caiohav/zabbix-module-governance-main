@@ -109,9 +109,11 @@ final class AvailabilityEngine {
         foreach ($events as $clock => $delta) {
             $end = min($to, (int) $clock);
             if ($end > $cursor) {
-                if ($mode === 'any_down') {
+                if ($mode === 'any_down' || $mode === 'any_down_observed') {
                     $down = $active[1] > 0;
-                    $unknown = !$down && $active[2] > 0;
+                    // Observed cohorts ignore unknown hosts, not required checks.
+                    // No known host must remain unknown rather than becoming UP.
+                    $unknown = !$down && ($mode === 'any_down_observed' ? $active[0] <= 0 : $active[2] > 0);
                     $fractions = [$down || $unknown ? 0.0 : 1.0, $down ? 1.0 : 0.0, $unknown ? 1.0 : 0.0];
                 }
                 else {
@@ -187,6 +189,78 @@ final class AvailabilityEngine {
             'observed' => $known > 0 ? self::percentage($durations['up'], $durations['down'], $known) : null,
             'coverage' => self::percentage($known, $durations['unknown'], $basis), 'lower' => $lower,
             'upper' => self::percentage($durations['up'] + $durations['unknown'], $durations['down'], $basis)];
+    }
+
+    /**
+     * Mean of observed indicators, not pooled durations. Missing scores do not
+     * participate in the score; every source retains its weight in coverage.
+     */
+    public static function weightedIndicators(array $indicators, array $weights = []): array {
+        $indicators = array_values($indicators);
+        $weights = $weights ? array_values($weights) : array_fill(0, count($indicators), 1.0);
+        if (count($indicators) !== count($weights)) {
+            throw new \InvalidArgumentException('Indicator and weight counts differ.');
+        }
+        $totalWeight = 0.0; $totalCorrection = 0.0;
+        $participatingWeight = 0.0; $participatingCorrection = 0.0;
+        $participants = 0; $complete = (bool) $indicators;
+        foreach ($indicators as $index => $indicator) {
+            if (!is_array($indicator) || !array_key_exists('score', $indicator)
+                    || !isset($indicator['coverage']) || !is_numeric($indicator['coverage'])
+                    || !is_finite((float) $indicator['coverage'])
+                    || $indicator['coverage'] < 0 || $indicator['coverage'] > 100
+                    || $indicator['score'] !== null && (!is_numeric($indicator['score'])
+                        || !is_finite((float) $indicator['score'])
+                        || $indicator['score'] < 0 || $indicator['score'] > 100)) {
+                throw new \InvalidArgumentException('Invalid observed indicator.');
+            }
+            if (!is_numeric($weights[$index]) || !is_finite((float) $weights[$index]) || $weights[$index] <= 0) {
+                throw new \InvalidArgumentException('Invalid indicator weight.');
+            }
+            $weights[$index] = (float) $weights[$index];
+            self::addCompensated($totalWeight, $totalCorrection, $weights[$index]);
+            if ($indicator['score'] !== null) {
+                self::addCompensated($participatingWeight, $participatingCorrection, $weights[$index]);
+                $participants++;
+            }
+            if ($indicator['score'] === null || (float) $indicator['coverage'] !== 100.0) { $complete = false; }
+        }
+        if (!is_finite($totalWeight) || !is_finite($participatingWeight)) {
+            throw new \InvalidArgumentException('Indicator weight sum is not finite.');
+        }
+        $result = ['score' => null, 'coverage' => 0.0, 'participating_weight' => $participatingWeight,
+            'total_weight' => $totalWeight, 'participants' => $participants,
+            'total_sources' => count($indicators), 'complete' => $complete];
+        if (!$indicators) { return $result; }
+
+        $score = 0.0; $scoreCorrection = 0.0; $deficit = 0.0; $deficitCorrection = 0.0;
+        $coverage = 0.0; $coverageCorrection = 0.0; $gap = 0.0; $gapCorrection = 0.0;
+        $hasDeficit = false; $hasGap = false;
+        foreach ($indicators as $index => $indicator) {
+            $coverageFraction = $weights[$index] / $totalWeight;
+            self::addCompensated($coverage, $coverageCorrection, $indicator['coverage'] * $coverageFraction);
+            self::addCompensated($gap, $gapCorrection, (100 - $indicator['coverage']) * $coverageFraction);
+            $hasGap = $hasGap || $indicator['coverage'] < 100;
+            if ($indicator['score'] === null) { continue; }
+            $scoreFraction = $weights[$index] / $participatingWeight;
+            self::addCompensated($score, $scoreCorrection, $indicator['score'] * $scoreFraction);
+            self::addCompensated($deficit, $deficitCorrection, (100 - $indicator['score']) * $scoreFraction);
+            $hasDeficit = $hasDeficit || $indicator['score'] < 100;
+        }
+        // Accumulate the complements separately: tiny real losses near 100 must
+        // survive a dominant weight. No epsilon can discard a score or data gap.
+        $result['score'] = $participants > 0 ? self::percentage($score, $deficit, 100.0) : null;
+        $result['coverage'] = self::percentage($coverage, $gap, 100.0);
+        if ($hasDeficit) { $result['score'] = min(99.99999999999999, $result['score']); }
+        if ($hasGap) { $result['coverage'] = min(99.99999999999999, $result['coverage']); }
+        return $result;
+    }
+
+    private static function addCompensated(float &$sum, float &$correction, float $value): void {
+        $adjusted = $value - $correction;
+        $next = $sum + $adjusted;
+        $correction = ($next - $sum) - $adjusted;
+        $sum = $next;
     }
 
     private static function percentage(float $included, float $excluded, float $total, bool $complete = true): float {

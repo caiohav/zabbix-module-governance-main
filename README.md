@@ -3,6 +3,79 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Novidades 1.10.0 — Disponibilidade observada por itens
+
+O cálculo por itens agora oferece duas políticas explícitas em **Configurar
+disponibilidade → Tratamento de dados ausentes**:
+
+- **Exigir cobertura completa** (`data_policy: "strict"`): preserva o comportamento
+  anterior. Um período com estado desconhecido não recebe um índice final.
+- **Calcular sobre dados disponíveis** (`data_policy: "observed"`): calcula a
+  disponibilidade observada, excluindo tempo sem estado conhecido do percentual.
+  A cobertura e as exclusões continuam sendo apresentadas. **100% observado
+  com cobertura parcial não certifica disponibilidade de 100% do mês inteiro.**
+
+Configurações existentes continuam em `strict` até a escolha explícita da
+nova política. Atualizar os arquivos não salva regras nem altera fontes, hosts,
+itens, SLAs ou retenções no Zabbix.
+
+### Usar os itens ICMP e PostgreSQL
+
+1. Mantenha **Fonte do cálculo → Histórico de itens (24×7)**, os grupos desejados
+   e o fuso que define seu mês, por exemplo `America/Cuiaba`.
+2. Use as chaves exatas `icmpping` e
+   `pgsql.ping["{$PG.URI}","{$PG.USER}","{$PG.PASSWORD}"]`, com disponível `= 1`.
+   As macros da chave não são substituídas por credenciais; a chave é procurada
+   como está cadastrada no item.
+3. Selecione **Calcular sobre dados disponíveis** e salve. Inicie um novo cálculo;
+   relatórios/checkpoints anteriores mantêm as regras capturadas no início.
+4. Abra os detalhes da tecnologia para conferir cobertura, hosts com/sem estado,
+   verificações não consultadas, validade, amostras e primeiro/último registro.
+
+O modo automático passou a reconhecer intervalos flexíveis numéricos positivos,
+como `30s;1m/6-7,00:00-24:00`. Antes, essa configuração era recusada e o histórico
+não era consultado. Agora o maior intervalo (60s neste exemplo) determina a
+validade conservadora de 180s. Com heartbeat de 1h e coleta de 60s, são 3720s.
+Agendamentos, macros de intervalo, base zero e janelas que suspendem coleta
+continuam exigindo validade manual: não se adivinha a cadência pelas amostras.
+
+### Regras para não distorcer o indicador
+
+- **Dentro de um host:** as verificações continuam obrigatórias. Uma queda
+  confirmada no ICMP ou no serviço torna o host indisponível; todas as verificações
+  precisam estar disponíveis para confirmar o host disponível. Uma chave ausente
+  não é considerada sucesso, mesmo no modo observado.
+- **Qualquer servidor fora:** união das quedas conhecidas, sem contar sobreposições
+  duas vezes. Hosts sem estado conhecido são ignorados naquele instante. Se todos
+  estiverem desconhecidos, o intervalo não entra no percentual.
+- **Média dos servidores:** média dos percentuais observados dos hosts que têm
+  estado conhecido. Um host com mais histórico não ganha peso adicional. Um host
+  sem evidência fica sem indicador, não com 0% ou 100%.
+- **Departamento:** média dos indicadores das tecnologias com os pesos configurados.
+  Tecnologias sem indicador não entram nessa média; a quantidade participante,
+  o peso participante/configurado e a participação efetiva ficam explícitos.
+- **Cobertura:** nos itens, média do tempo com estado conhecido de TODOS os hosts,
+  inclusive os sem dados. No departamento, considera TODOS os pesos. É separada
+  da cobertura temporal da união de hosts: um host observado durante todo o mês
+  não esconde que outro ficou sem dados.
+- **Durações/gráficos:** descrevem a linha do tempo consolidada e, nas médias,
+  tempos equivalentes de todo o escopo. Não são o denominador das médias de
+  percentuais observados quando as coberturas dos participantes são diferentes.
+
+Exemplo: um host tem 90s disponível e 10s indisponível; outro não tem nenhum
+estado conhecido nesses 100s. O modo observado produz 90%, cobertura de hosts
+50% e 1/2 hosts com dados. O modo estrito continua inconclusivo. Se ninguém tiver
+estado conhecido, ambos permanecem sem indicador.
+
+A apuração continua baseada em histórico bruto, validade finita e dados reais;
+não usa trends, não estende amostras por todo o mês e não substitui itens por SLA
+nativo. A fonte SLA opcional mantém seu calendário e suas restrições anteriores.
+O JSON passa a `governance-availability-v3`: `data_policy` identifica a escolha,
+`observation.score` contém o indicador observado, `observation.coverage` mantém
+a cobertura do escopo, e `summary` preserva a consolidação estrita para auditoria.
+Nos itens, `history_queried: false` distingue histórico não consultado de uma
+consulta bem-sucedida sem amostras. Os dados de diagnóstico não incluem senhas.
+
 ## Novidades 1.9.0 — Fonte SLA nativo na Disponibilidade
 
 Cada tecnologia pode escolher **Histórico de itens (24×7)** ou **SLA nativo
@@ -66,8 +139,9 @@ da meta do SLA. O tema claro/escuro e português/inglês são mantidos.
   Integrações que consomem o JSON devem verificar o campo `format`.
 
 A fonte SLA permite aproveitar um indicador já preservado pelo Zabbix. Ela não
-recupera o histórico bruto expirado dos itens. Se a tecnologia continuar em
-**Histórico de itens**, um mês sem evidência suficiente continuará inconclusivo.
+recupera o histórico bruto expirado dos itens. Em **Histórico de itens**, a política
+estrita continua inconclusiva quando faltam evidências. A política observada da
+versão 1.10.0 permite apurar somente a parcela conhecida, sem certificar o mês todo.
 
 ## Novidades 1.8.0 — Qualidade sem bloquear a página
 
@@ -218,18 +292,25 @@ de 3720 s. `icmpping` coletado a cada 60 s, sem esse pré-processamento, mantém
 validade de 180 s. Assim, o heartbeat do PostgreSQL não estende a validade do ICMP.
 As validades resolvidas e os avisos aparecem nos detalhes dos itens e no JSON.
 
-O automático **não interpreta macros de intervalo, agendamentos personalizados,
-itens dependentes/trapper nem descarte inalterado sem heartbeat**. Nessas situações,
+O automático aceita intervalos flexíveis numéricos positivos e usa o maior
+intervalo como base conservadora. **Não interpreta macros de intervalo,
+agendamentos, base/intervalo zero, itens dependentes/trapper nem descarte
+inalterado sem heartbeat**. Nessas situações,
 é necessário definir uma validade manual por item; até isso ser feito, a
 verificação fica desconhecida com aviso. A validade máxima é de 86400 s.
 Uma política manual abaixo do heartbeat gera aviso, sem ser alterada silenciosamente.
 
 Ao atualizar, as validades existentes são preservadas como manuais. Use o
 automático somente quando o intervalo/pré-processamento forem suportados.
-Por exemplo, um ICMP com intervalo flexível por dia da semana ainda exige uma
-validade manual. Não aumente a validade apenas para eliminar lacunas: isso muda
+Por exemplo, `30s;1m/6-7,00:00-24:00` recebe validade automática de 180s.
+Não aumente a validade apenas para eliminar lacunas: isso muda
 a regra do indicador e pode esconder a falta de coleta. Copiar os arquivos não
 muda as políticas já salvas nem a retenção de histórico do Zabbix.
+
+O automático usa o intervalo/pré-processamento **atual**, não a configuração
+histórica do item no mês consultado. Se essas regras mudaram, revise a validade
+manual de forma consciente; a exportação registra a política usada. O módulo
+não reconstrói o histórico de configurações nem infere heartbeat pelos dados.
 
 Todas as verificações de um host são obrigatórias. Uma falha confirmada deixa
 o host indisponível, mesmo se outra verificação estiver sem dados. No modo
@@ -240,8 +321,9 @@ ao consolidar o departamento.
 
 Ausência de histórico, item ausente/não numérico, amostra expirada ou valor
 que satisfaça ambas/nenhuma das condições explícitas gera tempo desconhecido.
-Resultados com lacunas ficam **incompletos**, com cobertura e faixa possível
-do índice, sem assumir disponibilidade. Um grupo vazio também não gera 100%.
+Na política estrita, resultados com lacunas ficam **incompletos**, com cobertura
+e faixa possível do índice. Na política observada, apenas estados conhecidos
+formam o percentual e as exclusões ficam explícitas. Um grupo vazio não gera 100%.
 
 O painel permite escolher mês e departamento, detalhar hosts/itens e intervalos,
 baixar um JSON com regras e memória de cálculo e imprimir/salvar PDF pelo
@@ -356,6 +438,16 @@ Execute `php tests/availability.php`, `php tests/availability-calculation.php`,
 `mbstring` habilitada.
 Os testes cobrem intervalos, sobreposições, lacunas, limiares, pesos e consultas
 simuladas à API. Não substituem a validação no frontend Zabbix instalado.
+Para a política de dados disponíveis, execute também
+`php tests/availability-observed.php`, `php tests/availability-flexible.php`,
+`php tests/availability-observed-config.php`,
+`php tests/availability-observed-calculation.php`,
+`php tests/availability-observed-view.php` e
+`node tests/availability-observed-view.js`.
+`node tests/availability-config.js` inclui a seleção, validação e persistência
+da política no payload. A prévia visual local usa
+`php -S 127.0.0.1:8772 tests/availability-observed-preview.php`, com dados fictícios
+e POST que apenas valida, sem persistir. Nenhuma prévia acessa o Zabbix real.
 Execute também `php tests/menu.php` para conferir os rótulos e destinos do menu.
 `node tests/availability-view.js` verifica o fluxo do navegador com DOM/rede
 simulados, incluindo SID, pausa, timeout, retomada, idempotência e relatórios antigos.

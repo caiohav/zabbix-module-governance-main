@@ -16,6 +16,8 @@
         const form = document.getElementById('gav-config-form');
         const status = document.getElementById('gav-config-status');
         const payload = document.getElementById('gav-payload');
+        const dataPolicy = document.getElementById('gav-data-policy');
+        const validDataPolicy = value => ['strict', 'observed'].includes(value);
         const input = (name, value, extra = '', type = 'text') => `<input type="${type}" data-field="${name}" value="${esc(value)}" ${extra}>`;
         const field = (label, control, classes = '', hint = '') => `<label class="gav-field ${classes}"><span>${label}</span>${control}${hint ? `<small>${hint}</small>` : ''}</label>`;
         const options = (values, selected) => Object.entries(values).map(([value, label]) => `<option value="${value}"${value === selected ? ' selected' : ''}>${esc(label)}</option>`).join('');
@@ -99,6 +101,8 @@
         </div></details>`;
         const get = (node, name) => node.querySelector(`[data-field="${name}"]`).value;
         const updateRules = () => {
+            dataPolicy.setCustomValidity(validDataPolicy(dataPolicy.value) ? ''
+                : t('Selecione uma política de dados válida.', 'Select a valid data policy.'));
             root.querySelectorAll('.gav-technology').forEach(tech => {
                 const source = get(tech, 'source');
                 tech.querySelectorAll('[data-source-panel]').forEach(panel => {
@@ -158,7 +162,8 @@
         };
         const serialize = () => {
             const readRule = node => ({op: get(node, 'op'), a: Number(get(node, 'a')), ...(get(node, 'op') === 'range' ? {b: Number(get(node, 'b'))} : {})});
-            const data = {timezone: document.getElementById('gav-timezone').value.trim(), departments: [...list.children].map(dept => ({
+            const data = {timezone: document.getElementById('gav-timezone').value.trim(), data_policy: dataPolicy.value,
+                departments: [...list.children].map(dept => ({
                 name: get(dept, 'name').trim(), target: Number(get(dept, 'target')),
                 technologies: [...dept.querySelectorAll('.gav-technology')].map(tech => {
                     const value = {name: get(tech, 'name').trim(), target: Number(get(tech, 'target')),
@@ -178,6 +183,8 @@
         try {
             const data = JSON.parse(document.getElementById('gav-config-data').textContent);
             if (!Array.isArray(data.departments)) throw new Error('Invalid configuration');
+            const policy = Object.prototype.hasOwnProperty.call(data, 'data_policy') ? data.data_policy : 'strict';
+            dataPolicy.value = validDataPolicy(policy) ? policy : '';
             list.innerHTML = data.departments.map((dept, i) => departmentHtml(dept, i === 0)).join('');
             document.getElementById('gav-legacy-notice').hidden = !data.departments.some(dept => dept.technologies.some(tech => tech.source !== 'sla' && tech.max_age != null
                 && Array.isArray(tech.checks) && tech.checks.some(check => !Object.prototype.hasOwnProperty.call(check, 'max_age'))));
@@ -240,6 +247,11 @@
         }, true);
         form.addEventListener('submit', event => {
             const data = serialize();
+            if (!validDataPolicy(data.data_policy)) {
+                event.preventDefault();
+                status.textContent = t('Selecione uma política de dados válida antes de salvar.', 'Select a valid data policy before saving.');
+                return;
+            }
             if (data.departments.some(d => !d.technologies.length || d.technologies.some(tech => tech.source === 'items' && !tech.checks.length))) {
                 event.preventDefault();
                 status.textContent = t('Cada departamento precisa de uma tecnologia. A fonte por itens exige ao menos uma verificação.', 'Each department needs a technology. The item source requires at least one check.');

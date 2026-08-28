@@ -148,6 +148,7 @@ final class AvailabilityJobStore {
                 'department_name' => $state['source_config']['departments'][$department]['name'] ?? '',
                 'from' => $report['from'] ?? null, 'to' => $report['to'] ?? null,
                 'timezone' => $report['timezone'] ?? ($state['source_config']['timezone'] ?? ''),
+                'data_policy' => $report['data_policy'] ?? ($state['source_config']['data_policy'] ?? 'strict'),
                 'generated_at' => $report['generated_at'] ?? $job['created_at']
             ]];
         if ($state['status'] === 'failed') {
@@ -190,7 +191,7 @@ final class AvailabilityJobStore {
     private static function terminalState(array $state, string $status, ?string $error = null): array {
         // Drop partial report content and work arrays; retain only frozen labels and progress.
         $report = array_intersect_key($state['report'] ?? [], array_flip([
-            'month', 'timezone', 'from', 'to', 'generated_at', 'partial'
+            'month', 'timezone', 'from', 'to', 'generated_at', 'partial', 'data_policy'
         ]));
         $terminal = ['status' => $status, 'source_config' => $state['source_config'] ?? [],
             'department_filter' => $state['department_filter'] ?? -1, 'report' => $report,

@@ -47,6 +47,7 @@ class ScaleEndpoint {
     }
 }
 API::$from = strtotime('2026-05-01 UTC');
+$observedPolicy = in_array('--observed', $argv ?? [], true);
 $config = ['timezone' => 'UTC', 'departments' => [['name' => 'DABD', 'target' => 99.9, 'technologies' => [
     ['name' => 'PostgreSQL', 'groups' => 'DABD/PostgreSQL', 'weight' => 1, 'target' => 99.9, 'mode' => 'any_down',
         'checks' => [
@@ -55,6 +56,7 @@ $config = ['timezone' => 'UTC', 'departments' => [['name' => 'DABD', 'target' =>
                 'up' => ['op' => 'eq', 'a' => 1], 'down' => null]
         ]]
 ]]]];
+$config['data_policy'] = $observedPolicy ? 'observed' : 'strict';
 $directory = sys_get_temp_dir() . '/governance-scale-' . bin2hex(random_bytes(12));
 $started = microtime(true);
 $steps = 0;
@@ -81,6 +83,15 @@ try {
         if ($host['sources'][0]['max_age'] !== 3600 || $host['sources'][1]['max_age'] !== 3600
                 || $host['sources'][0]['sample_count'] !== 89280 || $host['sources'][1]['sample_count'] !== 744) {
             throw new RuntimeException('Manual policy changed or samples dropped.');
+        }
+    }
+    if ($observedPolicy) {
+        $observation = $report['departments'][0]['observation'];
+        $seconds = $report['to'] - $report['from'];
+        if ($observation['complete'] || abs($observation['score'] - 100 * ($seconds - 150 - 30) / ($seconds - 150)) > 1e-10
+                || abs($observation['coverage'] - 100 * ($seconds - 150) / $seconds) > 1e-10
+                || $observation['summary']['unknown'] != 150 || $observation['summary']['down'] != 30) {
+            throw new RuntimeException('Observed policy hid a gap, changed a weight or invented a state.');
         }
     }
     echo 'PASS: monthly25hosts, ' . $report['rows'] . ' rows, ' . $steps . ' checkpoints, '

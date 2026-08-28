@@ -162,7 +162,7 @@ check(Freshness::resolve(array_replace($pollItem, ['delay' => '2h']), null)['max
 check(Freshness::resolve(array_replace($pgItem, ['preprocessing' => [['type' => 20, 'params' => '30s']]]), null)['max_age'] === 180, 'short heartbeat cannot shorten polling grace');
 foreach ([
     array_replace($pollItem, ['delay' => '{$UPDATE.INTERVAL}']),
-    array_replace($pollItem, ['delay' => '60;30/1-5,09:00-18:00']),
+    array_replace($pollItem, ['delay' => '60;0/1-5,09:00-18:00']),
     array_replace($pollItem, ['delay' => '0']),
     array_replace($pollItem, ['delay' => '1d']),
     array_replace($pollItem, ['delay' => '1000000000000000w']),
@@ -291,4 +291,8 @@ check($tech['hosts'][0]['sources'][0]['max_age'] === null && count($tech['hosts'
 $config['departments'][0]['technologies'][0]['checks'][0]['max_age'] = 4000;
 $report = (new Report())->build(Config::validate($config), '2026-05', $from + 7200);
 near($report['departments'][0]['summary']['score'], 100, 'explicit manual check resolves a macro-driven cadence');
+
+$config['data_policy'] = 'observed';
+rejects(static function() use ($config, $from) { (new Report())->build($config, '2026-05', $from + 7200); },
+    'legacy adapter cannot silently apply strict math to observed policy');
 echo 'PASS: ' . $assertions . " assertions\n";

@@ -7,7 +7,7 @@ use DateTimeZone;
 
 final class AvailabilityConfig {
     public static function defaults(): array {
-        return ['timezone' => 'America/Cuiaba', 'departments' => []];
+        return ['timezone' => 'America/Cuiaba', 'data_policy' => 'strict', 'departments' => []];
     }
 
     public static function validate($input): array {
@@ -18,8 +18,13 @@ final class AvailabilityConfig {
         if (!in_array($timezone, DateTimeZone::listIdentifiers(), true)) {
             throw new InvalidArgumentException('Invalid time zone / Fuso horário inválido.');
         }
+        // Only absent legacy policies default to strict; an explicit invalid value must not change criteria silently.
+        $dataPolicy = array_key_exists('data_policy', $input) ? $input['data_policy'] : 'strict';
+        if (!in_array($dataPolicy, ['strict', 'observed'], true)) {
+            throw new InvalidArgumentException('Invalid data policy / Política de dados inválida.');
+        }
         $departments = self::listOf($input['departments'] ?? null, 12, 'departments / departamentos');
-        $result = ['timezone' => $timezone, 'departments' => []];
+        $result = ['timezone' => $timezone, 'data_policy' => $dataPolicy, 'departments' => []];
         $techCount = 0;
         foreach ($departments as $department) {
             if (!is_array($department)) {

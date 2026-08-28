@@ -61,6 +61,7 @@ final class AvailabilityCalculation {
             'started_at' => time(), 'working_seconds' => 0.0,
             'report' => ['month' => $month, 'timezone' => $config['timezone'], 'from' => $from, 'to' => $to,
                 'generated_at' => $now, 'partial' => $to < $monthEnd, 'configuration' => $selected,
+                'data_policy' => $config['data_policy'] ?? 'strict',
                 'has_sla' => $hasSla, 'has_items' => $hasItems,
                 'departments' => [], 'rows' => 0],
             'progress' => ['hosts_total' => 0, 'hosts_done' => 0, 'checks_total' => 0, 'checks_done' => 0,
@@ -208,7 +209,7 @@ final class AvailabilityCalculation {
                 $item = $index[$host['hostid']][$check['key']] ?? null;
                 $source = ['key' => $check['key'], 'itemid' => $item ? (string) $item['itemid'] : null,
                     'sample_count' => 0, 'max_gap_seconds' => null, 'first_clock' => null, 'last_clock' => null,
-                    'seed_clock' => null];
+                    'seed_clock' => null, 'history_queried' => false];
                 if (!$item || !in_array((int) $item['value_type'], [0, 3], true)) {
                     $source += ['max_age' => null, 'freshness_mode' => $check['max_age'] === null ? 'auto' : 'manual',
                         'freshness_source' => 'unresolved', 'interval_seconds' => null, 'heartbeat_seconds' => null,
@@ -272,6 +273,7 @@ final class AvailabilityCalculation {
             'time_from' => $begin, 'time_till' => $end - 1,
             // Zabbix 6.0 supports clock but not ns as a sort field.
             'sortfield' => 'clock', 'sortorder' => 'ASC', 'limit' => $fetchLimit + 1]);
+        $current['source']['history_queried'] = true;
         $state['progress']['rows'] += count($samples);
         if ($state['progress']['rows'] > self::MAX_ROWS) {
             throw new RuntimeException('Calculation exceeds 20 million history rows; narrow the scope / Cálculo excede 20 milhões de amostras; reduza o escopo.');
@@ -343,9 +345,17 @@ final class AvailabilityCalculation {
         $host = $task['scope_hosts'][$state['host_index']];
         $series = $this->combine($state['current_host']['series'], 'any_down', $state['report']);
         $task['host_series'][] = $series;
-        $task['result']['hosts'][] = ['hostid' => (string) $host['hostid'], 'name' => $host['name'],
+        $result = ['hostid' => (string) $host['hostid'], 'name' => $host['name'],
             'sources' => $state['current_host']['sources'], 'warnings' => $host['warnings'],
             'summary' => AvailabilityEngine::summary($series, $state['report']['from'], $state['report']['to'])];
+        if (self::observed($state)) {
+            // A missing required check never proves this host UP. Only the consolidation
+            // across hosts may ignore an unknown host in the explicitly selected policy.
+            $result['observation'] = AvailabilityEngine::weightedIndicators([
+                ['score' => $result['summary']['observed'], 'coverage' => $result['summary']['coverage']]
+            ]);
+        }
+        $task['result']['hosts'][] = $result;
         unset($state['current_host'], $task['scope_hosts'][$state['host_index']]);
         $state['progress']['hosts_done']++;
         $state['host_index']++;
@@ -368,6 +378,35 @@ final class AvailabilityCalculation {
         $task['result']['daily_available'] = true;
         $task['result']['eligible_for_aggregation'] = true;
         $task['result']['basis_seconds'] = $state['report']['to'] - $state['report']['from'];
+        $diagnostics = ['hosts_with_data' => 0, 'hosts_without_data' => 0,
+            'checks_total' => 0, 'checks_not_queried' => 0, 'checks_without_known_time' => 0];
+        foreach ($task['result']['hosts'] as $host) {
+            $diagnostics[$host['summary']['up'] + $host['summary']['down'] > 0
+                ? 'hosts_with_data' : 'hosts_without_data']++;
+            foreach ($host['sources'] as $source) {
+                $diagnostics['checks_total']++;
+                if (isset($source['history_queried']) && !$source['history_queried']) { $diagnostics['checks_not_queried']++; }
+                if ($source['summary']['up'] + $source['summary']['down'] <= 0) { $diagnostics['checks_without_known_time']++; }
+            }
+        }
+        $task['result']['data_quality'] = $diagnostics;
+        if (self::observed($state)) {
+            $indicators = [];
+            foreach ($task['result']['hosts'] as $host) { $indicators[] = $host['observation']; }
+            $observation = AvailabilityEngine::weightedIndicators($indicators);
+            $observedSeries = $task['config']['mode'] === 'any_down'
+                ? $this->combine($task['host_series'], 'any_down_observed', $state['report']) : $series;
+            $this->observationTimeline($observation, $observedSeries, $state['report']);
+            if ($task['config']['mode'] === 'any_down') {
+                $observation['score'] = $observation['summary']['observed'];
+            }
+            // In mean mode each host keeps one vote, independent of its history coverage.
+            // Coverage always includes ALL scoped hosts, not just the participating cohort.
+            $observation['aggregation'] = $task['config']['mode'] === 'any_down'
+                ? 'any_down_observed' : 'mean_host_indicators';
+            $task['result']['observation'] = $observation;
+            $task['observed_series'] = $observedSeries;
+        }
         $state['report']['departments'][$task['department']]['technologies'][] = $task['result'];
         $task['series'] = $series;
         unset($task['scope_hosts'], $task['host_series'], $task['result']);
@@ -399,8 +438,21 @@ final class AvailabilityCalculation {
         $node['daily'] = $this->daily($combined, $state['report']);
         $node['daily_available'] = true;
         $node['aggregation_compatible'] = true;
+        if (self::observed($state)) {
+            $indicators = array_column($node['technologies'], 'observation');
+            $node['observation'] = AvailabilityEngine::weightedIndicators($indicators, $weights);
+            $observedSeries = [];
+            foreach ($state['tasks'] as $task) {
+                if ($task['department'] === $state['department_index']) { $observedSeries[] = $task['observed_series']; }
+            }
+            // Durations are equivalent time across the full configured scope. They are
+            // descriptive, not the denominator of the weighted observed percentages.
+            $observedCombined = $this->combine($observedSeries, 'mean', $state['report'], $weights);
+            $this->observationTimeline($node['observation'], $observedCombined, $state['report'], false);
+            $node['observation']['aggregation'] = 'weighted_technology_indicators';
+        }
         foreach ($state['tasks'] as &$task) {
-            if ($task['department'] === $state['department_index']) { unset($task['series']); }
+            if ($task['department'] === $state['department_index']) { unset($task['series'], $task['observed_series']); }
         }
         unset($task);
         $state['department_index']++;
@@ -418,7 +470,8 @@ final class AvailabilityCalculation {
         $state['report']['rows'] = $state['progress']['rows'];
         $method = empty($state['report']['has_sla']) ? 'checkpointed-history'
             : (empty($state['report']['has_items']) ? 'checkpointed-sla' : 'checkpointed-items-and-sla');
-        $state['report']['processing'] = ['method' => $method, 'version' => '1.9.0',
+        $state['report']['processing'] = ['method' => $method, 'version' => '1.10.0',
+            'data_policy' => $state['report']['data_policy'] ?? 'strict',
             'started_at' => $state['started_at'], 'completed_at' => time(),
             'elapsed_seconds' => max(0, time() - $state['started_at']), 'scope_frozen_at' => $state['scope_frozen_at'],
             'hosts_total' => $state['progress']['hosts_total'], 'hosts_done' => $state['progress']['hosts_done'],
@@ -574,17 +627,55 @@ final class AvailabilityCalculation {
         $node['basis_seconds'] = $compatible ? $basis : null;
         if ($compatible) {
             $node['summary'] = AvailabilityEngine::weightedSummaries($summaries, $weights, (float) $basis);
+            if (self::observed($state)) {
+                $indicators = []; $observedSummaries = [];
+                foreach ($node['technologies'] as $technology) {
+                    $indicators[] = $technology['observation'] ?? [
+                        'score' => $technology['summary']['score'], 'coverage' => $technology['summary']['coverage']
+                    ];
+                    $observedSummaries[] = $technology['observation']['summary'] ?? $technology['summary'];
+                }
+                $node['observation'] = AvailabilityEngine::weightedIndicators($indicators, $weights);
+                $node['observation']['summary'] = AvailabilityEngine::weightedSummaries($observedSummaries, $weights, (float) $basis);
+                $node['observation']['temporal_coverage'] = $node['observation']['summary']['coverage'];
+                $node['observation']['daily'] = [];
+                $node['observation']['aggregation'] = 'weighted_technology_indicators';
+            }
         }
         else {
             $node['summary'] = array_fill_keys(['up', 'down', 'unknown', 'score', 'observed', 'coverage', 'lower', 'upper'], null);
             $node['warnings'][] = 'Department index not calculated: every source must cover the same report period, schedule and exclusions. Check the SLA details and align the report timezone; individual results are preserved / Índice departamental não calculado: todas as fontes devem cobrir o mesmo período, calendário e exclusões. Confira os detalhes dos SLAs e alinhe o fuso do relatório; os resultados individuais foram preservados.';
         }
         foreach ($state['tasks'] as &$task) {
-            if ($task['department'] === $state['department_index']) { unset($task['series']); }
+            if ($task['department'] === $state['department_index']) { unset($task['series'], $task['observed_series']); }
         }
         unset($task);
         $state['department_index']++;
         if ($state['department_index'] >= count($state['report']['departments'])) { $state['phase'] = 'finish'; }
+    }
+
+    private static function observed(array $state): bool {
+        return ($state['report']['data_policy'] ?? 'strict') === 'observed';
+    }
+
+    /** Keep evidence durations separate from averages of observed percentages. */
+    private function observationTimeline(array &$observation, array $series, array $period, bool $includeIntervals = true): void {
+        $observation['summary'] = AvailabilityEngine::summary($series, $period['from'], $period['to']);
+        $observation['temporal_coverage'] = $observation['summary']['coverage'];
+        $observation['daily'] = $this->daily($series, $period);
+        $observation['evidence_from'] = null;
+        $observation['evidence_to'] = null;
+        foreach ($series as $interval) {
+            if ($interval[2] > 0 || $interval[3] > 0) {
+                if ($observation['evidence_from'] === null) { $observation['evidence_from'] = $interval[0]; }
+                $observation['evidence_to'] = $interval[1];
+            }
+        }
+        if ($includeIntervals) {
+            $exceptions = array_values(array_filter($series, static function($i) { return $i[3] > 0 || $i[4] > 0; }));
+            $observation['interval_count'] = count($exceptions);
+            $observation['intervals'] = array_slice($exceptions, 0, 200);
+        }
     }
 
     private function combine(array $series, string $mode, array $period, array $weights = []): array {
