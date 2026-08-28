@@ -152,6 +152,43 @@ final class AvailabilityEngine {
             'upper' => $total > 0 ? self::percentage($durations[0] + $durations[2], $durations[1], $total, $complete) : null];
     }
 
+    /** Weighted monthly totals only. This does not reconstruct daily states or outage intervals. */
+    public static function weightedSummaries(array $summaries, array $weights, float $basis): array {
+        if (!$summaries || count($summaries) !== count($weights) || $basis <= 0 || !is_finite($basis)) {
+            throw new \InvalidArgumentException('Invalid monthly aggregation basis.');
+        }
+        $totalWeight = array_sum($weights);
+        if ($totalWeight <= 0 || !is_finite($totalWeight)) { throw new \InvalidArgumentException('Invalid weights.'); }
+        $durations = ['up' => 0.0, 'down' => 0.0, 'unknown' => 0.0];
+        $complete = true;
+        foreach ($summaries as $index => $summary) {
+            if (!is_numeric($weights[$index]) || $weights[$index] <= 0 || !is_finite((float) $weights[$index])) {
+                throw new \InvalidArgumentException('Invalid weight.');
+            }
+            foreach ($durations as $state => $unused) {
+                if (!isset($summary[$state]) || !is_numeric($summary[$state])
+                        || !is_finite((float) $summary[$state]) || $summary[$state] < 0) {
+                    throw new \InvalidArgumentException('Invalid source totals.');
+                }
+                $durations[$state] += $summary[$state] * ($weights[$index] / $totalWeight);
+            }
+            // Item means accumulate fractional seconds over many intervals. Permit
+            // floating-point residue relative to the month, without rounding away
+            // any real unknown/down duration or accepting a different denominator.
+            if (abs($summary['up'] + $summary['down'] + $summary['unknown'] - $basis) > max(0.000001, $basis * 1e-10)) {
+                throw new \InvalidArgumentException('Incompatible monthly totals.');
+            }
+            if ($summary['score'] === null) { $complete = false; }
+        }
+        $known = $durations['up'] + $durations['down'];
+        $lower = self::percentage($durations['up'], $durations['down'] + $durations['unknown'], $basis);
+        return $durations + [
+            'score' => $complete && $durations['unknown'] === 0.0 ? $lower : null,
+            'observed' => $known > 0 ? self::percentage($durations['up'], $durations['down'], $known) : null,
+            'coverage' => self::percentage($known, $durations['unknown'], $basis), 'lower' => $lower,
+            'upper' => self::percentage($durations['up'] + $durations['unknown'], $durations['down'], $basis)];
+    }
+
     private static function percentage(float $included, float $excluded, float $total, bool $complete = true): float {
         // Use the smaller component: subtraction near zero loses precision, while a
         // sum near 100% can retain rounding residue from many weighted intervals.

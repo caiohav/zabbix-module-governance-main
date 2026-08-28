@@ -3,6 +3,72 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Novidades 1.9.0 — Fonte SLA nativo na Disponibilidade
+
+Cada tecnologia pode escolher **Histórico de itens (24×7)** ou **SLA nativo
+mensal**. A opção por itens e suas regras anteriores continuam sendo o padrão;
+atualizar os arquivos não troca fontes nem modifica serviços, SLAs ou retenções.
+Pesos, metas e hierarquia departamento → tecnologias são preservados.
+Alternar a fonte preserva os dois rascunhos durante a edição. Ao salvar, apenas
+os campos da fonte selecionada são guardados; mantenha uma cópia das regras
+por itens se pretender voltar a elas depois de converter uma tecnologia para SLA.
+
+### Configurar um indicador com o SLA existente
+
+1. Abra **Governança → Configurar disponibilidade** e expanda a tecnologia.
+2. Em **Fonte do cálculo**, selecione **SLA nativo mensal**.
+3. Informe **SLA ID** e **Serviço ID**, ou cole o endereço do relatório nativo
+   individual e clique em **Preencher IDs do endereço**. O endereço precisa
+   conter `action=slareport.list`, `filter_slaid` e `filter_serviceid` do mesmo
+   Zabbix. O link do dashboard/widget, sozinho, não contém esses dois IDs.
+   O endereço colado não é acessado nem salvo; apenas os IDs são copiados.
+4. Alinhe **Fuso horário do relatório** ao fuso do SLA para permitir a média
+   departamental. Se o SLA mostrar `System default: UTC`, use `UTC` no módulo;
+   o fuso do usuário não substitui o fuso do SLA.
+5. Salve e calcule um **mês encerrado**, como julho/2026. Não é necessário
+   informar grupos, chaves de itens ou validade de amostra para essa fonte.
+
+O relatório identifica a fonte de cada tecnologia, mostra um comparativo mensal
+em ECharts, os detalhes do SLA/serviço, a base de tempo após exclusões, o fuso,
+a meta nativa e um link para conferência. A meta do módulo continua independente
+da meta do SLA. O tema claro/escuro e português/inglês são mantidos.
+
+### Critérios e limites da fonte SLA
+
+- Consulta a API nativa `sla.getsli` para o serviço e mês exatos. Calcula os
+  pesos sobre os tempos disponível/indisponível, sem reutilizar o percentual
+  arredondado do widget. Respeita o calendário semanal e as exclusões nativas.
+- Exige SLA ativo de período **Mensal**, vigente e com serviço criado antes
+  do início do mês. O mês precisa estar encerrado no fuso do relatório e do SLA.
+  O mês atual continua disponível na fonte por itens; a API de SLA não permite
+  fixar seu resultado em andamento no instante de corte deste processamento.
+- A média exige o mesmo período absoluto, calendário, exclusões e base de tempo
+  em todas as tecnologias. SLAs com o mesmo calendário personalizado são aceitos.
+  Para combinar SLA com itens, o SLA precisa ser 24×7, sem exclusões no mês.
+  Fontes incompatíveis conservam seus resultados individuais, mas não geram
+  índice departamental nem tempos equivalentes fictícios.
+- **Cobertura SLA não é cobertura de amostras**: representa o tempo programado
+  avaliado pelo SLA. Seu SLI segue os estados e regras dos serviços nativos,
+  que podem ser diferentes das condições configuradas na fonte por itens.
+- Não há fallback automático entre fontes, nem preenchimento artificial de
+  lacunas com 100%. Uma resposta inválida da API interrompe o processamento;
+  ausência legítima de SLA/serviço/SLI recebe uma explicação de indisponibilidade
+  do indicador, sem assumir disponibilidade ou queda.
+- Um resumo mensal não reconstrói dias nem intervalos de queda. O comparativo
+  mensal substitui o gráfico diário para fontes SLA; em departamentos mistos,
+  os gráficos diários permanecem somente nas tecnologias por itens.
+- O processamento continua em etapas privadas por usuário. A definição do SLA
+  é conferida antes/depois da consulta; mudança detectada exige novo cálculo.
+  Não é um snapshot transacional ou fechamento mensal imutável: alterações
+  posteriores de regras, eventos ou calendário podem mudar nova apuração.
+- A exportação passa a `governance-availability-v2`, incluindo fonte, calendário,
+  comparabilidade, tempos nativos e disponibilidade ou não de série diária.
+  Integrações que consomem o JSON devem verificar o campo `format`.
+
+A fonte SLA permite aproveitar um indicador já preservado pelo Zabbix. Ela não
+recupera o histórico bruto expirado dos itens. Se a tecnologia continuar em
+**Histórico de itens**, um mês sem evidência suficiente continuará inconclusivo.
+
 ## Novidades 1.8.0 — Qualidade sem bloquear a página
 
 A Qualidade agora entrega primeiro o cabeçalho, as abas e os espaços dos cards.
@@ -125,7 +191,8 @@ adicione PostgreSQL (peso 4), SQL Server (peso 2) e Qlik Sense (peso 1).
 Os nomes e as metas são livres. O departamento usa a média ponderada das
 tecnologias, sem arredondamento intermediário.
 
-Cada tecnologia permite configurar:
+Cada tecnologia permite escolher a fonte do cálculo. Na fonte **Histórico de
+itens**, é possível configurar:
 
 - Grupos por nome (incluindo subgrupos) ou ID (apenas o grupo exato).
 - Consolidação **qualquer servidor fora** ou **média dos servidores**.
@@ -247,15 +314,17 @@ renomeação atômica. Não coloque essa pasta temporária em diretório públic
 
 ### Escopo e limites desta versão
 
-- Calendário 24×7, com fuso configurável; o mês atual considera apenas o tempo
-  transcorrido. Manutenções não são excluídas automaticamente.
-- Usa **histórico bruto** dos itens, com resolução de um segundo. Trends
+- Fonte por itens: calendário 24×7, com fuso configurável; o mês atual considera
+  apenas o tempo transcorrido. Manutenções não são excluídas automaticamente.
+- A fonte por itens usa **histórico bruto**, com resolução de um segundo. Trends
   agregadas não permitem reconstruir quedas e não são usadas como substituto.
   Configure retenção de histórico compatível com os meses que deseja consultar.
-- Usa as regras e a composição de hosts/grupos **atuais**, inclusive hosts
+- A fonte por itens usa as regras e a composição de hosts/grupos **atuais**, inclusive hosts
   desabilitados que ainda tenham histórico. Alterações podem mudar resultados
   de meses passados. Não há fechamento mensal imutável nem histórico de membros.
-- Hierarquia fixa: departamento → tecnologias → hosts → verificações.
+- Hierarquia fixa: departamento → tecnologias → hosts → verificações para
+  itens; departamento → tecnologias → SLA/serviço para a fonte nativa.
+- A fonte SLA segue as condições e limitações específicas descritas na seção 1.9.0.
 - Até 12 departamentos, 30 tecnologias no total, 6 verificações por tecnologia
   e 200 hosts por tecnologia. Consultas usam janelas de até 7 dias por item,
   paginadas em até 5000 amostras, com limite de 20 milhões de linhas lidas por
@@ -290,6 +359,18 @@ simuladas à API. Não substituem a validação no frontend Zabbix instalado.
 Execute também `php tests/menu.php` para conferir os rótulos e destinos do menu.
 `node tests/availability-view.js` verifica o fluxo do navegador com DOM/rede
 simulados, incluindo SID, pausa, timeout, retomada, idempotência e relatórios antigos.
+
+Para a fonte SLA, execute `php tests/availability-sla.php`,
+`php tests/availability-sla-config.php`, `php tests/availability-sla-calculation.php`,
+`php tests/availability-sla-actions.php`, `php tests/availability-sla-view.php`,
+`node tests/availability-config.js` e `node tests/availability-sla-view.js`.
+O teste de gráficos usa PHP pelo PATH ou pela variável `GOVERNANCE_PHP`;
+`GOVERNANCE_PHP_EXT` pode indicar o diretório da extensão `mbstring`.
+A prévia visual usa
+`php -S 127.0.0.1:8771 tests/availability-sla-preview.php`, com os mesmos CSS
+nativos opcionais descritos abaixo. Acesse `/?sample=1` para dados simulados e
+`/zabbix.php?action=governance.availability.config` para testar o editor e a
+importação de endereços. Nenhum desses testes acessa produção.
 
 Para regressões de memória, execute `php tests/availability-memory.php technology`,
 `php tests/availability-memory.php host` e `php tests/availability-memory.php department`.

@@ -173,6 +173,15 @@ main:has(.gav) { min-width: 0; }
 .gav-interval-table { max-height: 300px; overflow-y: auto; }
 .gav-source + .gav-source { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--gov-border); }
 .gav-report-footer { font-size: .7rem; }
+.gav .gav-job-counts { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.gav .gav-sla-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 10px; padding: 0; gap: 14px; }
+.gav .gav-sla-details > div { min-width: 0; }
+.gav .gav-sla-details dt { color: var(--gov-muted); font-size: .72rem; margin-bottom: 4px; }
+.gav .gav-sla-details dd { margin: 0; font-size: .8rem; overflow-wrap: anywhere; }
+.gav .gav-sla-details small { display: block; margin-top: 3px; color: var(--gov-muted); }
+.gav .gav-monthly-chart { width: 100%; min-height: 185px; }
+.gav .gav-monthly-chart canvas { background: transparent !important; }
+@media (max-width: 760px) { .gav .gav-sla-details { grid-template-columns: 1fr; } }
 @media (max-width: 1050px) {
     .gav-check-source { grid-template-columns: minmax(0, 1fr) 120px; }
     .gav-check-source > .gav-field:first-child { grid-column: 1 / -1; }

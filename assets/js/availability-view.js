@@ -24,7 +24,7 @@
             && tokenForm.querySelector('input[name="sid"]');
         const setText = (id, value) => {
             const node = document.getElementById(id);
-            if (node.textContent !== value) node.textContent = value;
+            if (node && node.textContent !== value) node.textContent = value;
         };
         const numeric = value => value !== null && value !== undefined && Number.isFinite(Number(value));
         const number = value => numeric(value) ? Number(value).toLocaleString(locale, {maximumFractionDigits: 0}) : '—';
@@ -93,11 +93,15 @@
                 failed: t('Falha no processamento', 'Processing failed'), cancelled: t('Cancelado', 'Cancelled'), complete: t('Concluído', 'Completed')
             };
             setText('gav-job-state', states[phase] || '');
-            setText('gav-job-message', notice || t('Processando o histórico em etapas. O relatório será exibido somente após a conclusão.', 'Processing history in stages. The report will appear only after completion.'));
+            setText('gav-job-message', notice || t('Consultando as fontes em etapas. O relatório será exibido somente após a conclusão.', 'Querying sources in stages. The report will appear only after completion.'));
             const progress = job && job.progress ? job.progress : {};
             const stages = {
                 groups: t('Resolvendo grupos', 'Resolving groups'), scope_hosts: t('Identificando hosts', 'Identifying hosts'),
                 scope_items: t('Identificando itens', 'Identifying items'), check: t('Preparando verificação', 'Preparing check'),
+                scope_sla: t('Consultando definição do SLA', 'Reading SLA definition'),
+                scope_sla_service: t('Validando serviço do SLA', 'Validating SLA service'),
+                sla: t('Consultando SLI mensal', 'Reading monthly SLI'),
+                sla_verify: t('Conferindo a definição do SLA', 'Verifying SLA definition'),
                 history: t('Lendo histórico', 'Reading history'), host: t('Consolidando host', 'Aggregating host'),
                 technology: t('Consolidando tecnologia', 'Aggregating technology'), department: t('Consolidando departamento', 'Aggregating department'),
                 finish: t('Preparando relatório completo', 'Preparing complete report'), complete: t('Processamento concluído', 'Processing completed')
@@ -114,6 +118,9 @@
             }
             setText('gav-job-hosts', number(progress.hosts_done) + ' / ' + number(progress.hosts_total));
             setText('gav-job-checks', number(progress.checks_done) + ' / ' + number(progress.checks_total));
+            setText('gav-job-slas', number(progress.slas_done) + ' / ' + number(progress.slas_total));
+            const slaCount = document.getElementById('gav-job-slas-count');
+            if (slaCount) slaCount.hidden = !(Number(progress.slas_total) > 0);
             setText('gav-job-rows', number(progress.rows));
             setText('gav-job-calls', number(progress.calls));
             const context = [
@@ -377,21 +384,52 @@
         try { report = JSON.parse(dataNode.textContent); }
         catch (error) { return; }
         const entries = [];
+        const percent = value => value === null ? '—' : (value < 100 && value > 99.999999
+            ? '<100%' : Number(value).toLocaleString(pt ? 'pt-BR' : 'en-GB', {maximumFractionDigits: 6}) + '%');
         const draw = entry => {
             if (!entry.node.clientWidth || !entry.details.open || typeof echarts === 'undefined') return;
+            const dept = report.departments[entry.index];
+            if (!dept) return;
+            const selected = entry.kind === 'monthly' ? null : Number(entry.select.value);
+            const data = entry.kind === 'monthly' ? null : (selected < 0 ? dept.daily : dept.technologies[selected]?.daily);
+            if (entry.kind !== 'monthly' && (!Array.isArray(data) || !data.length)) {
+                if (entry.chart) { entry.chart.dispose(); entry.chart = null; }
+                entry.node.textContent = t('Esta fonte não fornece distribuição diária. Consulte o resumo mensal.', 'This source does not provide a daily distribution. Check the monthly summary.');
+                return;
+            }
             if (!entry.chart) {
                 entry.node.textContent = '';
                 entry.chart = echarts.init(entry.node, null, {renderer: 'canvas'});
             }
-            const dept = report.departments[entry.index];
-            const selected = Number(entry.select.value);
-            const data = selected < 0 ? dept.daily : dept.technologies[selected].daily;
+            const style = getComputedStyle(root);
+            const muted = style.getPropertyValue('--gov-muted').trim();
+            if (entry.kind === 'monthly') {
+                entry.chart.setOption({backgroundColor: 'transparent', animation: false, color: ['#60aa87', '#d99d40'],
+                    textStyle: {fontFamily: style.fontFamily},
+                    tooltip: {trigger: 'axis', renderMode: 'richText', backgroundColor: style.getPropertyValue('--gav-panel').trim(),
+                        textStyle: {color: style.color}, valueFormatter: value => percent(Array.isArray(value) ? value[0] : value)},
+                    legend: {top: 0, textStyle: {color: muted}},
+                    grid: {left: 16, right: 78, top: 38, bottom: 22, containLabel: true},
+                    xAxis: {type: 'value', min: 0, max: 100, axisLabel: {color: muted, formatter: '{value}%'},
+                        splitLine: {lineStyle: {color: 'rgba(128,128,128,.15)'}}},
+                    yAxis: {type: 'category', inverse: true, data: dept.technologies.map(tech => tech.name),
+                        axisLabel: {color: muted, width: 180, overflow: 'truncate', formatter: (name, index) =>
+                            name + (dept.technologies[index].summary.score === null ? ' —' : '')}},
+                    series: [{name: t('Disponibilidade', 'Availability'), type: 'bar', barMaxWidth: 23,
+                        data: dept.technologies.map(tech => ({value: tech.summary.score,
+                            itemStyle: {color: tech.summary.score === null ? '#8c9baa'
+                                : (tech.summary.score >= tech.target ? '#60aa87' : '#df6969')}})),
+                        label: {show: true, position: 'right', color: style.color, formatter: info => percent(info.value)}},
+                    {name: t('Meta', 'Target'), type: 'scatter', symbol: 'rect', symbolSize: [3, 23],
+                        itemStyle: {color: '#d99d40'}, data: dept.technologies.map((tech, index) => [tech.target, index])}]
+                }, true);
+                entry.chart.resize();
+                return;
+            }
             const weighted = selected < 0 || dept.technologies[selected].mode === 'mean';
             const noExceptions = data.every(day => day.summary.down === 0 && day.summary.unknown === 0);
             entry.context.textContent = (weighted ? t('Minutos equivalentes (média ponderada ou por host).', 'Equivalent minutes (weighted mean or mean per host).') : t('Minutos de queda ou lacuna, sem duplicar sobreposições.', 'Minutes of downtime or gaps, without double counting overlaps.'))
                 + (noExceptions ? ' ' + t('Nenhuma queda ou lacuna no período.', 'No downtime or gaps in this period.') : '');
-            const style = getComputedStyle(root);
-            const muted = style.getPropertyValue('--gov-muted').trim();
             entry.chart.setOption({backgroundColor: 'transparent', animation: false,
                 textStyle: {fontFamily: style.fontFamily}, color: ['#df6969', '#8c9baa'],
                 tooltip: {trigger: 'axis', renderMode: 'richText', backgroundColor: style.getPropertyValue('--gav-panel').trim(),
@@ -419,6 +457,18 @@
             }).observe(node);
             draw(entry);
         });
+        root.querySelectorAll('.gav-monthly-chart').forEach(node => {
+            const entry = {node, index: Number(node.dataset.department), kind: 'monthly', chart: null,
+                details: node.closest('.gav-monthly-details')};
+            entries.push(entry);
+            node.style.height = Math.max(185, Math.min(1200, 85 + 34 * report.departments[entry.index].technologies.length)) + 'px';
+            entry.details.addEventListener('toggle', () => draw(entry));
+            if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => {
+                if (!entry.chart) draw(entry);
+                else if (entry.details.open) entry.chart.resize();
+            }).observe(node);
+            draw(entry);
+        });
         window.addEventListener('resize', () => entries.forEach(entry => { if (entry.chart && entry.details.open) entry.chart.resize(); }));
         root.querySelectorAll('.gav-open-tech').forEach(link => link.addEventListener('click', () => {
             const details = document.getElementById(link.hash.slice(1));
@@ -428,11 +478,14 @@
         exportButton.disabled = root.dataset.reportStale === '1';
         exportButton.addEventListener('click', () => {
             if (root.dataset.reportStale === '1') return;
-            const payload = {format: 'governance-availability-v1', module_version: '1.7.0',
-                assumptions: {schedule: '24x7', membership: 'current', maintenance_excluded: false,
-                    unknown_policy: 'no final score when unknown time exists', resolution_seconds: 1,
-                    sample_validity: 'per item; resolved values are listed in host sources',
-                    interval_list_limit: 200, immutable_close: false}, report};
+            const payload = {format: 'governance-availability-v2', module_version: '1.9.0',
+                assumptions: {aggregation: 'weighted mean only for matching periods, schedules and exclusions',
+                    items: {schedule: '24x7', membership: 'current', maintenance_excluded: false,
+                        unknown_policy: 'no final score when unknown time exists', resolution_seconds: 1,
+                        sample_validity: 'per item; resolved values are listed in host sources', interval_list_limit: 200},
+                    sla: {method: 'Zabbix sla.getsli', period: 'monthly; closed months only',
+                        schedule: 'native SLA calendar, timezone and exclusions', daily_timeline_available: false},
+                    automatic_source_fallback: false, immutable_close: false}, report};
             const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'}));
             const link = document.createElement('a');
             link.href = url;

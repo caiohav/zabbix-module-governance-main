@@ -1,7 +1,7 @@
 <?php
 $base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$this->addCssFile($base . 'css/governance.css?v=1.7.0');
-$this->addCssFile($base . 'css/availability.css?v=1.7.0');
+$this->addCssFile($base . 'css/governance.css?v=1.9.0');
+$this->addCssFile($base . 'css/availability.css?v=1.9.0');
 $this->includeJsFile('governance.availability.config.js.php');
 $pt = $data['is_pt'];
 $t = static function($ptText, $enText) use ($pt) { return $pt ? $ptText : $enText; };
@@ -12,24 +12,26 @@ ob_start();
     <div class="gav-toolbar gav-page-heading">
         <div><span class="gav-eyebrow"><?= $t('GOVERNANÇA / DISPONIBILIDADE', 'GOVERNANCE / AVAILABILITY') ?></span>
             <h2><?= $t('Regras dos indicadores', 'Indicator rules') ?></h2>
-            <p class="gav-muted"><?= $t('Defina os serviços, seus pesos e como cada item representa disponibilidade.', 'Define services, their weights and how each item represents availability.') ?></p></div>
+            <p class="gav-muted"><?= $t('Defina os serviços, seus pesos e a fonte de disponibilidade: histórico de itens ou SLA nativo mensal.', 'Define services, their weights and their availability source: item history or native monthly SLA.') ?></p></div>
         <a class="btn-alt" href="zabbix.php?action=governance.availability.view"><?= $t('Voltar ao painel', 'Back to dashboard') ?></a>
     </div>
     <section class="gav-report-settings">
         <label class="gav-field gav-timezone"><span><?= $t('Fuso horário do relatório', 'Report time zone') ?></span>
             <input type="text" id="gav-timezone" required maxlength="80" list="gav-timezones" value="<?= $e($data['config']['timezone']) ?>" aria-describedby="gav-timezone-help">
-            <small id="gav-timezone-help"><?= $t('Define o início e o fim de cada mês.', 'Defines the beginning and end of each month.') ?></small>
+            <small id="gav-timezone-help"><?= $t('Define os limites mensais da fonte por itens. Com SLA, alinhe este fuso ao do SLA para uma média departamental comparável.', 'Defines monthly boundaries for the item source. With SLA, align this time zone with the SLA for a comparable departmental mean.') ?></small>
         </label>
-        <div class="gav-setting-context"><strong><?= $t('Calendário 24×7', '24×7 calendar') ?></strong><p class="gav-muted"><?= $t('Departamento → tecnologias → hosts → itens. Pesos se aplicam entre tecnologias do mesmo departamento.', 'Department → technologies → hosts → items. Weights apply to technologies in the same department.') ?></p></div>
+        <div class="gav-setting-context"><strong><?= $t('Calendário por fonte', 'Calendar by source') ?></strong><p class="gav-muted"><?= $t('Itens usam calendário 24×7; SLA segue seu próprio calendário, fuso e exclusões. Os pesos do módulo se aplicam entre tecnologias do mesmo departamento.', 'Items use a 24×7 calendar; SLA follows its own schedule, time zone and exclusions. Module weights apply to technologies in the same department.') ?></p></div>
     </section>
     <datalist id="gav-timezones"><option value="America/Cuiaba"></option><option value="America/Sao_Paulo"></option><option value="America/Manaus"></option><option value="UTC"></option><option value="Europe/Lisbon"></option></datalist>
     <details class="gav-help"><summary><?= $t('Como o cálculo funciona e quais são os limites', 'How the calculation works and its limits') ?></summary>
         <ul>
-            <li><?= $t('Uma falha de host ou serviço deixa o host indisponível; sobreposições não são contadas duas vezes. Todas as verificações precisam existir em cada host selecionado.', 'A host or service failure makes the host unavailable; overlaps are not counted twice. Every check must exist on each selected host.') ?></li>
-            <li><?= $t('Grupo por nome inclui subgrupos; ID seleciona apenas o grupo exato. São usados os hosts cadastrados hoje, inclusive desabilitados com histórico.', 'Group names include subgroups; IDs select the exact group. Current hosts are used, including disabled hosts with history.') ?></li>
+            <li><?= $t('Na fonte por itens, uma falha de host ou serviço deixa o host indisponível; sobreposições não são contadas duas vezes. Todas as verificações precisam existir em cada host selecionado.', 'With the item source, a host or service failure makes the host unavailable; overlaps are not counted twice. Every check must exist on each selected host.') ?></li>
+            <li><?= $t('Na fonte por itens, grupo por nome inclui subgrupos; ID seleciona apenas o grupo exato. São usados os hosts cadastrados hoje, inclusive desabilitados com histórico.', 'With the item source, group names include subgroups; IDs select the exact group. Current hosts are used, including disabled hosts with history.') ?></li>
             <li><?= $t('A validade automática considera o intervalo de coleta e o heartbeat de cada item. Se não for possível interpretar a cadência, configure a validade manualmente.', 'Automatic validity considers the collection interval and heartbeat of each item. If the cadence cannot be interpreted, set validity manually.') ?></li>
-            <li><?= $t('Sem histórico ou amostras válidas, o resultado fica incompleto. É necessário reter o histórico bruto de todo o mês; trends não o substituem.', 'Without history or valid samples, the result is incomplete. Raw history must be retained for the entire month; trends do not replace it.') ?></li>
-            <li><?= $t('Manutenções não são descontadas. Alterar regras recalcula meses anteriores; esta versão não realiza fechamento imutável.', 'Maintenance is not excluded. Rule changes recalculate previous months; this version does not create immutable monthly closes.') ?></li>
+            <li><?= $t('Na fonte por itens, sem histórico ou amostras válidas, o resultado fica incompleto. É necessário reter o histórico bruto de todo o mês; trends não o substituem. Manutenções não são descontadas.', 'With the item source, missing history or valid samples makes the result incomplete. Raw history must be retained for the entire month; trends do not replace it. Maintenance is not excluded.') ?></li>
+            <li><?= $t('A fonte SLA exige um SLA mensal e um serviço selecionado no relatório nativo. Nesta versão, aceita apenas meses encerrados e usa o calendário, o fuso e as exclusões do SLA. Seu resumo mensal não fornece linha do tempo diária.', 'The SLA source requires a monthly SLA and one service selected in the native report. This version accepts closed months only and uses the SLA schedule, time zone and exclusions. Its monthly summary does not provide a daily timeline.') ?></li>
+            <li><?= $t('Os pesos continuam no módulo. Não há substituição automática entre itens e SLA se a fonte escolhida estiver indisponível. Alterar regras pode mudar meses anteriores; esta versão não realiza fechamento imutável.', 'Weights remain in the module. There is no automatic fallback between items and SLA if the selected source is unavailable. Rule changes may affect previous months; this version does not create immutable monthly closes.') ?></li>
+            <li><?= $t('Trocar a fonte preserva os dois rascunhos enquanto você edita. Ao salvar, somente os campos da fonte selecionada são guardados. Mantenha uma cópia das regras anteriores se desejar voltar a elas.', 'Switching sources keeps both drafts while editing. Saving stores only the selected source fields. Keep a copy of previous rules if you want to restore them later.') ?></li>
         </ul>
     </details>
     <div class="gav-notice" id="gav-legacy-notice" hidden>

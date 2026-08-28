@@ -36,6 +36,20 @@ final class AvailabilityConfig {
                 if (!is_array($technology) || ++$techCount > 30) {
                     throw new InvalidArgumentException('Maximum 30 technologies / Máximo de 30 tecnologias.');
                 }
+                $source = array_key_exists('source', $technology) ? $technology['source'] : 'items';
+                if (!in_array($source, ['items', 'sla'], true)) {
+                    throw new InvalidArgumentException('Invalid calculation source / Fonte do cálculo inválida.');
+                }
+                $tech = ['name' => self::text($technology['name'] ?? '', 100),
+                    'weight' => self::number($technology['weight'] ?? null, 0.001, 100000),
+                    'target' => self::number($technology['target'] ?? null, 0, 100), 'source' => $source];
+                if ($source === 'sla') {
+                    // IDs must stay strings: native DB IDs can exceed JavaScript's safe integer range.
+                    $tech['slaid'] = self::id($technology['slaid'] ?? null, 'SLA ID', 'ID do SLA');
+                    $tech['serviceid'] = self::id($technology['serviceid'] ?? null, 'Service ID', 'ID do serviço');
+                    $node['technologies'][] = $tech;
+                    continue;
+                }
                 $mode = $technology['mode'] ?? '';
                 if (!in_array($mode, ['any_down', 'mean'], true)) {
                     throw new InvalidArgumentException('Invalid aggregation / Consolidação inválida.');
@@ -48,10 +62,7 @@ final class AvailabilityConfig {
                 if (!self::groups($groups)) {
                     throw new InvalidArgumentException('Specify groups / Informe grupos.');
                 }
-                $tech = ['name' => self::text($technology['name'] ?? '', 100),
-                    'weight' => self::number($technology['weight'] ?? null, 0.001, 100000),
-                    'target' => self::number($technology['target'] ?? null, 0, 100),
-                    'groups' => $groups, 'mode' => $mode, 'checks' => []];
+                $tech += ['groups' => $groups, 'mode' => $mode, 'checks' => []];
                 // Keep legacy technology-wide policies until the user explicitly selects auto per check.
                 $legacyAge = isset($technology['max_age']) ? self::seconds($technology['max_age']) : null;
                 if ($legacyAge !== null) { $tech['max_age'] = $legacyAge; }
@@ -70,6 +81,17 @@ final class AvailabilityConfig {
             $result['departments'][] = $node;
         }
         return $result;
+    }
+
+    private static function id($value, string $englishLabel, string $portugueseLabel): string {
+        $maximum = '9223372036854775807';
+        if (!is_string($value) || !preg_match('/^[1-9][0-9]{0,18}$/D', $value)
+                || (strlen($value) === strlen($maximum) && strcmp($value, $maximum) > 0)) {
+            throw new InvalidArgumentException('Invalid ' . $englishLabel
+                . '; use a positive integer ID / ' . $portugueseLabel
+                . ' inválido; use um identificador inteiro positivo.');
+        }
+        return $value;
     }
 
     private static function seconds($value): int {

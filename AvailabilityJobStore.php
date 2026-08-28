@@ -131,7 +131,7 @@ final class AvailabilityJobStore {
     public static function projection(array $job): array {
         $state = $job['state'];
         $progress = [];
-        foreach (['hosts_total', 'hosts_done', 'checks_total', 'checks_done', 'rows', 'calls'] as $field) {
+        foreach (['hosts_total', 'hosts_done', 'checks_total', 'checks_done', 'slas_total', 'slas_done', 'rows', 'calls'] as $field) {
             $progress[$field] = max(0, (int) ($state['progress'][$field] ?? 0));
         }
         $progress['percent'] = max(0, min(100, (float) ($state['progress']['percent'] ?? 0)));

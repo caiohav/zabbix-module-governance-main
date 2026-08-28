@@ -49,14 +49,23 @@ final class AvailabilityCalculation {
         if ($from >= $to || $to > 2147483647) {
             throw new RuntimeException('Choose a past or current month supported by Zabbix / Selecione o mês atual ou anterior suportado pelo Zabbix.');
         }
-        $state = ['format' => self::FORMAT, 'status' => 'running', 'phase' => 'groups',
+        $hasItems = false; $hasSla = false;
+        foreach ($selected['departments'] as $node) {
+            foreach ($node['technologies'] as $technology) {
+                if (($technology['source'] ?? 'items') === 'sla') { $hasSla = true; }
+                else { $hasItems = true; }
+            }
+        }
+        $state = ['format' => self::FORMAT, 'status' => 'running', 'phase' => $hasItems ? 'groups' : 'scope_hosts',
             'source_config' => $config, 'department_filter' => $department,
             'started_at' => time(), 'working_seconds' => 0.0,
             'report' => ['month' => $month, 'timezone' => $config['timezone'], 'from' => $from, 'to' => $to,
                 'generated_at' => $now, 'partial' => $to < $monthEnd, 'configuration' => $selected,
+                'has_sla' => $hasSla, 'has_items' => $hasItems,
                 'departments' => [], 'rows' => 0],
             'progress' => ['hosts_total' => 0, 'hosts_done' => 0, 'checks_total' => 0, 'checks_done' => 0,
-                'rows' => 0, 'calls' => 0, 'percent' => 0, 'stage' => 'groups',
+                'slas_total' => 0, 'slas_done' => 0,
+                'rows' => 0, 'calls' => 0, 'percent' => 0, 'stage' => $hasItems ? 'groups' : 'scope_hosts',
                 'department' => '', 'technology' => '', 'host' => ''],
             'tasks' => [], 'scope_index' => 0, 'task_index' => 0, 'host_index' => 0, 'check_index' => 0,
             'department_index' => 0];
@@ -64,9 +73,12 @@ final class AvailabilityCalculation {
             $state['report']['departments'][] = ['name' => $node['name'], 'target' => $node['target'],
                 'technologies' => [], 'warnings' => []];
             foreach ($node['technologies'] as $technology) {
+                $source = $technology['source'] ?? 'items';
+                if ($source === 'sla') { $state['progress']['slas_total']++; }
                 $state['tasks'][] = ['department' => $d, 'config' => $technology,
                     'result' => ['name' => $technology['name'], 'weight' => $technology['weight'],
-                        'target' => $technology['target'], 'mode' => $technology['mode'],
+                        'target' => $technology['target'], 'source' => $source,
+                        'mode' => $source === 'items' ? $technology['mode'] : null,
                         'groups' => [], 'hosts' => [], 'hosts_total' => 0, 'warnings' => []],
                     'scope_hosts' => [], 'host_series' => []];
             }
@@ -124,6 +136,10 @@ final class AvailabilityCalculation {
                 break;
             case 'scope_hosts': $this->scopeHosts($state); break;
             case 'scope_items': $this->scopeItems($state); break;
+            case 'scope_sla': $this->scopeSla($state); break;
+            case 'scope_sla_service': $this->scopeSlaService($state); break;
+            case 'sla': $this->readSla($state); break;
+            case 'sla_verify': $this->verifySla($state); break;
             case 'check': $this->startCheck($state); break;
             case 'history': $this->historyPage($state); break;
             case 'host': $this->finishHost($state); break;
@@ -136,6 +152,10 @@ final class AvailabilityCalculation {
 
     private function scopeHosts(array &$state): void {
         $task = &$state['tasks'][$state['scope_index']];
+        if (($task['config']['source'] ?? 'items') === 'sla') {
+            $state['phase'] = 'scope_sla';
+            return;
+        }
         $ids = [];
         foreach (AvailabilityConfig::groups($task['config']['groups']) as $token) {
             $found = false;
@@ -222,6 +242,10 @@ final class AvailabilityCalculation {
 
     private function startCheck(array &$state): void {
         $task = &$state['tasks'][$state['task_index']];
+        if (($task['config']['source'] ?? 'items') === 'sla') {
+            $state['phase'] = 'sla';
+            return;
+        }
         if ($state['host_index'] >= $task['result']['hosts_total']) { $state['phase'] = 'technology'; return; }
         if (!isset($state['current_host'])) { $state['current_host'] = ['series' => [], 'sources' => []]; }
         $check = $task['scope_hosts'][$state['host_index']]['checks'][$state['check_index']];
@@ -331,12 +355,19 @@ final class AvailabilityCalculation {
 
     private function finishTechnology(array &$state): void {
         $task = &$state['tasks'][$state['task_index']];
+        if (($task['config']['source'] ?? 'items') === 'sla') {
+            $this->finishSlaTechnology($state);
+            return;
+        }
         $series = $this->combine($task['host_series'], $task['config']['mode'], $state['report']);
         $task['result']['summary'] = AvailabilityEngine::summary($series, $state['report']['from'], $state['report']['to']);
         $task['result']['daily'] = $this->daily($series, $state['report']);
         $exceptions = array_values(array_filter($series, static function($i) { return $i[3] > 0 || $i[4] > 0; }));
         $task['result']['interval_count'] = count($exceptions);
         $task['result']['intervals'] = array_slice($exceptions, 0, 200);
+        $task['result']['daily_available'] = true;
+        $task['result']['eligible_for_aggregation'] = true;
+        $task['result']['basis_seconds'] = $state['report']['to'] - $state['report']['from'];
         $state['report']['departments'][$task['department']]['technologies'][] = $task['result'];
         $task['series'] = $series;
         unset($task['scope_hosts'], $task['host_series'], $task['result']);
@@ -347,6 +378,15 @@ final class AvailabilityCalculation {
     }
 
     private function finishDepartment(array &$state): void {
+        $node = &$state['report']['departments'][$state['department_index']];
+        $hasSla = false;
+        foreach ($node['technologies'] as $technology) {
+            if (($technology['source'] ?? 'items') === 'sla') { $hasSla = true; break; }
+        }
+        if ($hasSla) {
+            $this->finishMixedDepartment($state);
+            return;
+        }
         $series = []; $weights = [];
         foreach ($state['tasks'] as $task) {
             if ($task['department'] === $state['department_index']) {
@@ -355,9 +395,10 @@ final class AvailabilityCalculation {
             }
         }
         $combined = $this->combine($series, 'mean', $state['report'], $weights);
-        $node = &$state['report']['departments'][$state['department_index']];
         $node['summary'] = AvailabilityEngine::summary($combined, $state['report']['from'], $state['report']['to']);
         $node['daily'] = $this->daily($combined, $state['report']);
+        $node['daily_available'] = true;
+        $node['aggregation_compatible'] = true;
         foreach ($state['tasks'] as &$task) {
             if ($task['department'] === $state['department_index']) { unset($task['series']); }
         }
@@ -368,17 +409,21 @@ final class AvailabilityCalculation {
 
     private function finish(array &$state): void {
         if ($state['progress']['hosts_done'] !== $state['progress']['hosts_total']
-                || $state['progress']['checks_done'] !== $state['progress']['checks_total']) {
+                || $state['progress']['checks_done'] !== $state['progress']['checks_total']
+                || ($state['progress']['slas_done'] ?? 0) !== ($state['progress']['slas_total'] ?? 0)) {
             throw new RuntimeException('Scope not fully evaluated; no final indicator available / Escopo não totalmente avaliado; indicador final indisponível.');
         }
         $state['status'] = 'complete';
         $state['phase'] = 'complete';
         $state['report']['rows'] = $state['progress']['rows'];
-        $state['report']['processing'] = ['method' => 'checkpointed-history', 'version' => '1.7.0',
+        $method = empty($state['report']['has_sla']) ? 'checkpointed-history'
+            : (empty($state['report']['has_items']) ? 'checkpointed-sla' : 'checkpointed-items-and-sla');
+        $state['report']['processing'] = ['method' => $method, 'version' => '1.9.0',
             'started_at' => $state['started_at'], 'completed_at' => time(),
             'elapsed_seconds' => max(0, time() - $state['started_at']), 'scope_frozen_at' => $state['scope_frozen_at'],
             'hosts_total' => $state['progress']['hosts_total'], 'hosts_done' => $state['progress']['hosts_done'],
             'checks_total' => $state['progress']['checks_total'], 'checks_done' => $state['progress']['checks_done'],
+            'slas_total' => $state['progress']['slas_total'] ?? 0, 'slas_done' => $state['progress']['slas_done'] ?? 0,
             'api_calls' => $state['progress']['calls']];
         unset($state['tasks']);
     }
@@ -404,19 +449,142 @@ final class AvailabilityCalculation {
             $fraction = max(0, ($state['current_check']['cursor'] - $state['report']['from'])
                 / ($state['report']['to'] - $state['report']['from']));
         }
-        $p['percent'] = min(99, 5 + 90 * ($p['checks_total'] ? ($p['checks_done'] + $fraction) / $p['checks_total'] : 1));
+        $total = $p['checks_total'] + ($p['slas_total'] ?? 0);
+        $done = $p['checks_done'] + ($p['slas_done'] ?? 0);
+        $p['percent'] = min(99, 5 + 90 * ($total ? ($done + $fraction) / $total : 1));
     }
 
-    private function query(array &$state, string $endpoint, array $options): array {
+    private function query(array &$state, string $endpoint, array $options, string $method = 'get'): array {
         $state['progress']['calls']++;
-        try { $rows = API::$endpoint()->get($options); }
+        try { $rows = API::$endpoint()->$method($options); }
         catch (\Throwable $e) {
             throw new RuntimeException('Zabbix API query failed (' . $endpoint . '); calculation interrupted / Consulta à API Zabbix falhou (' . $endpoint . '); cálculo interrompido.');
         }
         if (!is_array($rows)) {
             throw new RuntimeException('Zabbix API returned no valid response (' . $endpoint . ') / API Zabbix retornou resposta inválida (' . $endpoint . ').');
         }
-        return array_values($rows);
+        // getSli returns an object-like array: periods, serviceids and sli must retain their keys.
+        return $method === 'getSli' ? $rows : array_values($rows);
+    }
+
+    private static function slaOptions(array $technology): array {
+        return ['slaids' => [$technology['slaid']],
+            'output' => ['slaid', 'name', 'period', 'slo', 'effective_date', 'timezone', 'status'],
+            'selectSchedule' => ['period_from', 'period_to'],
+            'selectExcludedDowntimes' => ['name', 'period_from', 'period_to'],
+            'selectServiceTags' => ['tag', 'operator', 'value']];
+    }
+
+    private function scopeSla(array &$state): void {
+        $task = &$state['tasks'][$state['scope_index']];
+        $task['sla_definition'] = $this->query($state, 'Sla', self::slaOptions($task['config']));
+        $state['phase'] = 'scope_sla_service';
+    }
+
+    private function scopeSlaService(array &$state): void {
+        $task = &$state['tasks'][$state['scope_index']];
+        $services = $this->query($state, 'Service', [
+            'serviceids' => [$task['config']['serviceid']], 'slaids' => [$task['config']['slaid']],
+            'output' => ['serviceid', 'name', 'created_at']]);
+        // This is exactly the resolver used by CSla in Zabbix 6.0; user/profile timezone is not equivalent.
+        $systemTimezone = class_exists('CTimezoneHelper') ? \CTimezoneHelper::getSystemTimezone() : null;
+        $task['sla_prepared'] = AvailabilitySla::prepare($task['config'], $state['report'],
+            $task['sla_definition'], $services, $systemTimezone);
+        $this->nextScope($state);
+    }
+
+    private function readSla(array &$state): void {
+        $task = &$state['tasks'][$state['task_index']];
+        if (!$task['sla_prepared']['ready']) {
+            $task['sla_result'] = AvailabilitySla::interpret($task['sla_prepared'], null);
+            $state['phase'] = 'technology';
+            return;
+        }
+        $task['sla_response'] = $this->query($state, 'Sla', $task['sla_prepared']['request'], 'getSli');
+        $state['phase'] = 'sla_verify';
+    }
+
+    private function verifySla(array &$state): void {
+        $task = &$state['tasks'][$state['task_index']];
+        $current = $this->query($state, 'Sla', self::slaOptions($task['config']));
+        if (self::canonical($current) !== self::canonical($task['sla_definition'])) {
+            throw new RuntimeException('The SLA definition changed during calculation; start again / A definição do SLA mudou durante o cálculo; inicie novamente.');
+        }
+        $task['sla_result'] = AvailabilitySla::interpret($task['sla_prepared'], $task['sla_response']);
+        if (isset($task['sla_result']['processing_error'])) {
+            throw new RuntimeException($task['sla_result']['processing_error']);
+        }
+        $task['sla_result']['metadata']['queried_at'] = time();
+        $state['phase'] = 'technology';
+    }
+
+    private static function canonical(array $value): string {
+        $normalize = static function(array $node) use (&$normalize): array {
+            foreach ($node as &$child) { if (is_array($child)) { $child = $normalize($child); } }
+            unset($child);
+            if (array_keys($node) === range(0, count($node) - 1)) {
+                usort($node, static function($a, $b) { return strcmp(json_encode($a), json_encode($b)); });
+            }
+            else { ksort($node); }
+            return $node;
+        };
+        return json_encode($normalize($value), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    private function finishSlaTechnology(array &$state): void {
+        $task = &$state['tasks'][$state['task_index']];
+        $result = $task['sla_result'];
+        $task['result']['summary'] = $result['summary'];
+        $task['result']['native_sla'] = $result['metadata'];
+        $task['result']['eligible_for_aggregation'] = $result['eligible_for_aggregation'];
+        $task['result']['warnings'] = $result['warnings'];
+        $task['result']['daily_available'] = false;
+        $task['result']['daily'] = [];
+        $task['result']['interval_count'] = null;
+        $task['result']['intervals'] = [];
+        $task['result']['basis_seconds'] = $result['metadata']['basis_seconds'] ?? null;
+        $state['report']['departments'][$task['department']]['technologies'][] = $task['result'];
+        unset($task['scope_hosts'], $task['host_series'], $task['result'], $task['sla_prepared'],
+            $task['sla_response'], $task['sla_definition'], $task['sla_result']);
+        $state['progress']['slas_done']++;
+        $state['task_index']++;
+        $state['host_index'] = 0;
+        $state['check_index'] = 0;
+        $state['phase'] = $state['task_index'] < count($state['tasks']) ? 'check' : 'department';
+    }
+
+    private function finishMixedDepartment(array &$state): void {
+        $node = &$state['report']['departments'][$state['department_index']];
+        $key = null; $basis = null; $compatible = true; $summaries = []; $weights = [];
+        foreach ($node['technologies'] as $technology) {
+            $native = ($technology['source'] ?? 'items') === 'sla';
+            $currentKey = $native ? ($technology['native_sla']['calendar_key'] ?? null)
+                : AvailabilitySla::calendarKey($state['report']['from'], $state['report']['to']);
+            $currentBasis = $technology['basis_seconds'] ?? null;
+            if (empty($technology['eligible_for_aggregation']) || !is_string($currentKey)
+                    || !is_numeric($currentBasis) || $currentBasis <= 0) { $compatible = false; }
+            if ($key !== null && ($key !== $currentKey || (float) $basis !== (float) $currentBasis)) { $compatible = false; }
+            $key = $currentKey; $basis = $currentBasis;
+            $summaries[] = $technology['summary'];
+            $weights[] = $technology['weight'];
+        }
+        $node['aggregation_compatible'] = $compatible;
+        $node['daily_available'] = false;
+        $node['daily'] = [];
+        $node['basis_seconds'] = $compatible ? $basis : null;
+        if ($compatible) {
+            $node['summary'] = AvailabilityEngine::weightedSummaries($summaries, $weights, (float) $basis);
+        }
+        else {
+            $node['summary'] = array_fill_keys(['up', 'down', 'unknown', 'score', 'observed', 'coverage', 'lower', 'upper'], null);
+            $node['warnings'][] = 'Department index not calculated: every source must cover the same report period, schedule and exclusions. Check the SLA details and align the report timezone; individual results are preserved / Índice departamental não calculado: todas as fontes devem cobrir o mesmo período, calendário e exclusões. Confira os detalhes dos SLAs e alinhe o fuso do relatório; os resultados individuais foram preservados.';
+        }
+        foreach ($state['tasks'] as &$task) {
+            if ($task['department'] === $state['department_index']) { unset($task['series']); }
+        }
+        unset($task);
+        $state['department_index']++;
+        if ($state['department_index'] >= count($state['report']['departments'])) { $state['phase'] = 'finish'; }
     }
 
     private function combine(array $series, string $mode, array $period, array $weights = []): array {

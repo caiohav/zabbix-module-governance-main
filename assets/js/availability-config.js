@@ -19,6 +19,27 @@
         const input = (name, value, extra = '', type = 'text') => `<input type="${type}" data-field="${name}" value="${esc(value)}" ${extra}>`;
         const field = (label, control, classes = '', hint = '') => `<label class="gav-field ${classes}"><span>${label}</span>${control}${hint ? `<small>${hint}</small>` : ''}</label>`;
         const options = (values, selected) => Object.entries(values).map(([value, label]) => `<option value="${value}"${value === selected ? ' selected' : ''}>${esc(label)}</option>`).join('');
+        const validNativeId = value => typeof value === 'string' && value.length > 0 && value.length <= 19
+            && value[0] !== '0' && !/[^0-9]/.test(value)
+            && (value.length < 19 || value <= '9223372036854775807');
+        // Input maxlength exceeds the valid ID length so a pasted oversized ID is rejected, not shortened into another ID.
+        const nativeIdControl = (name, value) => input(name, typeof value === 'string' ? value : '',
+            'required inputmode="numeric" pattern="[1-9][0-9]{0,18}" maxlength="64" autocomplete="off" spellcheck="false"');
+        const parseSlaUrl = raw => {
+            if (typeof raw !== 'string' || !raw.trim() || raw.length > 4096 || /[\u0000-\u001f\u007f]/.test(raw)) return null;
+            try {
+                const current = new URL(window.location.href);
+                const url = new URL(raw.trim(), current);
+                if (!['http:', 'https:'].includes(url.protocol) || url.origin !== current.origin
+                    || url.pathname !== current.pathname || url.username || url.password
+                    || url.searchParams.getAll('action').length !== 1 || url.searchParams.get('action') !== 'slareport.list'
+                    || url.searchParams.getAll('filter_slaid').length !== 1
+                    || url.searchParams.getAll('filter_serviceid').length !== 1) return null;
+                const slaid = url.searchParams.get('filter_slaid'), serviceid = url.searchParams.get('filter_serviceid');
+                return validNativeId(slaid) && validNativeId(serviceid) ? {slaid, serviceid} : null;
+            }
+            catch (error) { return null; }
+        };
         const operators = {eq: '=', ne: '≠', gt: '>', ge: '≥', lt: '<', le: '≤', range: t('Entre (inclusive)', 'Between (inclusive)')};
         const rule = (side, value = {op: 'eq', a: 1}) => `<div class="gav-rule" data-side="${side}">
             ${field(t('Operador', 'Operator'), `<select data-field="op">${options(operators, value.op)}</select>`)}
@@ -46,12 +67,27 @@
                 ${field(t('Tecnologia / serviço', 'Technology / service'), input('name', tech.name, 'required maxlength="100" placeholder="PostgreSQL"'), 'gav-span-6')}
                 ${field(t('Peso', 'Weight'), input('weight', tech.weight, 'min="0.001" max="100000" step="any" required', 'number'), 'gav-span-3')}
                 ${field(t('Meta (%)', 'Target (%)'), input('target', tech.target, 'min="0" max="100" step="any" required', 'number'), 'gav-span-3')}
+                ${field(t('Fonte do cálculo', 'Calculation source'), `<select data-field="source">${options({items: t('Histórico de itens (24×7)', 'Item history (24×7)'), sla: t('SLA nativo mensal', 'Native monthly SLA')}, tech.source ?? 'items')}</select>`, 'gav-span-6')}
+                <p class="gav-muted gav-span-6">${t('O peso continua sendo aplicado neste módulo. A fonte escolhida não é substituída pela outra se faltar histórico ou SLA.', 'The weight still applies in this module. The selected source is not replaced by the other when history or SLA data is missing.')}</p>
+            </div>
+            <div class="gav-items-source" data-source-panel="items"><div class="gav-config-grid">
                 ${field(t('Grupos de hosts', 'Host groups'), input('groups', tech.groups, 'required maxlength="1000" placeholder="Equipes/Banco de Dados"'), 'gav-span-6', t('Nomes ou IDs separados por vírgula. Nomes incluem subgrupos.', 'Comma-separated names or IDs. Names include subgroups.'))}
-                ${field(t('Consolidação dos hosts', 'Host aggregation'), `<select data-field="mode">${options({any_down: t('Indisponível se qualquer host cair', 'Unavailable if any host goes down'), mean: t('Média dos hosts (pesos iguais)', 'Mean of hosts (equal weights)')}, tech.mode)}</select>`, 'gav-span-6')}
+                ${field(t('Consolidação dos hosts', 'Host aggregation'), `<select data-field="mode">${options({any_down: t('Indisponível se qualquer host cair', 'Unavailable if any host goes down'), mean: t('Média dos hosts (pesos iguais)', 'Mean of hosts (equal weights)')}, tech.mode ?? 'any_down')}</select>`, 'gav-span-6')}
             </div>
             <div class="gav-checks-title"><h4>${t('Itens que determinam o estado de cada host', 'Items that determine each host state')}</h4><p class="gav-muted">${t('Todos são obrigatórios. Uma falha confirmada prevalece sobre outro item sem dados; quedas sobrepostas contam uma vez.', 'All are required. A confirmed failure takes precedence over another item with no data; overlapping outages count once.')}</p></div>
-            <div class="gav-checks">${(tech.checks.length ? tech.checks : [{key: '', up: {op: 'eq', a: 1}, down: null, max_age: null}]).map(check => checkHtml(check, tech.max_age ?? null)).join('')}</div>
-            <div class="gav-toolbar gav-node-actions"><button type="button" data-action="add-check" class="btn-alt">${t('Adicionar verificação', 'Add check')}</button><button type="button" data-action="remove-technology" class="btn-alt gav-remove">${t('Remover tecnologia', 'Remove technology')}</button></div>
+            <div class="gav-checks">${(Array.isArray(tech.checks) && tech.checks.length ? tech.checks : [{key: '', up: {op: 'eq', a: 1}, down: null, max_age: null}]).map(check => checkHtml(check, tech.max_age ?? null)).join('')}</div>
+            <div class="gav-toolbar gav-node-actions"><button type="button" data-action="add-check" class="btn-alt">${t('Adicionar verificação', 'Add check')}</button></div></div>
+            <div class="gav-sla-source" data-source-panel="sla" hidden>
+                <p class="gav-notice">${t('Nesta versão, use um SLA de período mensal e apenas meses encerrados. O resultado segue o calendário, o fuso horário e as exclusões do SLA nativo; o resumo mensal não fornece linha do tempo diária.', 'In this version, use a monthly SLA and closed months only. Results follow the native SLA schedule, time zone and exclusions; the monthly summary does not provide a daily timeline.')}</p>
+                <div class="gav-config-grid">
+                    ${field('SLA ID', nativeIdControl('slaid', tech.slaid), 'gav-span-6', t('Copie filter_slaid do endereço do relatório nativo.', 'Copy filter_slaid from the native report address.'))}
+                    ${field(t('Serviço ID', 'Service ID'), nativeIdControl('serviceid', tech.serviceid), 'gav-span-6', t('Copie filter_serviceid do mesmo relatório, com um serviço selecionado.', 'Copy filter_serviceid from the same report, with one service selected.'))}
+                </div>
+                ${field(t('Colar endereço do relatório nativo (opcional)', 'Paste native report address (optional)'), input('sla_url', '', 'maxlength="8192" autocomplete="off" spellcheck="false" placeholder="zabbix.php?action=slareport.list&amp;filter_slaid=…&amp;filter_serviceid=…"'), '', t('Use um relatório deste Zabbix. O endereço não é acessado nem salvo; somente os dois IDs são copiados.', 'Use a report from this Zabbix. The address is not visited or saved; only the two IDs are copied.'))}
+                <div class="gav-toolbar gav-node-actions"><button type="button" data-action="import-sla-url" class="btn-alt">${t('Preencher IDs do endereço', 'Fill IDs from address')}</button><p class="gav-muted gav-sla-import-status" role="status"></p></div>
+                <p class="gav-muted">${t('Alinhe o fuso do relatório com o fuso do SLA para uma média departamental comparável. Esta fonte não consulta itens nem grupos de hosts.', 'Align the report time zone with the SLA time zone for a comparable departmental mean. This source does not query items or host groups.')}</p>
+            </div>
+            <div class="gav-toolbar gav-node-actions"><button type="button" data-action="remove-technology" class="btn-alt gav-remove">${t('Remover tecnologia', 'Remove technology')}</button></div>
             </div></details>`;
         const departmentHtml = (dept = {name: '', target: 99.9, technologies: []}, open = true) => `<details class="gav-department-editor" ${open ? 'open' : ''}>
             <summary><strong>${esc(dept.name || t('Novo departamento', 'New department'))}</strong><span class="gav-summary-meta"></span></summary>
@@ -63,19 +99,39 @@
         </div></details>`;
         const get = (node, name) => node.querySelector(`[data-field="${name}"]`).value;
         const updateRules = () => {
+            root.querySelectorAll('.gav-technology').forEach(tech => {
+                const source = get(tech, 'source');
+                tech.querySelectorAll('[data-source-panel]').forEach(panel => {
+                    const active = panel.dataset.sourcePanel === source;
+                    panel.hidden = !active;
+                    panel.querySelectorAll('input, select, button').forEach(control => {
+                        control.disabled = !active;
+                        if (control.tagName === 'INPUT') {
+                            control.required = active && ['groups', 'key', 'slaid', 'serviceid'].includes(control.dataset.field);
+                            control.setCustomValidity('');
+                        }
+                    });
+                });
+                ['slaid', 'serviceid'].forEach(name => {
+                    const control = tech.querySelector(`[data-field="${name}"]`);
+                    control.setCustomValidity(source === 'sla' && control.value !== '' && !validNativeId(control.value)
+                        ? t('Informe um ID inteiro positivo, sem zeros iniciais, até 9223372036854775807.', 'Enter a positive integer ID without leading zeros, up to 9223372036854775807.') : '');
+                });
+            });
             root.querySelectorAll('.gav-check').forEach(check => {
+                const itemsActive = get(check.closest('.gav-technology'), 'source') === 'items';
                 const manual = get(check, 'age_mode') === 'manual';
                 const age = check.querySelector('[data-field="max_age"]');
                 check.querySelector('.gav-manual-age').hidden = !manual;
-                age.disabled = !manual;
-                age.required = manual;
+                age.disabled = !itemsActive || !manual;
+                age.required = itemsActive && manual;
                 check.querySelector('.gav-validity-hint').textContent = manual
                     ? t('Validade fixa somente deste item. Considere o intervalo gravado e o heartbeat, quando existir.', 'Fixed validity for this item only. Consider the stored interval and heartbeat, when present.')
                     : t('Usa o intervalo e o heartbeat deste item, com margem. Itens cuja cadência não puder ser interpretada exigem validade manual.', 'Uses this item’s interval and heartbeat, with a margin. Items with an uninterpretable cadence require manual validity.');
                 const explicit = get(check, 'down_mode') === 'explicit';
                 check.querySelector('.gav-down-rule').hidden = !explicit;
                 check.querySelectorAll('.gav-rule').forEach(ruleNode => {
-                    const active = ruleNode.dataset.side === 'up' || explicit;
+                    const active = itemsActive && (ruleNode.dataset.side === 'up' || explicit);
                     const range = get(ruleNode, 'op') === 'range';
                     ruleNode.querySelector('.gav-bound').hidden = !range;
                     ruleNode.querySelectorAll('input, select').forEach(control => {
@@ -89,7 +145,9 @@
             root.querySelectorAll('.gav-technology').forEach(tech => {
                 tech.querySelector('summary strong').textContent = get(tech, 'name') || t('Nova tecnologia', 'New technology');
                 const checks = tech.querySelectorAll('.gav-check').length;
-                tech.querySelector('.gav-summary-meta').textContent = `${t('Peso', 'Weight')} ${number(get(tech, 'weight'))} · ${checks} ${checks === 1 ? t('item', 'item') : t('itens', 'items')}`;
+                const detail = get(tech, 'source') === 'sla' ? t('SLA nativo mensal', 'Native monthly SLA')
+                    : `${checks} ${checks === 1 ? t('item', 'item') : t('itens', 'items')}`;
+                tech.querySelector('.gav-summary-meta').textContent = `${t('Peso', 'Weight')} ${number(get(tech, 'weight'))} · ${detail}`;
             });
             [...list.children].forEach(dept => {
                 dept.querySelector('summary strong').textContent = get(dept, 'name') || t('Novo departamento', 'New department');
@@ -102,14 +160,16 @@
             const readRule = node => ({op: get(node, 'op'), a: Number(get(node, 'a')), ...(get(node, 'op') === 'range' ? {b: Number(get(node, 'b'))} : {})});
             const data = {timezone: document.getElementById('gav-timezone').value.trim(), departments: [...list.children].map(dept => ({
                 name: get(dept, 'name').trim(), target: Number(get(dept, 'target')),
-                technologies: [...dept.querySelectorAll('.gav-technology')].map(tech => ({
-                    name: get(tech, 'name').trim(), target: Number(get(tech, 'target')), weight: Number(get(tech, 'weight')),
-                    groups: get(tech, 'groups').trim(), mode: get(tech, 'mode'),
-                    checks: [...tech.querySelectorAll('.gav-check')].map(check => ({key: get(check, 'key').trim(),
-                        max_age: get(check, 'age_mode') === 'manual' ? Number(get(check, 'max_age')) : null,
-                        up: readRule(check.querySelector('[data-side="up"]')),
-                        down: get(check, 'down_mode') === 'explicit' ? readRule(check.querySelector('[data-side="down"]')) : null}))
-                }))
+                technologies: [...dept.querySelectorAll('.gav-technology')].map(tech => {
+                    const value = {name: get(tech, 'name').trim(), target: Number(get(tech, 'target')),
+                        weight: Number(get(tech, 'weight')), source: get(tech, 'source')};
+                    if (value.source === 'sla') return {...value, slaid: get(tech, 'slaid'), serviceid: get(tech, 'serviceid')};
+                    return {...value, groups: get(tech, 'groups').trim(), mode: get(tech, 'mode'),
+                        checks: [...tech.querySelectorAll('.gav-check')].map(check => ({key: get(check, 'key').trim(),
+                            max_age: get(check, 'age_mode') === 'manual' ? Number(get(check, 'max_age')) : null,
+                            up: readRule(check.querySelector('[data-side="up"]')),
+                            down: get(check, 'down_mode') === 'explicit' ? readRule(check.querySelector('[data-side="down"]')) : null}))};
+                })
             }))};
             payload.value = JSON.stringify(data);
             return data;
@@ -119,7 +179,8 @@
             const data = JSON.parse(document.getElementById('gav-config-data').textContent);
             if (!Array.isArray(data.departments)) throw new Error('Invalid configuration');
             list.innerHTML = data.departments.map((dept, i) => departmentHtml(dept, i === 0)).join('');
-            document.getElementById('gav-legacy-notice').hidden = !data.departments.some(dept => dept.technologies.some(tech => tech.max_age != null && tech.checks.some(check => !Object.prototype.hasOwnProperty.call(check, 'max_age'))));
+            document.getElementById('gav-legacy-notice').hidden = !data.departments.some(dept => dept.technologies.some(tech => tech.source !== 'sla' && tech.max_age != null
+                && Array.isArray(tech.checks) && tech.checks.some(check => !Object.prototype.hasOwnProperty.call(check, 'max_age'))));
             updateRules();
             serialize();
         } catch (error) {
@@ -136,8 +197,22 @@
         root.addEventListener('input', changed);
         root.addEventListener('click', event => {
             const button = event.target.closest('[data-action]');
-            if (!button) return;
+            if (!button || button.disabled) return;
             const action = button.dataset.action;
+            if (action === 'import-sla-url') {
+                const tech = button.closest('.gav-technology');
+                const ids = parseSlaUrl(get(tech, 'sla_url'));
+                const message = tech.querySelector('.gav-sla-import-status');
+                if (!ids) {
+                    message.textContent = t('Endereço inválido. Use o relatório nativo deste Zabbix com filter_slaid e filter_serviceid únicos e positivos.', 'Invalid address. Use this Zabbix native report with one positive filter_slaid and one positive filter_serviceid.');
+                    return;
+                }
+                tech.querySelector('[data-field="slaid"]').value = ids.slaid;
+                tech.querySelector('[data-field="serviceid"]').value = ids.serviceid;
+                changed();
+                message.textContent = t('IDs copiados. O endereço não foi acessado nem será salvo.', 'IDs copied. The address was not visited and will not be saved.');
+                return;
+            }
             if (action === 'add-technology') {
                 if (root.querySelectorAll('.gav-technology').length >= 30) { status.textContent = t('Máximo de 30 tecnologias.', 'Maximum 30 technologies.'); return; }
                 const technologies = button.closest('.gav-department-editor').querySelector('.gav-technologies');
@@ -165,9 +240,14 @@
         }, true);
         form.addEventListener('submit', event => {
             const data = serialize();
-            if (data.departments.some(d => !d.technologies.length || d.technologies.some(tech => !tech.checks.length))) {
+            if (data.departments.some(d => !d.technologies.length || d.technologies.some(tech => tech.source === 'items' && !tech.checks.length))) {
                 event.preventDefault();
-                status.textContent = t('Cada departamento precisa de uma tecnologia e cada tecnologia de uma verificação.', 'Each department needs a technology and each technology needs a check.');
+                status.textContent = t('Cada departamento precisa de uma tecnologia. A fonte por itens exige ao menos uma verificação.', 'Each department needs a technology. The item source requires at least one check.');
+                return;
+            }
+            if (data.departments.some(d => d.technologies.some(tech => tech.source === 'sla' && (!validNativeId(tech.slaid) || !validNativeId(tech.serviceid))))) {
+                event.preventDefault();
+                status.textContent = t('Cada fonte SLA exige IDs válidos de SLA e serviço, sem zeros iniciais.', 'Each SLA source requires valid SLA and service IDs without leading zeros.');
                 return;
             }
             if (payload.value.length > 300000) {

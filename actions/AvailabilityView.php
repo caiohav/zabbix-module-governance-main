@@ -66,7 +66,17 @@ class AvailabilityView extends CController {
             $error = 'Cannot load calculation or rules / Não foi possível carregar o cálculo ou as regras.';
         }
         if ($month === '') {
-            $month = (new DateTimeImmutable('now', new DateTimeZone($config['timezone'])))->format('Y-m');
+            $date = new DateTimeImmutable('now', new DateTimeZone($config['timezone']));
+            foreach ($config['departments'] as $index => $node) {
+                if ($department !== -1 && $department !== $index) { continue; }
+                foreach ($node['technologies'] as $technology) {
+                    if (($technology['source'] ?? 'items') === 'sla') {
+                        $date = $date->modify('first day of previous month');
+                        break 2;
+                    }
+                }
+            }
+            $month = $date->format('Y-m');
         }
         $this->setResponse(new CControllerResponseData([
             'page_title' => $isPt ? 'Disponibilidade por departamento' : 'Department availability',

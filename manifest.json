@@ -2,11 +2,11 @@
   "manifest_version": 1.0,
   "id": "zabbix_module_governance",
   "name": "Governance & Quality Audit",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "namespace": "Governance",
   "author": "Governance Module Team",
   "url": "https://github.com/seu-usuario/zabbix-module-governance",
-  "description": "Módulo de governança e auditoria de qualidade de dados (cobertura de tags, inventário e padronização) para Zabbix 6.",
+  "description": "Governança, qualidade de dados e disponibilidade mensal ponderada por itens ou SLA nativo para Zabbix 6.",
   "actions": {
     "governance.availability.view": {
       "class": "AvailabilityView",
