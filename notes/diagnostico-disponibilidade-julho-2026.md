@@ -315,3 +315,31 @@ validação não substitui a conferência após a atualização no frontend inst
 Os diagnósticos futuros de retenção por item e fechamento mensal permanente
 continuam fora desta implementação. A fonte por itens ainda precisa de histórico
 bruto suficiente para julho; nenhum dado faltante foi preenchido artificialmente.
+
+## Revalidação em produção — 31/08/2026
+
+A configuração foi inspecionada sem alterações: fuso `America/Cuiaba`, política
+**Calcular sobre dados disponíveis**, tecnologia PostgreSQL pela fonte de itens,
+modo **qualquer servidor fora**, 25 hosts e duas verificações obrigatórias por
+host. Portanto, não faltava selecionar a política observada nem salvar a fonte.
+
+Um novo processamento de julho/2026 terminou com 50 verificações, **0 linhas de
+histórico lidas**, 243 chamadas à API e 25/25 hosts sem estado conhecido. O
+resultado `Unknown`, cobertura 0% e 744 horas desconhecidas é coerente com essa
+evidência: na data da revalidação, o histórico bruto necessário já não estava
+mais acessível pela API. A política observada ignora lacunas no denominador, mas
+não pode formar um percentual quando nenhuma amostra classificável permanece.
+Ela também não autoriza presumir 100%.
+
+Essa execução separa dois problemas:
+
+1. **Dados de julho:** sem linhas recuperáveis, nenhum ajuste de gráfico consegue
+   reconstruir o mês. É necessário um SLA/fechamento preservado ou outra fonte
+   autorizada que ainda contenha as evidências.
+2. **Representação diária:** havia uma inconsistência real nas médias. Os pontos
+   eram derivados de durações temporais combinadas, que podem dar peso maior a
+   quem possui mais cobertura, enquanto o indicador mensal usa uma participação
+   por host e pesos por tecnologia. A versão 1.11 reaplica a hierarquia correta em
+   cada dia, separa disponibilidade de cobertura e adiciona gráficos lazy por host.
+
+Nenhuma configuração foi salva ou modificada no Zabbix durante essa validação.

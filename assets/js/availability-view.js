@@ -389,16 +389,35 @@
         const metric = node => observedPolicy && node.observation
             ? {...node.summary, ...(node.observation.summary || {}), score: node.observation.score, coverage: node.observation.coverage}
             : node.summary;
-        const daily = node => observedPolicy && node?.observation?.daily ? node.observation.daily : node?.daily;
+        const daily = (node, labels = null) => {
+            const rows = observedPolicy && node?.observation?.daily ? node.observation.daily : node?.daily;
+            if (!Array.isArray(rows)) return rows;
+            if (!rows.length || !Array.isArray(rows[0])) return rows;
+            return rows.map((point, index) => ({day: labels?.[index]?.day || String(index + 1),
+                score: point.length ? point[0] : null, coverage: point.length > 1 ? point[1] : 0, summary: {}}));
+        };
+        const dailyMetric = day => {
+            if (Array.isArray(day)) return {score: day.length ? day[0] : null, coverage: day.length > 1 ? day[1] : 0};
+            const summary = day?.summary || {};
+            return {score: Object.prototype.hasOwnProperty.call(day || {}, 'score') ? day.score
+                : observedPolicy ? summary.observed ?? null : summary.score ?? null,
+            coverage: Object.prototype.hasOwnProperty.call(day || {}, 'coverage') ? day.coverage : summary.coverage ?? 0};
+        };
         const entries = [];
-        const percent = value => value === null ? '—' : (value < 100 && value > 99.999999
-            ? '<100%' : Number(value).toLocaleString(pt ? 'pt-BR' : 'en-GB', {maximumFractionDigits: 6}) + '%');
+        const percent = value => value === null || value === undefined || !Number.isFinite(Number(value)) ? '—'
+            : (value < 100 && value > 99.999999 ? '<100%'
+                : Number(value).toLocaleString(pt ? 'pt-BR' : 'en-GB', {maximumFractionDigits: 6}) + '%');
         const draw = entry => {
             if (!entry.node.clientWidth || !entry.details.open || typeof echarts === 'undefined') return;
             const dept = report.departments[entry.index];
             if (!dept) return;
-            const selected = entry.kind === 'monthly' ? null : Number(entry.select.value);
-            const data = entry.kind === 'monthly' ? null : daily(selected < 0 ? dept : dept.technologies[selected]);
+            const selected = entry.kind === 'daily' ? Number(entry.select.value) : null;
+            const technology = entry.kind === 'host' ? dept.technologies[entry.technology] : null;
+            const host = technology && entry.kind === 'host' ? technology.hosts[entry.host] : null;
+            const source = entry.kind === 'host' ? host : (entry.kind === 'daily'
+                ? (selected < 0 ? dept : dept.technologies[selected]) : null);
+            const data = entry.kind === 'monthly' ? null : daily(source,
+                entry.kind === 'host' ? daily(technology) : null);
             if (entry.kind !== 'monthly' && (!Array.isArray(data) || !data.length)) {
                 if (entry.chart) { entry.chart.dispose(); entry.chart = null; }
                 entry.node.textContent = t('Esta fonte não fornece distribuição diária. Consulte o resumo mensal.', 'This source does not provide a daily distribution. Check the monthly summary.');
@@ -411,13 +430,21 @@
             const style = getComputedStyle(root);
             const muted = style.getPropertyValue('--gov-muted').trim();
             if (entry.kind === 'monthly') {
-                entry.chart.setOption({backgroundColor: 'transparent', animation: false, color: ['#60aa87', '#d99d40'],
+                const monthlyScores = dept.technologies.map(tech => metric(tech).score);
+                const moduleTargets = dept.technologies.map(tech => Number(tech.target));
+                const nativeSlos = dept.technologies.map(tech => (tech.source || 'items') === 'sla'
+                    && Number.isFinite(Number(tech.native_sla?.slo)) ? Number(tech.native_sla.slo) : null);
+                const scaleValues = [...monthlyScores, ...moduleTargets, ...nativeSlos]
+                    .filter(value => value !== null && Number.isFinite(Number(value))).map(Number);
+                const scaleMinimum = scaleValues.length ? Math.min(...scaleValues) : 0;
+                const monthlyFloor = Math.max(0, Math.floor((scaleMinimum - Math.max(.1, (100 - scaleMinimum) * .15)) * 10) / 10);
+                entry.chart.setOption({backgroundColor: 'transparent', animation: false, color: ['#60aa87', '#d99d40', '#9c86d8'],
                     textStyle: {fontFamily: style.fontFamily},
                     tooltip: {trigger: 'axis', renderMode: 'richText', backgroundColor: style.getPropertyValue('--gav-panel').trim(),
                         textStyle: {color: style.color}, valueFormatter: value => percent(Array.isArray(value) ? value[0] : value)},
                     legend: {top: 0, textStyle: {color: muted}},
                     grid: {left: 16, right: 78, top: 38, bottom: 22, containLabel: true},
-                    xAxis: {type: 'value', min: 0, max: 100, axisLabel: {color: muted, formatter: '{value}%'},
+                    xAxis: {type: 'value', min: monthlyFloor, max: 100, axisLabel: {color: muted, formatter: '{value}%'},
                         splitLine: {lineStyle: {color: 'rgba(128,128,128,.15)'}}},
                     yAxis: {type: 'category', inverse: true, data: dept.technologies.map(tech => tech.name),
                         axisLabel: {color: muted, width: 180, overflow: 'truncate', formatter: (name, index) =>
@@ -427,33 +454,58 @@
                             itemStyle: {color: metric(tech).score === null ? '#8c9baa'
                                 : (metric(tech).score >= tech.target ? '#60aa87' : '#df6969')}})),
                         label: {show: true, position: 'right', color: style.color, formatter: info => percent(info.value)}},
-                    {name: t('Meta', 'Target'), type: 'scatter', symbol: 'rect', symbolSize: [3, 23],
-                        itemStyle: {color: '#d99d40'}, data: dept.technologies.map((tech, index) => [tech.target, index])}]
+                    {name: t('Meta do indicador', 'Indicator target'), type: 'scatter', symbol: 'rect', symbolSize: [3, 23],
+                        itemStyle: {color: '#d99d40'}, data: dept.technologies.map((tech, index) => [tech.target, index])},
+                    {name: t('SLO nativo', 'Native SLO'), type: 'scatter', symbol: 'diamond', symbolSize: 9,
+                        itemStyle: {color: '#9c86d8'}, data: nativeSlos.flatMap((slo, index) => slo === null ? [] : [[slo, index]])}]
                 }, true);
                 entry.chart.resize();
                 return;
             }
-            const weighted = selected < 0 || dept.technologies[selected].mode === 'mean';
-            const noExceptions = data.every(day => day.summary.down === 0 && day.summary.unknown === 0);
-            entry.context.textContent = (weighted ? t('Minutos equivalentes (média ponderada ou por host).', 'Equivalent minutes (weighted mean or mean per host).') : t('Minutos de queda ou lacuna, sem duplicar sobreposições.', 'Minutes of downtime or gaps, without double counting overlaps.'))
-                + (noExceptions ? ' ' + t('Nenhuma queda ou lacuna no período.', 'No downtime or gaps in this period.') : '')
-                + (observedPolicy ? ' ' + t('A cobertura considera também os hosts ignorados por falta de dados; consulte a tabela.', 'Coverage also accounts for hosts ignored due to missing data; see the table.') : '');
+            const target = Number(entry.kind === 'host' ? technology.target
+                : selected < 0 ? dept.target : dept.technologies[selected].target);
+            const values = data.map(dailyMetric);
+            const scores = values.map(value => value.score).filter(value => value !== null && Number.isFinite(Number(value)));
+            const scoreFloor = Math.max(0, Math.floor((Math.min(target, ...(scores.length ? scores : [target])) - .1) * 10) / 10);
+            if (entry.context) entry.context.textContent = t(
+                'Cada ponto reaplica o critério do indicador ao respectivo dia; cobertura usa eixo separado e lacunas não viram disponibilidade. A média simples dos dias pode diferir do indicador mensal.',
+                'Each point reapplies the indicator criterion to that day; coverage uses a separate axis and gaps never become availability. A simple mean of the days may differ from the monthly indicator.');
             entry.chart.setOption({backgroundColor: 'transparent', animation: false,
-                textStyle: {fontFamily: style.fontFamily}, color: ['#df6969', '#8c9baa'],
+                textStyle: {fontFamily: style.fontFamily}, color: ['#60aa87', '#d99d40', '#71b6df'],
                 tooltip: {trigger: 'axis', renderMode: 'richText', backgroundColor: style.getPropertyValue('--gav-panel').trim(),
-                    textStyle: {color: style.color}, valueFormatter: value => Number(value).toLocaleString(pt ? 'pt-BR' : 'en-GB', {maximumFractionDigits: 3}) + ' min'},
+                    textStyle: {color: style.color}, formatter: params => {
+                        const index = params?.[0]?.dataIndex;
+                        if (!Number.isInteger(index) || !data[index]) return '';
+                        return [data[index].day,
+                            t('Disponibilidade: ', 'Availability: ') + percent(values[index].score),
+                            t('Cobertura: ', 'Coverage: ') + percent(values[index].coverage),
+                            t('Meta: ', 'Target: ') + percent(target)].join('\n');
+                    }},
                 legend: {top: 0, textStyle: {color: muted}},
-                grid: {left: 55, right: 18, top: 48, bottom: 28},
-                xAxis: {type: 'category', data: data.map(day => day.day), axisLabel: {color: muted, formatter: value => value.slice(8)}},
-                yAxis: {type: 'value', name: 'min', min: 0, axisLabel: {color: muted}, nameTextStyle: {color: muted}, splitLine: {lineStyle: {color: 'rgba(128,128,128,.15)'}}},
-                series: [{name: t('Indisponível', 'Down'), type: 'bar', stack: 'minutes', data: data.map(day => day.summary.down / 60), barMaxWidth: 25},
-                    {name: t('Sem dados', 'Unknown'), type: 'bar', stack: 'minutes', data: data.map(day => day.summary.unknown / 60), barMaxWidth: 25}]
+                axisPointer: {link: [{xAxisIndex: 'all'}]},
+                grid: [{left: 58, right: 22, top: 48, height: '52%'},
+                    {left: 58, right: 22, top: '78%', height: '10%'}],
+                xAxis: [{type: 'category', data: data.map(day => day.day), gridIndex: 0,
+                    axisLabel: {show: false}, axisTick: {show: false}},
+                {type: 'category', data: data.map(day => day.day), gridIndex: 1, axisLabel: {color: muted,
+                    formatter: value => String(value).length >= 10 ? String(value).slice(8) : String(value)}}],
+                yAxis: [{type: 'value', name: t('Disponibilidade', 'Availability'), min: scoreFloor, max: 100, gridIndex: 0,
+                    axisLabel: {color: muted, formatter: '{value}%'}, nameTextStyle: {color: muted}, splitLine: {lineStyle: {color: 'rgba(128,128,128,.15)'}}},
+                {type: 'value', min: 0, max: 100, interval: 100, gridIndex: 1,
+                    axisLabel: {color: muted, formatter: '{value}%'}, nameTextStyle: {color: muted}, splitLine: {show: false}}],
+                series: [{name: t('Disponibilidade', 'Availability'), type: 'line', showSymbol: false, connectNulls: false,
+                    data: values.map(value => value.score), lineStyle: {width: 2}},
+                {name: t('Meta', 'Target'), type: 'line', showSymbol: false, silent: true,
+                    data: data.map(() => target), lineStyle: {width: 1, type: 'dotted'}},
+                {name: t('Cobertura', 'Coverage'), type: 'line', xAxisIndex: 1, yAxisIndex: 1, showSymbol: false,
+                    connectNulls: false, data: values.map(value => value.coverage), lineStyle: {width: 1.5},
+                    areaStyle: {opacity: .12}}]
             }, true);
             entry.chart.resize();
         };
         root.querySelectorAll('.gav-chart').forEach(node => {
             const index = Number(node.dataset.department);
-            const entry = {node, index, chart: null, details: node.closest('.gav-chart-details'),
+            const entry = {node, index, kind: 'daily', chart: null, details: node.closest('.gav-chart-details'),
                 select: root.querySelector(`.gav-chart-selection[data-department="${index}"]`),
                 context: root.querySelector(`.gav-chart-context[data-department="${index}"]`)};
             entries.push(entry);
@@ -477,6 +529,37 @@
             }).observe(node);
             draw(entry);
         });
+        root.querySelectorAll('.gav-host-chart').forEach(node => {
+            const entry = {node, index: Number(node.dataset.department), technology: Number(node.dataset.technology),
+                host: Number(node.dataset.host), kind: 'host', chart: null, details: node.closest('.gav-host-chart-details'),
+                technologyDetails: node.closest('.gav-tech-detail'), select: null, context: null};
+            entries.push(entry);
+            entry.details.addEventListener('toggle', () => {
+                if (entry.details.open) {
+                    entries.filter(peer => peer !== entry && peer.kind === 'host').forEach(peer => {
+                            if (peer.details.open) peer.details.open = false;
+                            if (peer.chart) peer.chart.dispose();
+                            peer.chart = null;
+                            peer.node.textContent = t('Abra para carregar o gráfico deste host.', 'Open to load this host chart.');
+                        });
+                    draw(entry);
+                }
+                else {
+                    if (entry.chart) entry.chart.dispose();
+                    entry.chart = null;
+                    entry.node.textContent = t('Abra para carregar o gráfico deste host.', 'Open to load this host chart.');
+                }
+            });
+        });
+        root.querySelectorAll('.gav-tech-detail').forEach(details => details.addEventListener('toggle', () => {
+            const hosts = entries.filter(entry => entry.kind === 'host' && entry.technologyDetails === details);
+            if (details.open) hosts.filter(entry => entry.details.open).forEach(draw);
+            else hosts.forEach(entry => {
+                if (entry.chart) entry.chart.dispose();
+                entry.chart = null;
+                entry.node.textContent = t('Abra para carregar o gráfico deste host.', 'Open to load this host chart.');
+            });
+        }));
         window.addEventListener('resize', () => entries.forEach(entry => { if (entry.chart && entry.details.open) entry.chart.resize(); }));
         root.querySelectorAll('.gav-open-tech').forEach(link => link.addEventListener('click', () => {
             const details = document.getElementById(link.hash.slice(1));
@@ -486,7 +569,7 @@
         exportButton.disabled = root.dataset.reportStale === '1';
         exportButton.addEventListener('click', () => {
             if (root.dataset.reportStale === '1') return;
-            const payload = {format: 'governance-availability-v3', module_version: '1.10.0',
+            const payload = {format: 'governance-availability-v3', module_version: '1.11.0',
                 assumptions: {aggregation: 'weighted mean only for matching periods, schedules and exclusions',
                     data_policy: observedPolicy ? 'observed' : 'strict',
                     items: {schedule: '24x7', membership: 'current', maintenance_excluded: false,
@@ -497,6 +580,8 @@
                         observed_aggregation: 'mean of host percentages for mean mode; union of known outages for any_down; weighted technology percentages for departments; exclude null indicators from score, not coverage',
                         observed_coverage: 'known-state time averaged over ALL scoped hosts, then ALL configured technology weights',
                         strict_summary_preserved: true, resolution_seconds: 1,
+                        daily_indicator: 'each civil day reapplies the same host and technology hierarchy; a simple mean of daily points need not equal the monthly indicator',
+                        host_daily_format: '[score, coverage] per civil day, positionally aligned with the parent technology daily calendar',
                         sample_validity: 'per item; resolved values are listed in host sources', interval_list_limit: 200},
                     sla: {method: 'Zabbix sla.getsli', period: 'monthly; closed months only',
                         schedule: 'native SLA calendar, timezone and exclusions', daily_timeline_available: false},
@@ -511,11 +596,12 @@
         let printState = null;
         window.addEventListener('beforeprint', () => {
             if (printState || root.dataset.reportStale === '1') return;
-            printState = entries.map(entry => entry.details.open);
-            entries.forEach(entry => { entry.details.open = true; draw(entry); });
+            const printable = entries.filter(entry => entry.kind !== 'host');
+            printState = printable.map(entry => ({entry, open: entry.details.open}));
+            printable.forEach(entry => { entry.details.open = true; draw(entry); });
         });
         window.addEventListener('afterprint', () => {
-            entries.forEach((entry, index) => { entry.details.open = printState ? printState[index] : entry.details.open; draw(entry); });
+            for (const state of printState || []) { state.entry.details.open = state.open; draw(state.entry); }
             printState = null;
         });
         const printButton = document.getElementById('gav-print');

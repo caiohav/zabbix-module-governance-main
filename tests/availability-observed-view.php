@@ -51,6 +51,67 @@ try {
     }
     observedViewCheck(count(API::$calls) === $callsBefore, 'rendering completed reports never makes a source query');
 
+    foreach ($reports as $case => $report) {
+        $expectedHostCharts = 0;
+        $html = $renderer->render($report, true, false);
+        foreach ($report['departments'] as $di => $department) {
+            foreach ($department['technologies'] as $ti => $technology) {
+                if (($technology['source'] ?? 'items') === 'sla') { continue; }
+                $days = []; $daysCoherent = true; $previousDay = null;
+                foreach ($technology['daily'] ?? [] as $day) {
+                    $label = is_array($day) ? ($day['day'] ?? null) : null;
+                    if (!is_string($label) || preg_match('/^\d{4}-\d{2}-\d{2}$/D', $label) !== 1
+                            || ($previousDay !== null && strcmp($label, $previousDay) <= 0)) {
+                        $daysCoherent = false;
+                    }
+                    $days[] = $label; $previousDay = $label;
+                }
+                observedViewCheck($daysCoherent && $days !== [], $case . ': item technology provides ordered daily labels for compact host points');
+                foreach ($technology['hosts'] as $hi => $host) {
+                    $expectedHostCharts++;
+                    $hostDaily = $host['daily'] ?? null;
+                    observedViewCheck(is_array($hostDaily) && count($hostDaily) === count($days), $case . ': compact host points align one-to-one with technology days: ' . $host['name']);
+                    $compactAndValid = is_array($hostDaily);
+                    foreach (is_array($hostDaily) ? $hostDaily : [] as $point) {
+                        $compactAndValid = $compactAndValid && is_array($point) && array_keys($point) === [0, 1];
+                        if (!$compactAndValid) { break; }
+                        [$score, $coverage] = $point;
+                        $compactAndValid = ($score === null || (is_numeric($score) && (float) $score >= 0 && (float) $score <= 100))
+                            && is_numeric($coverage) && (float) $coverage >= 0 && (float) $coverage <= 100;
+                        if (!$compactAndValid) { break; }
+                    }
+                    observedViewCheck($compactAndValid, $case . ': each compact host point is exactly [score|null, coverage] in percentage bounds: ' . $host['name']);
+
+                    $coordinates = 'class="gav-host-chart" data-department="' . $di . '" data-technology="' . $ti . '" data-host="' . $hi . '"';
+                    observedViewCheck(substr_count($html, $coordinates) === 1, $case . ': item host has exactly one chart bound to its report coordinates: ' . $host['name']);
+                    $escapedHost = htmlspecialchars($host['name'], ENT_QUOTES, 'UTF-8');
+                    observedViewCheck(strpos($html, '<summary>' . $escapedHost . ' · gráfico diário</summary>') !== false,
+                        $case . ': host chart summary renders the escaped host name: ' . $host['name']);
+                }
+            }
+        }
+        observedViewCheck(substr_count($html, 'class="gav-host-chart"') === $expectedHostCharts, $case . ': item reports render one host chart per item host only');
+        observedViewCheck(substr_count($html, '<tr class="gav-host-chart-row"><td colspan="6"><details class="gav-host-chart-details">') === $expectedHostCharts,
+            $case . ': every host chart occupies a six-column row and starts in a details element');
+        preg_match_all('~<details class="gav-host-chart-details"([^>]*)>~', $html, $hostDetails);
+        $allInitiallyClosed = count($hostDetails[0]) === $expectedHostCharts;
+        foreach ($hostDetails[1] as $attributes) {
+            if (preg_match('~(?:^|\s)open(?:\s|=|$)~i', trim($attributes))) { $allInitiallyClosed = false; break; }
+        }
+        observedViewCheck($allInitiallyClosed, $case . ': host chart details are initially closed');
+    }
+
+    foreach ([true, false] as $pt) {
+        $html = $renderer->render($reports['observed90'], $pt, false);
+        $chartCount = count($reports['observed90']['departments'][0]['technologies'][0]['hosts']);
+        $deferred = $pt
+            ? 'Carregado somente ao abrir. Ao abrir outro host, este gráfico é liberado para preservar memória.'
+            : 'Loaded only when opened. Opening another host releases this chart to preserve memory.';
+        $placeholder = $pt ? 'Abra para carregar o gráfico deste host.' : 'Open to load this host chart.';
+        observedViewCheck(substr_count($html, $deferred) === $chartCount, 'lazy host-chart memory guidance is translated for every host');
+        observedViewCheck(substr_count($html, $placeholder) === $chartCount, 'lazy host-chart placeholder is translated for every host');
+    }
+
     $department = $reports['observed90']['departments'][0];
     $technology = $department['technologies'][0];
     observedViewCheck($reports['observed90']['data_policy'] === 'observed' && !$reports['observed90']['partial'], '90/50 fixture uses explicit observed policy in a closed month');
@@ -104,13 +165,15 @@ try {
         $html = $renderer->render($reports['mean'], $pt);
         observedViewCheck(strpos(observedViewScore($html), '<strong>50%</strong>') !== false, 'mean score card selects observation.score, not its timeline ratio');
         observedViewCheck(strpos(observedViewMetrics($html), '<strong>55%</strong>') !== false, 'mean coverage card retains source exposure');
-        observedViewCheck(strpos($html, $pt ? 'não são o denominador dessa média' : 'they are not the denominator of that mean') !== false, 'durations and graphs are qualified separately from observed means');
+        observedViewCheck(strpos($html, $pt ? 'As durações descrevem o tempo equivalente consolidado; o gráfico diário reaplica a hierarquia do indicador dentro de cada dia.'
+            : 'Durations describe combined equivalent time; the daily chart reapplies the indicator hierarchy within each day.') !== false,
+            'durations and daily graphs are qualified separately from observed monthly means');
     }
 
     $weights = $reports['weights']['departments'][0]['observation'];
     observedViewNear($weights['score'], 80, '4 and 1 weights produce 80 after the blind weight 2 is excluded');
     observedViewNear($weights['coverage'], 100 * 5 / 7, 'blind weight remains in coverage denominator');
-    observedViewCheck($weights['participating_weight'] === 5.0 && $weights['total_weight'] === 7.0, 'participating and configured weights are separately available');
+    observedViewCheck((float) $weights['participating_weight'] === 5.0 && (float) $weights['total_weight'] === 7.0, 'participating and configured weights are separately available');
     foreach ([true, false] as $pt) {
         $html = $renderer->render($reports['weights'], $pt); $table = observedViewTable($html);
         observedViewCheck(strpos(observedViewScore($html), '<strong>80%</strong>') !== false, 'rebalanced score appears on the card');
@@ -165,8 +228,10 @@ try {
 
     foreach (['native', 'native_observed'] as $case) {
         $report = $reports[$case]; $tech = $report['departments'][0]['technologies'][0]; $html = $renderer->render($report);
-        observedViewCheck($tech['summary']['score'] === 100.0 && !isset($tech['observation']) && $report['rows'] === 0, $case . ': native SLI is neither recomputed nor replaced');
+        observedViewCheck((float) $tech['summary']['score'] === 100.0 && !isset($tech['observation']) && $report['rows'] === 0, $case . ': native SLI is neither recomputed nor replaced');
         observedViewCheck(strpos($html, 'class="gav-chart"') === false && strpos($html, 'class="gav-monthly-chart"') !== false, $case . ': no native daily timeline is fabricated');
+        observedViewCheck(strpos($html, 'class="gav-host-chart"') === false && strpos($html, 'class="gav-host-chart-details"') === false,
+            $case . ': native SLA does not fabricate per-host charts or lazy host details');
     }
     $html = $renderer->render($reports['precision']);
     observedViewCheck($reports['precision']['departments'][0]['observation']['score'] < 100, 'one-second observed outage retains full numeric precision');

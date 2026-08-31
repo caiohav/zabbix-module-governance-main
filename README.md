@@ -3,6 +3,38 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Novidades 1.11.0 — Gráficos coerentes e detalhe por host
+
+Os gráficos da Disponibilidade agora usam o mesmo nível de agregação do
+indicador exibido. Cada ponto diário recalcula hosts, tecnologias e pesos dentro
+daquele dia; não divide tempos consolidados quando a regra é uma média de
+indicadores. Isso corrige diferenças visuais quando os participantes têm
+coberturas distintas.
+
+- O gráfico diário mostra **disponibilidade**, **meta** e **cobertura**. A
+  disponibilidade usa uma escala ampliada; a cobertura fica em uma faixa
+  separada de 0–100%, evitando comparar alturas produzidas por eixos diferentes.
+- A média simples dos pontos diários pode diferir do indicador mensal: cada dia
+  tem duração e participantes próprios, enquanto o mês reaplica a regra sobre o
+  período completo. Lacunas continuam desconhecidas e nunca viram 100%.
+- Nos detalhes de uma tecnologia por itens, cada host ganhou um gráfico diário
+  recolhido. Os 31 pontos compactos são carregados no relatório, mas o ECharts só
+  é criado ao abrir o host. Abrir qualquer outro host descarta o canvas anterior;
+  fechar a tecnologia também libera o gráfico.
+- O comparativo mensal usa escala adaptativa para distinguir valores próximos de
+  100%. **Meta do indicador** (configurada no módulo) e **SLO nativo** do Zabbix
+  aparecem como referências separadas.
+- O SLA nativo permanece mensal. `sla.getsli` não fornece uma série diária por
+  host, portanto nenhum ponto ou disponibilidade é inventado para essa fonte.
+- O checkpoint interno passa ao formato 2. Um cálculo iniciado antes da
+  atualização é recusado como incompatível e deve ser iniciado novamente; isso
+  impede combinar hosts processados por versões diferentes.
+
+O JSON permanece no formato aditivo `governance-availability-v3`. Em fontes por
+itens, `host.daily` contém pares posicionais `[score, coverage]`, alinhados aos
+dias de `technology.daily`; `daily_indicator` e `host_daily_format` documentam
+essa representação nas premissas exportadas.
+
 ## Novidades 1.10.0 — Disponibilidade observada por itens
 
 O cálculo por itens agora oferece duas políticas explícitas em **Configurar
@@ -58,9 +90,11 @@ continuam exigindo validade manual: não se adivinha a cadência pelas amostras.
   inclusive os sem dados. No departamento, considera TODOS os pesos. É separada
   da cobertura temporal da união de hosts: um host observado durante todo o mês
   não esconde que outro ficou sem dados.
-- **Durações/gráficos:** descrevem a linha do tempo consolidada e, nas médias,
-  tempos equivalentes de todo o escopo. Não são o denominador das médias de
-  percentuais observados quando as coberturas dos participantes são diferentes.
+- **Durações:** descrevem a linha do tempo consolidada e, nas médias, tempos
+  equivalentes de todo o escopo. Não são o denominador das médias de percentuais
+  observados quando as coberturas dos participantes são diferentes. A partir da
+  versão 1.11, os pontos dos gráficos reaplicam a hierarquia de indicadores em
+  cada dia e mantêm essas durações apenas como informação descritiva.
 
 Exemplo: um host tem 90s disponível e 10s indisponível; outro não tem nenhum
 estado conhecido nesses 100s. O modo observado produz 90%, cobertura de hosts

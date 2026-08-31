@@ -42,8 +42,8 @@ class ObservedViewEndpoint {
                 }));
                 usort($rows, static function($a, $b) { return [(int) $a['clock'], (int) $a['ns']] <=> [(int) $b['clock'], (int) $b['ns']]; });
                 return array_slice($rows, 0, $options['limit']);
-            case 'Sla': return [(string) $options['slaids'][0] === API::$sla['slaid'] ? API::$sla : []];
-            case 'Service': return [(string) $options['serviceids'][0] === API::$service['serviceid'] ? API::$service : []];
+            case 'Sla': return (string) $options['slaids'][0] === API::$sla['slaid'] ? [API::$sla] : [];
+            case 'Service': return (string) $options['serviceids'][0] === API::$service['serviceid'] ? [API::$service] : [];
         }
         throw new RuntimeException('Unexpected synthetic endpoint: ' . $this->name);
     }
@@ -67,7 +67,7 @@ class ObservedViewEndpoint {
 
 function observedViewCases(): array {
     return ['observed90', 'strict', 'legacy', 'observed100', 'allunknown', 'mean', 'weights', 'mixed',
-        'mixed_unknown', 'calendar', 'timezone', 'notqueried', 'seed', 'flexible', 'precision', 'native', 'native_observed', 'escaped'];
+        'mixed_unknown', 'calendar', 'timezone', 'item_timezone', 'notqueried', 'seed', 'flexible', 'precision', 'native', 'native_observed', 'escaped'];
 }
 function observedViewItem(string $name = 'Item service', string $group = '1', float $weight = 1): array {
     return ['name' => $name, 'source' => 'items', 'weight' => $weight, 'target' => 99.9, 'groups' => $group,
@@ -156,6 +156,11 @@ function observedViewFixture(string $case): array {
             API::$items[0]['delay'] = '30s;1m/6-7,00:00-24:00';
             API::$history['201'] = [observedViewRow($from, 1), observedViewRow($from + 60, 1)];
         }
+    }
+    if ($case === 'item_timezone') {
+        API::$config['timezone'] = 'America/Cuiaba';
+        $localFrom = strtotime('2026-07-01 04:00:00 UTC'); $localTo = strtotime('2026-08-01 04:00:00 UTC');
+        API::$history['201'] = observedViewSamples($localFrom, $localTo, $localTo);
     }
     if ($case === 'precision') { API::$history['201'] = observedViewSamples($from, $to, $to - 1); }
     if ($case === 'escaped') {

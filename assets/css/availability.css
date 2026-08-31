@@ -149,8 +149,8 @@ main:has(.gav) { min-width: 0; }
 .gav-metrics strong { font-size: .9rem; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .gav-metrics small { color: var(--gov-muted); font-size: .69rem; margin-top: 3px; }
 .gav-chart-header { padding: 12px 16px 6px; }
-.gav-chart { height: 230px; width: 100%; }
-.gav-chart canvas { background: transparent !important; }
+.gav-chart { height: 270px; width: 100%; }
+.gav-chart canvas, .gav-host-chart canvas { background: transparent !important; }
 .gav-chart-header .gav-field { width: 260px; max-width: 100%; }
 .gav-chart-header h3 { font-size: .88rem; }
 .gav-table-scroll { overflow-x: auto; min-width: 0; }
@@ -175,6 +175,11 @@ main:has(.gav) { min-width: 0; }
 .gav-formula { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .gav-interval-table { max-height: 300px; overflow-y: auto; }
 .gav-source + .gav-source { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--gov-border); }
+.gav-host-chart-row > td { padding: 0 13px 10px; background: var(--gav-panel); }
+.gav-host-chart-details { border-top: 1px dashed var(--gov-border); }
+.gav-host-chart-details > summary { cursor: pointer; padding: 9px 0 5px; color: var(--gav-accent); font-size: .74rem; font-weight: 600; }
+.gav-host-chart-details > p { margin: 2px 0 0; font-size: .68rem; }
+.gav-host-chart { width: 100%; min-width: 500px; height: 250px; margin-top: 4px; }
 .gav-report-footer { font-size: .7rem; }
 .gav .gav-job-counts { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 .gav .gav-sla-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 10px; padding: 0; gap: 14px; }
@@ -218,8 +223,9 @@ main:has(.gav) { min-width: 0; }
 }
 @media print {
     .gav-no-print { display: none !important; }
-    .gav { color: #111 !important; --gov-surface: #fff; --gov-surface-strong: #f4f4f4; --gov-muted: #444; --gov-border: #bbb; --gav-good: #145c34; --gav-bad: #a01e1e; --gav-unknown: #6d4a00; }
+    .gav, .gov-theme-dark.gav { color: #111 !important; color-scheme: light; --gov-surface: #fff; --gov-surface-strong: #f4f4f4; --gov-muted: #444; --gov-border: #bbb; --gav-panel: #fff; --gav-accent: #2479aa; --gav-good: #145c34; --gav-bad: #a01e1e; --gav-unknown: #6d4a00; }
     .gav-score strong { color: #111 !important; }
     .gav-table-scroll { overflow: visible; }
     .gav-interval-table { max-height: none; }
+    .gav-host-chart-row { display: none !important; }
 }

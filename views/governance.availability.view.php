@@ -1,7 +1,7 @@
 <?php
 $base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
 $this->addCssFile($base . 'css/governance.css?v=1.7.0');
-$this->addCssFile($base . 'css/availability.css?v=1.10.0');
+$this->addCssFile($base . 'css/availability.css?v=1.11.0');
 $this->includeJsFile('governance.availability.view.js.php');
 $pt = $data['is_pt'];
 $t = static function($a, $b) use ($pt) { return $pt ? $a : $b; };
@@ -144,7 +144,7 @@ ob_start();
     ?>
     <section class="gav-department gav-<?= $status($ds, $department['target']) ?>">
         <div class="gav-dept-header">
-            <div><span class="gav-eyebrow"><?= $observedPolicy && $hasItems ? $t('ÍNDICE OBSERVADO DO DEPARTAMENTO', 'OBSERVED DEPARTMENT INDEX') : $t('ÍNDICE DO DEPARTAMENTO', 'DEPARTMENT INDEX') ?></span><h2><?= $e($department['name']) ?></h2>
+            <div><span class="gav-eyebrow"><?= $t('ÍNDICE MENSAL DO DEPARTAMENTO', 'MONTHLY DEPARTMENT INDEX') ?></span><h2><?= $e($department['name']) ?></h2>
                 <span class="gav-muted"><?= $t('Meta', 'Target') ?> <?= $e($percent($department['target'])) ?> · <?= $t('Média ponderada das tecnologias', 'Weighted mean of technologies') ?></span></div>
             <div class="gav-score"><strong><?= $e($percent($ds['score'])) ?></strong><span><?= !$compatible ? $t('Fontes não comparáveis', 'Sources not comparable') : ($ds['score'] === null ? ($observedPolicy && $hasItems ? $t('Sem estado conhecido', 'No known state') : $t('Dados incompletos', 'Incomplete data')) : ($ds['score'] >= $department['target'] ? ($observedPolicy && $hasItems ? $t('Na meta nos dados disponíveis', 'On target in available data') : ($report['partial'] ? $t('Na meta até agora', 'On target so far') : $t('Meta atingida', 'Target met'))) : $t('Abaixo da meta', 'Below target'))) ?></span>
                 <?php if ($observedPolicy && $hasItems && isset($department['observation'])): ?><small class="<?= $department['observation']['complete'] ? 'gav-muted' : 'gav-warning' ?>"><?= $department['observation']['complete'] ? $t('Cobertura completa', 'Complete coverage') : $t('Cobertura parcial', 'Partial coverage') ?></small><?php endif ?></div>
@@ -161,7 +161,7 @@ ob_start();
         <?php foreach ($department['warnings'] ?? [] as $warning): ?><p class="gav-notice gav-error"><?= $e($message($warning)) ?></p><?php endforeach ?>
         <div class="gav-table-scroll"><table class="gav-table"><thead><tr>
             <th><?= $t('Tecnologia', 'Technology') ?></th><th><?= $t('Peso / participação', 'Weight / share') ?></th>
-            <th><?= $observedPolicy && $hasItems ? $t('Disponibilidade observada', 'Observed availability') : $t('Disponibilidade', 'Availability') ?></th><th><?= $t('Meta', 'Target') ?></th><th><?= $t('Cobertura', 'Coverage') ?></th>
+            <th><?= $t('Indicador mensal', 'Monthly indicator') ?></th><th><?= $t('Meta', 'Target') ?></th><th><?= $t('Cobertura', 'Coverage') ?></th>
             <th><?= $t('Tempo indisponível¹', 'Downtime¹') ?></th><th><?= $t('Desconhecido¹', 'Unknown¹') ?></th>
         </tr></thead><tbody>
         <?php $sumWeights = array_sum(array_column($department['technologies'], 'weight')); $participatingWeight = $observedPolicy && isset($department['observation']) ? $department['observation']['participating_weight'] : $sumWeights;
@@ -176,7 +176,7 @@ ob_start();
         <p class="gav-muted gav-footnote"><?= $hasSla
             ? $t('¹ SLA: tempos do serviço dentro de seu calendário. Itens no modo média: tempos médios por servidor. Durações exibidas em segundos inteiros; cálculo preserva frações.', '¹ SLA: service durations within its schedule. Items in mean mode: average durations per host. Displayed durations use whole seconds; calculations preserve fractions.')
             : $t('¹ Na consolidação por média, as durações são médias por servidor. Não são a soma das quedas nem a união dos intervalos. Durações exibidas em segundos inteiros; cálculo preserva frações.', '¹ In mean aggregation, durations are averages per host, not summed outages or the union of intervals. Displayed durations use whole seconds; calculations preserve fractions.') ?></p>
-        <?php if ($observedPolicy && $hasItems): ?><p class="gav-muted gav-footnote"><?= $t('A média observada usa o percentual de cada participante, sem aumentar o peso de quem tem mais histórico. Durações e gráficos descrevem o tempo consolidado de todo o escopo; não são o denominador dessa média.', 'The observed mean uses each participant’s percentage without giving extra weight to longer histories. Durations and charts describe combined time across the full scope; they are not the denominator of that mean.') ?></p><?php endif ?>
+        <?php if ($observedPolicy && $hasItems): ?><p class="gav-muted gav-footnote"><?= $t('A média observada usa o percentual de cada participante, sem aumentar o peso de quem tem mais histórico. As durações descrevem o tempo equivalente consolidado; o gráfico diário reaplica a hierarquia do indicador dentro de cada dia.', 'The observed mean uses each participant’s percentage without giving extra weight to longer histories. Durations describe combined equivalent time; the daily chart reapplies the indicator hierarchy within each day.') ?></p><?php endif ?>
         <?php if ($hasSla): ?>
         <details class="gav-details gav-monthly-details" open><summary><?= $t('Comparativo mensal por tecnologia', 'Monthly comparison by technology') ?></summary>
             <p class="gav-muted"><?= $t('Percentuais individuais e metas. Ausência de indicador não é zero. Consulte a tabela e os detalhes para conferir a fonte e o calendário.', 'Individual percentages and targets. A missing indicator is not zero. Check the table and details for each source and calendar.') ?></p>
@@ -184,13 +184,13 @@ ob_start();
         </details>
         <?php endif ?>
         <?php if ($hasDaily): ?>
-        <details class="gav-details gav-chart-details" <?= $di === 0 ? 'open' : '' ?>><summary><?= $t('Gráfico diário de quedas e lacunas', 'Daily downtime and data gaps chart') ?></summary>
-            <div class="gav-chart-header"><div><h3><?= $t('Distribuição ao longo do mês', 'Distribution throughout the month') ?></h3><p class="gav-muted gav-chart-context" data-department="<?= $di ?>"></p></div>
+        <details class="gav-details gav-chart-details" <?= $di === 0 ? 'open' : '' ?>><summary><?= $t('Disponibilidade e cobertura diárias', 'Daily availability and coverage') ?></summary>
+            <div class="gav-chart-header"><div><h3><?= $t('Evolução do indicador no mês', 'Indicator evolution throughout the month') ?></h3><p class="gav-muted gav-chart-context" data-department="<?= $di ?>"></p></div>
                 <label class="gav-field gav-no-print"><span><?= $t('Detalhar', 'Show') ?></span><select class="gav-chart-selection" data-department="<?= $di ?>">
                     <?php if (!empty($department['daily'])): ?><option value="-1"><?= $t('Departamento (ponderado)', 'Department (weighted)') ?></option><?php endif ?>
                     <?php foreach ($department['technologies'] as $ti => $tech): if (empty($tech['daily'])) { continue; } ?><option value="<?= $ti ?>"><?= $e($tech['name']) ?></option><?php endforeach ?>
                 </select></label></div>
-            <div class="gav-chart" data-department="<?= $di ?>" role="img" aria-label="<?= $t('Minutos diários indisponíveis e desconhecidos', 'Daily unavailable and unknown minutes') ?>">
+            <div class="gav-chart" data-department="<?= $di ?>" role="img" aria-label="<?= $t('Percentuais diários de disponibilidade, cobertura e meta', 'Daily availability, coverage and target percentages') ?>">
                 <p class="gav-muted"><?= $t('Os totais permanecem disponíveis na tabela se o gráfico não carregar.', 'Totals remain available in the table if the chart does not load.') ?></p>
             </div>
         </details>
@@ -241,7 +241,7 @@ ob_start();
             <?php endif ?>
             <?php foreach ($tech['warnings'] as $warning): ?><p class="gav-notice gav-error"><?= $e($message($warning)) ?></p><?php endforeach ?>
             <div class="gav-table-scroll"><table class="gav-table"><thead><tr><th>Host</th><th><?= $observedPolicy ? $t('Disponibilidade observada', 'Observed availability') : $t('Disponibilidade', 'Availability') ?></th><th><?= $t('Cobertura', 'Coverage') ?></th><th><?= $t('Indisponível', 'Down') ?></th><th><?= $t('Desconhecido', 'Unknown') ?></th><th><?= $t('Itens / observações', 'Items / notes') ?></th></tr></thead><tbody>
-                <?php foreach ($tech['hosts'] as $host): $sourceWarnings = []; $hs = $metric($host); ?><tr><th><?= $e($host['name']) ?></th><td><?= $e($percent($hs['score'])) ?><?php if ($observedPolicy && $hs['score'] === null): ?><small><?= $t('Sem estado conhecido', 'No known state') ?></small><?php endif ?></td><td><?= $e($percent($hs['coverage'])) ?></td><td><?= $e($duration($hs['down'])) ?></td><td><?= $e($duration($hs['unknown'])) ?></td><td>
+                <?php foreach ($tech['hosts'] as $hi => $host): $sourceWarnings = []; $hs = $metric($host); ?><tr><th><?= $e($host['name']) ?></th><td><?= $e($percent($hs['score'])) ?><?php if ($observedPolicy && $hs['score'] === null): ?><small><?= $t('Sem estado conhecido', 'No known state') ?></small><?php endif ?></td><td><?= $e($percent($hs['coverage'])) ?></td><td><?= $e($duration($hs['down'])) ?></td><td><?= $e($duration($hs['unknown'])) ?></td><td>
                     <?php foreach ($host['sources'] as $source): ?><div class="gav-source"><code><?= $e($source['key']) ?></code><small>ID <?= $e($source['itemid'] ?? '—') ?> · <?= ($source['freshness_mode'] ?? 'manual') === 'auto' ? $t('Validade automática', 'Automatic validity') : $t('Validade manual', 'Manual validity') ?>: <?= isset($source['max_age']) ? $e($source['max_age']) . 's' : $t('não resolvida', 'unresolved') ?><?php if (!empty($source['interval_seconds'])): ?> · <?= $t('coleta', 'polling') ?> <?= $e($source['interval_seconds']) ?>s<?php endif ?><?php if (!empty($source['heartbeat_seconds'])): ?> · heartbeat <?= $e($source['heartbeat_seconds']) ?>s<?php endif ?></small>
                         <?php if (strpos($source['freshness_source'] ?? '', 'flexible_interval') !== false): ?><small><?= $t('Intervalos flexíveis: validade calculada pelo maior intervalo de coleta.', 'Flexible intervals: validity calculated from the longest polling interval.') ?></small><?php endif ?>
                         <?php if (isset($source['history_queried']) && !$source['history_queried']): ?><small class="gav-warning"><?= $t('Histórico não consultado: revise o item e a validade.', 'History not queried: review the item and validity.') ?></small><?php else: ?>
@@ -253,7 +253,12 @@ ob_start();
                         <?php foreach ($source['warnings'] ?? [] as $warning): $sourceWarnings[$warning] = true; $sourceWarnings[$source['key'] . ': ' . $warning] = true; ?><small class="gav-warning"><?= $e($message($warning)) ?></small><?php endforeach ?>
                     </div><?php endforeach ?>
                     <?php foreach ($host['warnings'] as $warning): if (isset($sourceWarnings[$warning])) { continue; } ?><small class="gav-warning"><?= $e($message($warning)) ?></small><?php endforeach ?>
-                </td></tr><?php endforeach ?>
+                </td></tr>
+                <?php if (!empty($host['daily'])): ?><tr class="gav-host-chart-row"><td colspan="6"><details class="gav-host-chart-details"><summary><?= $e($host['name']) ?> · <?= $t('gráfico diário', 'daily chart') ?></summary>
+                        <p class="gav-muted"><?= $t('Carregado somente ao abrir. Ao abrir outro host, este gráfico é liberado para preservar memória.', 'Loaded only when opened. Opening another host releases this chart to preserve memory.') ?></p>
+                        <div class="gav-host-chart" data-department="<?= $di ?>" data-technology="<?= $ti ?>" data-host="<?= $hi ?>" role="img" aria-label="<?= $e($t('Disponibilidade e cobertura diárias do host ', 'Daily availability and coverage for host ') . $host['name']) ?>"><span class="gav-muted"><?= $t('Abra para carregar o gráfico deste host.', 'Open to load this host chart.') ?></span></div>
+                    </details></td></tr><?php endif ?>
+                <?php endforeach ?>
             </tbody></table></div>
             <h4><?= $t('Intervalos com queda ou lacuna', 'Intervals with downtime or gaps') ?></h4>
             <p class="gav-muted"><?= $t('Fim exclusivo. Frações representam a parcela dos servidores afetada no modo média.', 'End is exclusive. Fractions represent the share of affected hosts in mean mode.') ?></p>

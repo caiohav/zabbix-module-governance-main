@@ -17,7 +17,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'assets', 'js', 'avail
 
 function page(report, {language = 'pt', dark = true, chartsAvailable = true} = {}) {
     const nodes = {}, events = {}, charts = [], downloads = [], blobs = [], revoked = [], timers = [];
-    const daily = [], monthly = [], selections = {}, contexts = {}, links = [];
+    const daily = [], monthly = [], hosts = [], technologyDetails = [], selections = {}, contexts = {}, links = [];
     let network = 0, prints = 0;
     class Element {
         constructor(id = null) {
@@ -27,7 +27,9 @@ function page(report, {language = 'pt', dark = true, chartsAvailable = true} = {
             if (id) nodes[id] = this;
         }
         closest(selector) {
-            return selector === '.gav-chart-details' || selector === '.gav-monthly-details' ? this.details : null;
+            if (selector === '.gav-chart-details' || selector === '.gav-monthly-details'
+                || selector === '.gav-host-chart-details') return this.details;
+            return selector === '.gav-tech-detail' ? this.technologyDetails : null;
         }
         addEventListener(type, callback) { (this.events[type] ||= []).push(callback); }
         fire(type) { for (const callback of this.events[type] || []) callback({target: this}); }
@@ -46,7 +48,16 @@ function page(report, {language = 'pt', dark = true, chartsAvailable = true} = {
         department.technologies.forEach((technology, technologyIndex) => {
             if (Array.isArray(technology.daily) && technology.daily.length) options.push(technologyIndex);
             const link = new Element(); link.hash = '#tech-' + index + '-' + technologyIndex;
-            new Element(link.hash.slice(1)).open = false; links.push(link);
+            const technologyDetail = new Element(link.hash.slice(1)); technologyDetail.open = false;
+            technologyDetails.push(technologyDetail); links.push(link);
+            (technology.hosts || []).forEach((host, hostIndex) => {
+                if (!Array.isArray(host.daily) || !host.daily.length) return;
+                const node = new Element(); node.dataset.department = String(index);
+                node.dataset.technology = String(technologyIndex); node.dataset.host = String(hostIndex); node.kind = 'host';
+                node.details = new Element(); node.details.open = false; node.technologyDetails = technologyDetail;
+                node.textContent = language === 'pt' ? 'Abra para carregar o gráfico deste host.' : 'Open to load this host chart.';
+                hosts.push(node);
+            });
         });
         if (options.length) {
             const node = new Element(); node.dataset.department = String(index); node.kind = 'daily';
@@ -55,7 +66,8 @@ function page(report, {language = 'pt', dark = true, chartsAvailable = true} = {
             daily.push(node); selections[index] = select; contexts[index] = new Element();
         }
     });
-    root.querySelectorAll = selector => ({'.gav-chart': daily, '.gav-monthly-chart': monthly, '.gav-open-tech': links}[selector] || []);
+    root.querySelectorAll = selector => ({'.gav-chart': daily, '.gav-monthly-chart': monthly,
+        '.gav-host-chart': hosts, '.gav-tech-detail': technologyDetails, '.gav-open-tech': links}[selector] || []);
     root.querySelector = selector => {
         const match = selector.match(/data-department="(\d+)"/);
         if (!match) return null;
@@ -82,9 +94,13 @@ function page(report, {language = 'pt', dark = true, chartsAvailable = true} = {
         fetch() { network++; throw new Error('Report presentation must not query a live source'); }};
     if (chartsAvailable) context.echarts = echarts;
     vm.runInNewContext(source, context);
-    const activeChart = (kind, index = 0) => charts.filter(chart => !chart.disposed && chart.node.kind === kind && chart.node.dataset.department === String(index)).at(-1);
-    return {root, nodes, charts, daily, monthly, selections, contexts, links, downloads, blobs, revoked, colors,
-        activeChart, fireWindow, option: (kind, index) => activeChart(kind, index).options.at(-1),
+    const activeChart = (kind, index = 0, technology, host) => charts.filter(chart => !chart.disposed
+        && chart.node.kind === kind && chart.node.dataset.department === String(index)
+        && (technology === undefined || chart.node.dataset.technology === String(technology))
+        && (host === undefined || chart.node.dataset.host === String(host))).at(-1);
+    return {root, nodes, charts, daily, monthly, hosts, technologyDetails, selections, contexts, links,
+        downloads, blobs, revoked, colors, activeChart, fireWindow,
+        option: (kind, index, technology, host) => activeChart(kind, index, technology, host).options.at(-1),
         runTimers: milliseconds => timers.filter(timer => timer.milliseconds === milliseconds).forEach(timer => timer.callback()),
         get network() { return network; }, get prints() { return prints; }};
 }
@@ -98,7 +114,13 @@ const tests = [
         assert.notEqual(option.series[0].data[1].value, 99.877912, 'chart does not replace the precise SLI with displayed rounding');
         assert.deepEqual(Array.from(option.series[1].data, row => Array.from(row)), report.departments[0].technologies.map((tech, index) => [tech.target, index]));
         assert.notEqual(option.series[1].data[0][0], report.departments[0].technologies[0].native_sla.slo, 'module target is not silently replaced by native SLO');
-        assert.equal(option.xAxis.min, 0); assert.equal(option.xAxis.max, 100);
+        assert.deepEqual(Array.from(option.series[2].data, row => Array.from(row)),
+            report.departments[0].technologies.map((tech, index) => [tech.native_sla.slo, index]));
+        assert.equal(option.series[2].name, 'SLO nativo'); assert.equal(option.series[2].symbol, 'diamond');
+        const scaleMinimum = Math.min(...report.departments[0].technologies.flatMap(tech =>
+            [tech.summary.score, tech.target, tech.native_sla.slo]));
+        const expectedFloor = Math.max(0, Math.floor((scaleMinimum - Math.max(.1, (100 - scaleMinimum) * .15)) * 10) / 10);
+        assert.equal(option.xAxis.min, expectedFloor); assert.equal(option.xAxis.max, 100);
         assert.equal(option.series[0].label.formatter({value: 100}), '100%');
         assert.equal(option.series[0].label.formatter({value: 99.99999999999999}), '<100%');
         assert.equal(p.network, 0);
@@ -118,14 +140,18 @@ const tests = [
         const unknown = page(reports.item_unknown).option('monthly');
         assert.equal(unknown.series[0].data[0].value, 100); assert.equal(unknown.series[0].data[3].value, null);
     }],
-    ['mixed daily chart uses real item intervals and refuses native or department daily fabrication', async () => {
+    ['mixed daily chart uses item availability and coverage and refuses native or department daily fabrication', async () => {
         const p = page(reports.mixed);
         assert.equal(p.daily.length, 1); assert.equal(p.monthly.length, 1);
         assert.deepEqual(p.selections[0].options, [3]);
         const daily = p.option('daily'), item = reports.mixed.departments[0].technologies[3];
-        assert.deepEqual(Array.from(daily.xAxis.data), item.daily.map(day => day.day));
-        assert.deepEqual(Array.from(daily.series[0].data), item.daily.map(day => day.summary.down / 60));
-        assert.deepEqual(Array.from(daily.series[1].data), item.daily.map(day => day.summary.unknown / 60));
+        assert.deepEqual(Array.from(daily.xAxis[0].data), item.daily.map(day => day.day));
+        assert.deepEqual(Array.from(daily.xAxis[1].data), item.daily.map(day => day.day));
+        assert.deepEqual(Array.from(daily.series[0].data), item.daily.map(day => day.score));
+        assert.deepEqual(Array.from(daily.series[1].data), item.daily.map(() => item.target));
+        assert.deepEqual(Array.from(daily.series[2].data), item.daily.map(day => day.coverage));
+        assert.equal(daily.series[0].name, 'Disponibilidade'); assert.equal(daily.series[1].name, 'Meta');
+        assert.equal(daily.series[2].name, 'Cobertura'); assert.equal(daily.series[2].yAxisIndex, 1);
         const original = p.activeChart('daily');
         p.selections[0].value = '0'; p.selections[0].fire('change');
         assert.equal(original.disposed, true); assert.equal(p.activeChart('daily'), undefined);
@@ -135,7 +161,8 @@ const tests = [
         p.selections[0].value = '3'; p.selections[0].fire('change');
         assert.ok(p.activeChart('daily')); assert.equal(p.activeChart('monthly').disposed, false);
         const unknown = page(reports.item_unknown).option('daily');
-        assert.ok(unknown.series[1].data.every(minutes => minutes === 1440), 'actual daily item gaps remain visible');
+        assert.ok(unknown.series[0].data.every(score => score === null), 'a gap is not fabricated as availability');
+        assert.ok(unknown.series[2].data.every(coverage => coverage === 0), 'actual daily item gaps remain visible as zero coverage');
     }],
     ['incompatible source calendars retain only individual monthly values', async () => {
         for (const name of ['timezone', 'calendar']) {
@@ -174,7 +201,7 @@ const tests = [
             p.nodes['gav-export'].fire('click');
             assert.equal(p.blobs.length, 1); assert.equal(p.blobs[0].type, 'application/json');
             const payload = JSON.parse(await p.blobs[0].text());
-            assert.equal(payload.format, 'governance-availability-v3'); assert.equal(payload.module_version, '1.10.0');
+            assert.equal(payload.format, 'governance-availability-v3'); assert.equal(payload.module_version, '1.11.0');
             assert.equal(payload.assumptions.automatic_source_fallback, false);
             assert.equal(payload.assumptions.immutable_close, false);
             assert.equal(payload.assumptions.sla.daily_timeline_available, false);
@@ -195,9 +222,11 @@ const tests = [
     }],
     ['printing supports both chart kinds and restores disclosure state', async () => {
         const p = page(reports.mixed);
+        assert.equal(p.hosts.length, 1); assert.equal(p.activeChart('host'), undefined, 'host charts remain lazy before printing');
         p.daily[0].details.open = false; p.monthly[0].details.open = true;
         p.fireWindow('beforeprint');
         assert.equal(p.daily[0].details.open, true); assert.equal(p.monthly[0].details.open, true);
+        assert.equal(p.activeChart('host'), undefined, 'printing does not instantiate every host chart');
         p.fireWindow('afterprint');
         assert.equal(p.daily[0].details.open, false); assert.equal(p.monthly[0].details.open, true);
         p.nodes['gav-print'].fire('click'); assert.equal(p.prints, 1);
@@ -210,7 +239,8 @@ const tests = [
     }],
     ['English monthly labels and no-chart export fallback remain available', async () => {
         const english = page(reports.native, {language: 'en'}).option('monthly');
-        assert.equal(english.series[0].name, 'Availability'); assert.equal(english.series[1].name, 'Target');
+        assert.equal(english.series[0].name, 'Availability'); assert.equal(english.series[1].name, 'Indicator target');
+        assert.equal(english.series[2].name, 'Native SLO');
         assert.equal(english.series[0].label.formatter({value: 99.5}), '99.5%');
         const p = page(reports.native, {chartsAvailable: false});
         assert.equal(p.charts.length, 0); assert.match(p.monthly[0].textContent, /table/);
@@ -228,3 +258,6 @@ const tests = [
     }
     console.log('PASS: ' + tests.length + ' SLA report chart/export scenarios (real synthetic runner reports).');
 })().catch(error => { console.error(error); process.exitCode = 1; });
+
+// Shared local-only presentation harness for policy-specific report tests.
+module.exports = {page};

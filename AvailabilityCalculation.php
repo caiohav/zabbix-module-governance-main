@@ -13,7 +13,10 @@ use RuntimeException;
  * reading history. A processing failure is not a measurement of unknown availability.
  */
 final class AvailabilityCalculation {
-    const FORMAT = 1;
+    // Version of the resumable server-side state, not the exported report JSON.
+    // v2 adds daily host points and enriched daily indicators; v1 checkpoints
+    // must restart instead of mixing partially processed result shapes.
+    const FORMAT = 2;
     const MAX_HOSTS = 200;
     const PAGE_ROWS = 5000;
     const MAX_ROWS = 20000000;
@@ -348,6 +351,13 @@ final class AvailabilityCalculation {
         $result = ['hostid' => (string) $host['hostid'], 'name' => $host['name'],
             'sources' => $state['current_host']['sources'], 'warnings' => $host['warnings'],
             'summary' => AvailabilityEngine::summary($series, $state['report']['from'], $state['report']['to'])];
+        // Thirty-one compact summaries are enough for a faithful host chart. Never
+        // expose the raw timeline or create one ECharts instance during page load.
+        // Host chart points are positional [score, coverage]. Day labels come from
+        // the technology calendar, avoiding repeated date/field names in checkpoints.
+        $result['daily'] = array_map(static function(array $day): array {
+            return [$day['score'], $day['coverage']];
+        }, $this->scoredDaily($series, $state['report'], self::observed($state)));
         if (self::observed($state)) {
             // A missing required check never proves this host UP. Only the consolidation
             // across hosts may ignore an unknown host in the explicitly selected policy.
@@ -371,7 +381,7 @@ final class AvailabilityCalculation {
         }
         $series = $this->combine($task['host_series'], $task['config']['mode'], $state['report']);
         $task['result']['summary'] = AvailabilityEngine::summary($series, $state['report']['from'], $state['report']['to']);
-        $task['result']['daily'] = $this->daily($series, $state['report']);
+        $task['result']['daily'] = $this->scoredDaily($series, $state['report'], false);
         $exceptions = array_values(array_filter($series, static function($i) { return $i[3] > 0 || $i[4] > 0; }));
         $task['result']['interval_count'] = count($exceptions);
         $task['result']['intervals'] = array_slice($exceptions, 0, 200);
@@ -397,6 +407,8 @@ final class AvailabilityCalculation {
             $observedSeries = $task['config']['mode'] === 'any_down'
                 ? $this->combine($task['host_series'], 'any_down_observed', $state['report']) : $series;
             $this->observationTimeline($observation, $observedSeries, $state['report']);
+            $observation['daily'] = $this->aggregateObservedDaily($observation['daily'],
+                array_column($task['result']['hosts'], 'daily'), [], $task['config']['mode'] === 'any_down');
             if ($task['config']['mode'] === 'any_down') {
                 $observation['score'] = $observation['summary']['observed'];
             }
@@ -435,7 +447,7 @@ final class AvailabilityCalculation {
         }
         $combined = $this->combine($series, 'mean', $state['report'], $weights);
         $node['summary'] = AvailabilityEngine::summary($combined, $state['report']['from'], $state['report']['to']);
-        $node['daily'] = $this->daily($combined, $state['report']);
+        $node['daily'] = $this->scoredDaily($combined, $state['report'], false);
         $node['daily_available'] = true;
         $node['aggregation_compatible'] = true;
         if (self::observed($state)) {
@@ -449,6 +461,10 @@ final class AvailabilityCalculation {
             // descriptive, not the denominator of the weighted observed percentages.
             $observedCombined = $this->combine($observedSeries, 'mean', $state['report'], $weights);
             $this->observationTimeline($node['observation'], $observedCombined, $state['report'], false);
+            $technologyDaily = [];
+            foreach ($node['technologies'] as $technology) { $technologyDaily[] = $technology['observation']['daily']; }
+            $node['observation']['daily'] = $this->aggregateObservedDaily(
+                $node['observation']['daily'], $technologyDaily, $weights, false);
             $node['observation']['aggregation'] = 'weighted_technology_indicators';
         }
         foreach ($state['tasks'] as &$task) {
@@ -470,7 +486,7 @@ final class AvailabilityCalculation {
         $state['report']['rows'] = $state['progress']['rows'];
         $method = empty($state['report']['has_sla']) ? 'checkpointed-history'
             : (empty($state['report']['has_items']) ? 'checkpointed-sla' : 'checkpointed-items-and-sla');
-        $state['report']['processing'] = ['method' => $method, 'version' => '1.10.0',
+        $state['report']['processing'] = ['method' => $method, 'version' => '1.11.0',
             'data_policy' => $state['report']['data_policy'] ?? 'strict',
             'started_at' => $state['started_at'], 'completed_at' => time(),
             'elapsed_seconds' => max(0, time() - $state['started_at']), 'scope_frozen_at' => $state['scope_frozen_at'],
@@ -662,7 +678,7 @@ final class AvailabilityCalculation {
     private function observationTimeline(array &$observation, array $series, array $period, bool $includeIntervals = true): void {
         $observation['summary'] = AvailabilityEngine::summary($series, $period['from'], $period['to']);
         $observation['temporal_coverage'] = $observation['summary']['coverage'];
-        $observation['daily'] = $this->daily($series, $period);
+        $observation['daily'] = $this->scoredDaily($series, $period, true);
         $observation['evidence_from'] = null;
         $observation['evidence_to'] = null;
         foreach ($series as $interval) {
@@ -698,6 +714,46 @@ final class AvailabilityCalculation {
             $day = $day->modify('+1 day');
         }
         return $days;
+    }
+
+    private function scoredDaily(array $series, array $period, bool $observed): array {
+        $days = $this->daily($series, $period);
+        foreach ($days as &$day) {
+            $indicator = AvailabilityEngine::weightedIndicators([[
+                'score' => $observed ? $day['summary']['observed'] : $day['summary']['score'],
+                'coverage' => $day['summary']['coverage']
+            ]]);
+            $day += $indicator;
+        }
+        unset($day);
+        return $days;
+    }
+
+    /**
+     * Daily charts use the same hierarchy as the monthly indicator. Pooling child
+     * durations would give extra weight to a host/technology merely because it has
+     * more history. The descriptive timeline remains in each day's summary.
+     */
+    private function aggregateObservedDaily(array $timeline, array $children, array $weights, bool $anyDown): array {
+        foreach ($timeline as $index => &$day) {
+            $indicators = [];
+            foreach ($children as $child) {
+                $childDay = $child[$index] ?? null;
+                $compact = is_array($childDay) && array_keys($childDay) === [0, 1];
+                if (!is_array($childDay) || !$compact && ($childDay['day'] ?? null) !== $day['day']) {
+                    $indicators[] = ['score' => null, 'coverage' => 0.0];
+                }
+                else {
+                    $indicators[] = ['score' => $compact ? $childDay[0] : ($childDay['score'] ?? null),
+                        'coverage' => $compact ? $childDay[1] : ($childDay['coverage'] ?? 0.0)];
+                }
+            }
+            $indicator = AvailabilityEngine::weightedIndicators($indicators, $weights);
+            if ($anyDown) { $indicator['score'] = $day['summary']['observed']; }
+            foreach ($indicator as $field => $value) { $day[$field] = $value; }
+        }
+        unset($day);
+        return $timeline;
     }
 
     private function guard(int $additionalBytes = 0): void {

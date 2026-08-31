@@ -5,9 +5,11 @@ if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 // Reuse the legacy API fixture and run its existing regressions before observed cases.
 require __DIR__ . '/availability-calculation.php';
 require_once __DIR__ . '/../AvailabilitySla.php';
+require_once __DIR__ . '/../AvailabilityJobStore.php';
 use Modules\Governance\AvailabilityCalculation as ObservedCalculation;
 use Modules\Governance\AvailabilityConfig as ObservedConfig;
 use Modules\Governance\AvailabilityEngine as ObservedEngine;
+use Modules\Governance\AvailabilityJobStore as ObservedJobStore;
 use Modules\Governance\AvailabilitySla as ObservedSla;
 
 $legacyAssertions = $assertions;
@@ -42,6 +44,15 @@ function dailyConserves(array $daily, array $summary, string $label): void {
         observedApprox($sum, $summary[$field], $label . ' daily ' . $field, 1e-6);
     }
 }
+function observedCheckpointBytes(array $state, int $sequence): int {
+    $job = ['id' => str_repeat('a', 64), 'owner' => '1', 'sequence' => $sequence,
+        'created_at' => 1, 'updated_at' => 1, 'state' => $state];
+    $metadata = $job; $metadata['state'] = null; $metadata['status'] = $state['status'];
+    $header = json_encode($metadata);
+    $payload = json_encode($state, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
+    verify(is_string($header) && is_string($payload), 'job checkpoint is serializable');
+    return strlen($header) + strlen($payload) + 10;
+}
 function currentHostOracle(array $checks, string $hostid, int $from, int $seconds): array {
     $states = [];
     for ($second = 0; $second < $seconds; $second++) {
@@ -63,6 +74,12 @@ function currentHostOracle(array $checks, string $hostid, int $from, int $second
     return ['states' => $states, 'score' => $up + $down ? 100 * $up / ($up + $down) : null,
         'coverage' => 100 * ($up + $down) / $seconds];
 }
+
+$formatState = ObservedCalculation::create(observedConfig(), '2026-05', -1, strtotime('2026-05-01 UTC') + 100);
+verify($formatState['format'] === 2, 'daily host checkpoints use state format 2');
+$formatState['format'] = 1;
+rejects(static function() use ($formatState) { (new ObservedCalculation())->advance($formatState); },
+    'pre-host-daily checkpoints are rejected instead of being mixed into a new report');
 
 $from = strtotime('2026-05-01 UTC');
 fixture(2); $config = observedConfig();
@@ -95,6 +112,20 @@ verify($technology['observation']['evidence_from'] === $from && $technology['obs
 verify($technology['observation']['interval_count'] === 1
     && $technology['observation']['intervals'][0][0] === $from + 50
     && $technology['observation']['intervals'][0][1] === $from + 60, 'cohort interval list contains only the real outage');
+$hostDaily = array_column($technology['hosts'], 'daily');
+verify(count($hostDaily[0]) === 1 && count($hostDaily[1]) === 1
+    && array_keys($hostDaily[0][0]) === [0, 1], 'host daily output is one compact positional point per report day');
+observedApprox($hostDaily[0][0][0], 90, 'known host daily score uses its observed evidence');
+observedApprox($hostDaily[0][0][1], 100, 'known host daily coverage');
+verify($hostDaily[1][0][0] === null, 'blind host daily score remains N/A');
+observedApprox($hostDaily[1][0][1], 0, 'blind host daily coverage remains zero');
+verify($technology['observation']['daily'][0]['day'] === '2026-05-01', 'technology calendar labels compact host points');
+observedApprox($technology['observation']['daily'][0]['score'], 90, 'daily cohort score ignores only the blind host');
+observedApprox($technology['observation']['daily'][0]['coverage'], 50, 'daily cohort coverage includes the blind host');
+verify($technology['observation']['daily'][0]['participants'] === 1
+    && $technology['observation']['daily'][0]['total_sources'] === 2, 'daily cohort participation retains full host scope');
+observedApprox($department['observation']['daily'][0]['score'], 90, 'department daily score follows the technology indicator');
+observedApprox($department['observation']['daily'][0]['coverage'], 50, 'department daily coverage follows full configured scope');
 dailyConserves($technology['observation']['daily'], $technology['observation']['summary'], 'cohort');
 dailyConserves($technology['daily'], $technology['summary'], 'strict');
 dailyConserves($department['observation']['daily'], $department['observation']['summary'], 'department observation');
@@ -114,6 +145,9 @@ foreach ($strictTechnology['hosts'] as $index => $host) {
     verify($host['summary'] === $technology['hosts'][$index]['summary'], 'legacy host summary unchanged');
     verify($host['sources'] === $technology['hosts'][$index]['sources'], 'legacy item evidence unchanged');
 }
+observedApprox($strictTechnology['hosts'][0]['daily'][0][0], 90, 'complete strict host day retains its final score');
+verify($strictTechnology['hosts'][1]['daily'][0][0] === null
+    && $strictTechnology['hosts'][1]['daily'][0][1] == 0, 'strict blind host day remains N/A with zero coverage');
 verify($strictReport['departments'][0]['summary'] === $department['summary'], 'legacy department summary unchanged');
 verify(API::$calls === $observedCalls, 'observed policy does not silently change the history query scope');
 
@@ -130,6 +164,12 @@ verify($technology['data_quality']['hosts_without_data'] === 2 && $technology['d
     'empty queried histories differ from unqueried checks');
 verify($technology['observation']['evidence_from'] === null && $technology['observation']['evidence_to'] === null,
     'no evidence does not fabricate evidence boundaries');
+foreach ($technology['hosts'] as $host) {
+    verify($host['daily'][0][0] === null && $host['daily'][0][1] == 0,
+        'all-unknown host day is compact N/A with zero coverage');
+}
+verify($technology['observation']['daily'][0]['score'] === null
+    && $technology['observation']['daily'][0]['coverage'] == 0, 'all-unknown cohort day remains N/A');
 dailyConserves($technology['observation']['daily'], $technology['observation']['summary'], 'all unknown');
 
 // An unknown required service cannot be replaced by an available ICMP check.
@@ -144,12 +184,16 @@ verify($technology['hosts'][0]['sources'][0]['history_queried'] === true
     && $technology['hosts'][0]['sources'][1]['history_queried'] === false, 'queried and missing item distinguished');
 verify($technology['data_quality']['checks_not_queried'] === 1 && $technology['data_quality']['hosts_without_data'] === 1,
     'unqueried required source explains a host without known state');
+verify($technology['hosts'][0]['daily'][0][0] === null && $technology['hosts'][0]['daily'][0][1] == 0,
+    'missing required service keeps the host day unknown');
 API::$history['1-ping'] = [sample($from, 0)];
 $technology = observedResult($config)['departments'][0]['technologies'][0];
 observedApprox($technology['observation']['score'], 0, 'known ICMP DOWN dominates missing service check');
 observedApprox($technology['observation']['coverage'], 100, 'known DOWN determines the host state throughout');
 verify($technology['data_quality']['checks_not_queried'] === 1 && $technology['data_quality']['hosts_with_data'] === 1,
     'known host DOWN does not conceal the unqueried service diagnostic');
+observedApprox($technology['hosts'][0]['daily'][0][0], 0, 'known DOWN wins over a missing required check in the host chart');
+observedApprox($technology['hosts'][0]['daily'][0][1], 100, 'known DOWN covers the whole host day');
 
 // A checked source with unclassifiable numeric values is not a source that was never queried.
 fixture(1); $config = oneCheck(observedConfig());
@@ -184,6 +228,13 @@ verify($technology['data_quality']['hosts_with_data'] === 1 && $technology['data
     'seed evidence prevents a false host-without-data diagnosis');
 verify($technology['observation']['evidence_to'] === $from + 30 && !$technology['observation']['complete'],
     'seed cannot be extrapolated after its validity');
+observedApprox($technology['hosts'][0]['daily'][0][0], 100, 'observed host day scores only its real seed evidence');
+observedApprox($technology['hosts'][0]['daily'][0][1], 30, 'observed host day exposes partial seed coverage');
+$strictSeedConfig = $config; unset($strictSeedConfig['data_policy']);
+$strictSeedHost = observedResult($strictSeedConfig)['departments'][0]['technologies'][0]['hosts'][0];
+verify($strictSeedHost['daily'][0][0] === null, 'strict host day vetoes the same real gap');
+observedApprox($strictSeedHost['daily'][0][1], 30, 'strict and observed host days report identical source coverage');
+verify($strictSeedHost['summary'] === $technology['hosts'][0]['summary'], 'policy selection does not alter host durations');
 fixture(1); $config = oneCheck(observedConfig(), 'ping', 10);
 API::$history['1-ping'] = [sample($from, 1), sample($from + 100, 0), sample($from + 200, 0)];
 $technology = observedResult($config)['departments'][0]['technologies'][0];
@@ -223,13 +274,23 @@ verify(!$technology['observation']['complete'], 'sparse ICMP history cannot cert
 fixture(2); $config = oneCheck(observedConfig('mean'), 'ping', 10);
 for ($second = 0; $second < 100; $second += 10) { API::$history['1-ping'][] = sample($from + $second, 1); }
 API::$history['2-ping'] = [sample($from, 0)];
-$technology = observedResult($config)['departments'][0]['technologies'][0];
+$meanReport = observedResult($config); $technology = $meanReport['departments'][0]['technologies'][0];
 observedApprox($technology['observation']['score'], 50, 'two hosts keep equal votes despite 100/10 coverage');
 observedApprox($technology['observation']['coverage'], 55, 'host mean coverage uses every scoped host');
 observedApprox($technology['summary']['observed'], 1000 / 11, 'legacy pooled descriptive ratio is not overwritten');
 observedApprox($technology['observation']['summary']['observed'], 1000 / 11, 'observed durations are descriptive, not the score denominator');
 verify($technology['observation']['aggregation'] === 'mean_host_indicators' && !$technology['observation']['complete'],
     'host indicator aggregation is explicit and incomplete');
+observedApprox($technology['hosts'][0]['daily'][0][0], 100, 'fully observed host daily vote');
+observedApprox($technology['hosts'][0]['daily'][0][1], 100, 'fully observed host daily coverage');
+observedApprox($technology['hosts'][1]['daily'][0][0], 0, 'short observed outage keeps a full host vote');
+observedApprox($technology['hosts'][1]['daily'][0][1], 10, 'short observed outage exposes only ten percent coverage');
+observedApprox($technology['observation']['daily'][0]['score'], 50, 'daily host mean is unbiased by unequal coverage');
+observedApprox($technology['observation']['daily'][0]['coverage'], 55, 'daily host mean coverage includes both hosts');
+observedApprox($technology['observation']['daily'][0]['summary']['observed'], 1000 / 11,
+    'daily descriptive durations intentionally differ from the 50 percent indicator');
+observedApprox($meanReport['departments'][0]['observation']['daily'][0]['score'], 50,
+    'single-technology department keeps the daily host indicator');
 dailyConserves($technology['observation']['daily'], $technology['observation']['summary'], 'host mean');
 
 // Department 4/2 keeps configured weights when technologies cover different durations.
@@ -243,6 +304,12 @@ $department = observedResult($config)['departments'][0];
 observedApprox($department['observation']['score'], 200 / 3, 'department 4/2 observed score is 66.6667, not pooled 95.238');
 observedApprox($department['observation']['coverage'], 70, 'department source coverage is 70 percent');
 observedApprox($department['observation']['summary']['observed'], 2000 / 21, 'descriptive pooled duration remains separate');
+observedApprox($department['observation']['daily'][0]['score'], 200 / 3,
+    'daily department applies 4/2 weights to child indicators');
+observedApprox($department['observation']['daily'][0]['coverage'], 70,
+    'daily department coverage keeps both configured weights');
+observedApprox($department['observation']['daily'][0]['summary']['observed'], 2000 / 21,
+    'daily equivalent duration is not mislabeled as the weighted score');
 verify($department['summary']['score'] === null && !$department['observation']['complete'], 'observed indicator does not certify a complete monthly result');
 verify($department['observation']['participants'] === 2 && $department['observation']['total_sources'] === 2,
     'both technologies participate despite their different coverage');
@@ -258,6 +325,10 @@ verify($department['observation']['participating_weight'] == 6 && $department['o
     'excluded technology and weight share remain explicit');
 verify($department['technologies'][2]['observation']['score'] === null
     && $department['technologies'][2]['data_quality']['hosts_with_data'] === 0, 'empty group does not become a 100 percent technology');
+observedApprox($department['observation']['daily'][0]['score'], 200 / 3,
+    'blank daily technology is excluded from the score denominator');
+observedApprox($department['observation']['daily'][0]['coverage'], 60,
+    'blank daily technology retains its configured coverage share');
 
 // Tiny weighted gaps remain incomplete even when the participating indicators are all 100.
 fixture(1); $config = oneCheck(observedConfig(), 'ping', 86400);
@@ -291,8 +362,43 @@ verify(count($technology['observation']['daily']) === 2, 'observed daily breakdo
 observedApprox($technology['observation']['daily'][0]['summary']['up'], 86400, 'first day has observed uptime');
 observedApprox($technology['observation']['daily'][1]['summary']['unknown'], 1800, 'second-day leading gap is not backfilled');
 observedApprox($technology['observation']['daily'][1]['summary']['down'], 84600, 'second-day real outage begins only at its sample');
+verify(count($technology['hosts'][0]['daily']) === 2 && count($technology['hosts'][1]['daily']) === 2,
+    'every host has one compact point for each civil day');
+observedApprox($technology['hosts'][0]['daily'][0][0], 100, 'first host is available on its evidenced day');
+verify($technology['hosts'][0]['daily'][1][0] === null, 'expired first host is N/A on the following day');
+verify($technology['hosts'][1]['daily'][0][0] === null, 'later host is N/A before its first evidence');
+observedApprox($technology['hosts'][1]['daily'][1][0], 0, 'later host reports its real second-day outage');
+observedApprox($technology['hosts'][1]['daily'][1][1], 100 * 84600 / 86400,
+    'later host daily coverage excludes its leading gap');
+observedApprox($technology['observation']['daily'][0]['score'], 100, 'daily cohort follows the only known first-day host');
+observedApprox($technology['observation']['daily'][0]['coverage'], 50, 'first-day source coverage includes both hosts');
+observedApprox($technology['observation']['daily'][1]['score'], 0, 'daily cohort follows the known second-day outage');
+observedApprox($technology['observation']['daily'][1]['coverage'], 50 * 84600 / 86400,
+    'second-day source coverage averages both scoped hosts');
 dailyConserves($technology['observation']['daily'], $technology['observation']['summary'], 'midnight cohort');
 dailyConserves($technology['daily'], $technology['summary'], 'midnight strict');
+
+// Monthly host votes are not reconstructed by averaging daily scores: a host that
+// has no evidence on day two still keeps its one monthly vote from day one.
+fixture(2); $config = oneCheck(observedConfig('mean'), 'ping', 86400);
+API::$history['1-ping'] = [sample($from, 1), sample($from + 86400, 1)];
+API::$history['2-ping'] = [sample($from, 0)];
+$twoDay = observedResult($config, 2 * 86400)['departments'][0];
+$technology = $twoDay['technologies'][0];
+observedApprox($technology['observation']['score'], 50, 'monthly mean keeps one vote for each participating host');
+observedApprox($technology['observation']['coverage'], 75, 'monthly coverage averages full and half-month hosts');
+observedApprox($technology['observation']['summary']['observed'], 200 / 3,
+    'monthly equivalent durations remain descriptive');
+observedApprox($technology['observation']['daily'][0]['score'], 50, 'day one includes both host votes');
+observedApprox($technology['observation']['daily'][0]['coverage'], 100, 'day one has full source coverage');
+observedApprox($technology['observation']['daily'][1]['score'], 100, 'day two excludes only the host without evidence');
+observedApprox($technology['observation']['daily'][1]['coverage'], 50, 'day two still counts the blind host in coverage');
+observedApprox($twoDay['observation']['daily'][0]['score'], 50, 'department day one follows child indicator hierarchy');
+observedApprox($twoDay['observation']['daily'][1]['score'], 100, 'department day two follows child indicator hierarchy');
+verify($technology['observation']['score'] != ($technology['observation']['daily'][0]['score']
+    + $technology['observation']['daily'][1]['score']) / 2, 'monthly indicator is never fabricated from daily score averages');
+verify($technology['hosts'][1]['daily'][0][0] == 0 && $technology['hosts'][1]['daily'][1][0] === null,
+    'host chart exposes the exact day on which its evidence disappears');
 
 // Daily observed durations follow local civil boundaries across a DST transition.
 fixture(2); $config = oneCheck(observedConfig(), 'ping', 86400); $config['timezone'] = 'America/New_York';
@@ -308,6 +414,13 @@ $dstDay = array_values(array_filter($technology['observation']['daily'], static 
 observedApprox($dstDay['summary']['up'], 23 * 3600, 'observed spring-transition day has 23 hours, not 24');
 verify(count($technology['observation']['daily']) === 31 && $technology['summary']['score'] === null,
     'daily observed data does not replace the strict missing-host result');
+verify(count($technology['hosts'][0]['daily']) === 31 && count($technology['hosts'][1]['daily']) === 31,
+    'host chart aligns one compact point to every DST calendar day');
+$dstIndex = array_search('2026-03-08', array_column($technology['observation']['daily'], 'day'), true);
+verify($dstIndex !== false, 'DST host point has a shared technology day label');
+observedApprox($technology['hosts'][0]['daily'][$dstIndex][0], 100, 'DST host score is not affected by the 23-hour day');
+observedApprox($technology['hosts'][0]['daily'][$dstIndex][1], 100, 'DST host coverage uses the actual civil-day duration');
+verify($technology['hosts'][1]['daily'][$dstIndex][0] === null, 'blind DST host remains N/A');
 dailyConserves($technology['observation']['daily'], $technology['observation']['summary'], 'DST cohort');
 
 // Checkpoints may cut every stage; each resumed result uses the frozen observed policy.
@@ -334,6 +447,38 @@ foreach (['groups', 'scope_hosts', 'scope_items', 'check', 'history', 'host', 't
     verify(isset($phases[$phase]), 'stage boundary exercised: ' . $phase);
 }
 verify($initial['status'] === 'running' && $initial['progress']['hosts_done'] === 0, 'advancing does not mutate caller checkpoint');
+
+// The largest serialized checkpoint for the supported 25-host monthly scenario
+// remains below the exact 16 MiB JobStore payload limit after adding 31 host points.
+fixture(25); $monthSeconds = 31 * 86400; $config = observedConfig('any_down', 86400);
+foreach (API::$items as $item) {
+    for ($dayOffset = 0; $dayOffset < $monthSeconds; $dayOffset += 86400) {
+        API::$history[$item['itemid']][] = sample($from + $dayOffset, 1);
+    }
+}
+$scaleState = ObservedCalculation::create($config, '2026-05', -1, $from + $monthSeconds);
+$scaleRunner = new ObservedCalculation(); $scaleSequence = 0; $maxCheckpointBytes = observedCheckpointBytes($scaleState, 0);
+while ($scaleState['status'] === 'running' && ++$scaleSequence < 1000) {
+    $scaleState = $scaleRunner->advance($scaleState, 1);
+    $maxCheckpointBytes = max($maxCheckpointBytes, observedCheckpointBytes($scaleState, $scaleSequence));
+    $scaleState = checkpoint($scaleState);
+}
+verify($scaleState['status'] === 'complete' && $scaleSequence < 1000, '25-host monthly checkpoint calculation completes');
+verify($maxCheckpointBytes < ObservedJobStore::MAX_JOB_BYTES,
+    '25-host monthly checkpoints remain below JobStore 16 MiB limit: ' . $maxCheckpointBytes);
+$scaleReport = ObservedCalculation::result($scaleState);
+$scaleTechnology = $scaleReport['departments'][0]['technologies'][0];
+verify(count($scaleTechnology['hosts']) === 25 && count($scaleTechnology['observation']['daily']) === 31,
+    '25-host monthly result retains its complete scope and shared calendar');
+foreach ($scaleTechnology['hosts'] as $host) {
+    verify(count($host['daily']) === 31, 'each scale host has 31 compact daily points');
+    foreach ($host['daily'] as $point) {
+        verify(array_keys($point) === [0, 1] && $point[0] == 100 && $point[1] == 100,
+            'scale host point is compact and preserves score/coverage');
+    }
+}
+observedApprox($scaleTechnology['observation']['score'], 100, '25-host cohort monthly score');
+observedApprox($scaleTechnology['observation']['coverage'], 100, '25-host cohort monthly coverage');
 
 // Independent raw-sample oracle: required check truth table, group cohort, host votes, technology weights.
 mt_srand(9812026);
