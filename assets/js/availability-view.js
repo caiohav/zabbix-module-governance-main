@@ -569,7 +569,7 @@
         exportButton.disabled = root.dataset.reportStale === '1';
         exportButton.addEventListener('click', () => {
             if (root.dataset.reportStale === '1') return;
-            const payload = {format: 'governance-availability-v3', module_version: '1.11.0',
+            const payload = {format: 'governance-availability-v3', module_version: '1.12.0',
                 assumptions: {aggregation: 'weighted mean only for matching periods, schedules and exclusions',
                     data_policy: observedPolicy ? 'observed' : 'strict',
                     items: {schedule: '24x7', membership: 'current', maintenance_excluded: false,

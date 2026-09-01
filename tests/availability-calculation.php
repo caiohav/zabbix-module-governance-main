@@ -177,6 +177,8 @@ verify($sources[1]['itemid'] === '1-service' && $sources[1]['key'] === $pgKey, '
 verify($sources[1]['max_age'] === 3600 && $sources[1]['freshness_mode'] === 'manual', 'manual heartbeat tolerance preserved');
 verify($sources[1]['summary']['unknown'] == 74 && $sources[1]['summary']['score'] === null, 'heartbeat gaps not reclassified as up');
 verify($sources[1]['max_gap_seconds'] === 3673 && $sources[1]['sample_count'] === 3, 'per-item gap diagnostics');
+verify($sources[1]['up_sample_count'] === 3 && $sources[1]['down_sample_count'] === 0
+    && $sources[1]['unknown_sample_count'] === 0, 'raw sample classifications are audited');
 verify($report['departments'][0]['summary']['unknown'] == 74, 'source gaps survive host and department consolidation');
 
 // Dense data requires several pages. Ties at the page boundary must be read completely.
@@ -195,6 +197,8 @@ $report = Calculation::result($state);
 equalSummary($report['departments'][0]['summary'], $expected, 'pagination + nanoseconds oracle');
 $source = $report['departments'][0]['technologies'][0]['hosts'][0]['sources'][0];
 verify($source['sample_count'] === 12024, 'no dropped or double counted boundary samples');
+verify($source['up_sample_count'] + $source['down_sample_count'] + $source['unknown_sample_count']
+    === $source['sample_count'], 'every in-period sample has exactly one audit classification');
 verify($report['rows'] > count($rows), 'raw rows honestly include boundary re-reads');
 verify($source['seed_clock'] === $from - 10 && $source['first_clock'] === $from, 'seed is not counted as a monthly sample');
 

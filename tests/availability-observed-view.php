@@ -219,11 +219,18 @@ try {
         observedViewCheck(strpos($html, $pt ? 'Amostras no período: 0' : 'Samples in period: 0') !== false, 'real zero in-month samples can coexist with a valid seed');
     }
     $source = $reports['flexible']['departments'][0]['technologies'][0]['hosts'][0]['sources'][0];
-    observedViewCheck($source['max_age'] === 180 && $source['interval_seconds'] === 60 && $source['freshness_source'] === 'flexible_interval', 'real flexible cadence resolves to the conservative 180 second validity');
+    observedViewCheck($source['max_age'] === 3600 && $source['interval_seconds'] === 60
+        && $source['freshness_source'] === 'flexible_interval',
+        'real flexible cadence resolves to the one-hour evidence floor');
+    observedViewCheck($source['up_sample_count'] === 2 && $source['down_sample_count'] === 0
+        && $source['unknown_sample_count'] === 0, 'source audit classifies every returned value');
     foreach ([true, false] as $pt) {
         $html = $renderer->render($reports['flexible'], $pt);
-        observedViewCheck(strpos($html, $pt ? 'Validade automática: 180s' : 'Automatic validity: 180s') !== false, 'resolved automatic validity is visible');
-        observedViewCheck(strpos($html, $pt ? 'Intervalos flexíveis: validade calculada pelo maior intervalo de coleta.' : 'Flexible intervals: validity calculated from the longest polling interval.') !== false, 'flexible cadence derivation is explained');
+        observedViewCheck(strpos($html, $pt ? 'Janela automática: 3600s' : 'Automatic window: 3600s') !== false,
+            'resolved automatic evidence window is visible');
+        observedViewCheck(strpos($html, 'UP 2 · DOWN 0 · UNKNOWN 0') !== false,
+            'raw state counts are visible without translating the state names');
+        observedViewCheck(strpos($html, $pt ? 'Intervalos flexíveis: janela calculada pelo maior intervalo de coleta e pelo mínimo horário.' : 'Flexible intervals: window calculated from the longest polling interval and the hourly minimum.') !== false, 'flexible cadence derivation is explained');
     }
 
     foreach (['native', 'native_observed'] as $case) {

@@ -3,6 +3,14 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Novidades 1.12.0 — Evidência horária e diagnóstico por estado
+
+- A validade automática de itens agora mantém uma amostra real por no mínimo uma hora. Isso alinha o ICMP frequente aos itens com descarte/heartbeat sem criar médias horárias: qualquer novo `0` ou `1` substitui o estado imediatamente.
+- O PostgreSQL com heartbeat de 1h mantém sua margem automática (`heartbeat + duas coletas`), resultando em 3720s quando a coleta é de 1m. Sem nova evidência após a janela, o trecho passa a `UNKNOWN`.
+- A configuração oferece janela automática, uma hora exata ou quantidade manual de segundos por item, explicando o efeito de cada opção.
+- Os detalhes por fonte agora separam quantidade de amostras `UP`, `DOWN` e `UNKNOWN`, histórico vazio e valores que não correspondem às regras.
+- A regra do host permanece explícita: todas as verificações em `UP` confirmam disponibilidade; qualquer `DOWN` prevalece; `UP + UNKNOWN` continua `UNKNOWN`.
+
 ## Novidades 1.11.0 — Gráficos coerentes e detalhe por host
 
 Os gráficos da Disponibilidade agora usam o mesmo nível de agregação do

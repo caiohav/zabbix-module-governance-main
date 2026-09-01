@@ -98,7 +98,9 @@ const tests = [
         assert.ok(seed.series[0].data.slice(1).every(score => score === null));
         assert.ok(seed.series[2].data.slice(1).every(coverage => coverage === 0));
         const flexible = page(reports.flexible).option('daily');
-        assert.equal(flexible.series[0].data[0], 100); assert.equal(flexible.series[2].data[0], 240 / 86400 * 100);
+        assert.equal(flexible.series[0].data[0], 100);
+        assert.equal(flexible.series[2].data[0], 3660 / 86400 * 100,
+            'the last frequent sample remains evidence for the automatic one-hour window');
         assert.ok(flexible.series[2].data.slice(1).every(coverage => coverage === 0));
         const timezoneReport = reports.item_timezone.departments[0], timezone = page(reports.item_timezone).option('daily');
         assert.deepEqual(Array.from(timezone.xAxis[0].data), timezoneReport.observation.daily.map(day => day.day));
@@ -113,7 +115,7 @@ const tests = [
             presentation.nodes['gav-export'].fire('click');
             const payload = JSON.parse(await presentation.blobs[0].text());
             assert.equal(payload.format, 'governance-availability-v3');
-            assert.equal(payload.module_version, '1.11.0');
+            assert.equal(payload.module_version, '1.12.0');
             assert.equal(payload.assumptions.data_policy, 'observed');
             assert.match(payload.assumptions.items.unknown_policy, /ignore unknown intervals and hosts/);
             assert.equal(payload.assumptions.items.reported_score, 'observation.score');

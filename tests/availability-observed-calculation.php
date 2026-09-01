@@ -259,15 +259,18 @@ $technology = observedResult($config, 7300)['departments'][0]['technologies'][0]
 observedApprox($technology['observation']['score'], 100, 'flexible polling and hourly heartbeat yield a fully observed available period');
 observedApprox($technology['observation']['coverage'], 100, 'supported flexible interval no longer skips the actual history');
 $sources = $technology['hosts'][0]['sources'];
-verify($sources[0]['max_age'] === 180 && $sources[1]['max_age'] === 3720, 'ICMP and PostgreSQL retain independent validities');
+verify($sources[0]['max_age'] === 3600 && $sources[1]['max_age'] === 3720,
+    'ICMP uses the hourly floor while PostgreSQL retains heartbeat tolerance');
 verify($sources[0]['history_queried'] && $sources[1]['history_queried']
     && $technology['data_quality']['checks_not_queried'] === 0, 'both flexible item histories are actually queried');
 verify($sources[1]['key'] === $pgKey && $sources[1]['sample_count'] === 3, 'macro-bearing key is matched exactly without expanding secrets');
 API::$history['1-ping'] = [sample($from, 1)];
 $technology = observedResult($config, 7300)['departments'][0]['technologies'][0];
 observedApprox($technology['observation']['score'], 100, 'available observed evidence is separate from the missing ICMP tail');
-observedApprox($technology['observation']['coverage'], 100 * 180 / 7300, 'PostgreSQL heartbeat never extends ICMP validity');
-observedApprox($technology['observation']['summary']['unknown'], 7120, 'expired ICMP tail remains unknown in observed diagnostics');
+observedApprox($technology['observation']['coverage'], 100 * 3600 / 7300,
+    'PostgreSQL heartbeat never extends ICMP beyond its own hourly window');
+observedApprox($technology['observation']['summary']['unknown'], 3700,
+    'ICMP becomes unknown after its own hourly evidence expires');
 verify(!$technology['observation']['complete'], 'sparse ICMP history cannot certify the whole period');
 
 // Host mean preserves equal votes, not sample count or observed duration as hidden weights.

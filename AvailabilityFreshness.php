@@ -5,6 +5,11 @@ namespace Modules\Governance;
 /** Resolve a separate, auditable validity policy for every selected item; never expand macros. */
 final class AvailabilityFreshness {
     const MAX_AGE = 86400;
+    // Availability is evaluated as a state, not as a count of collected rows.
+    // Keep a real sample as evidence for at least one hour; a newer sample always
+    // replaces it immediately. This aligns frequent checks (for example ICMP)
+    // with hourly heartbeat items without converting missing history into UP.
+    const MIN_AUTOMATIC_AGE = 3600;
     const MAX_DELAY_LENGTH = 4096;
     const MAX_FLEXIBLE_INTERVALS = 128;
 
@@ -30,13 +35,15 @@ final class AvailabilityFreshness {
         }
         return ['max_age' => $manualAge, 'freshness_mode' => 'manual', 'freshness_source' => 'manual',
             'interval_seconds' => $automatic['interval_seconds'], 'heartbeat_seconds' => $automatic['heartbeat_seconds'],
+            'automatic_minimum_seconds' => self::MIN_AUTOMATIC_AGE,
             'warnings' => $warnings];
     }
 
     private static function automatic(array $item): array {
         $polling = self::polling($item['delay'] ?? null);
         $result = ['max_age' => null, 'freshness_mode' => 'auto', 'freshness_source' => 'unresolved',
-            'interval_seconds' => $polling['seconds'], 'heartbeat_seconds' => null, 'warnings' => []];
+            'interval_seconds' => $polling['seconds'], 'heartbeat_seconds' => null,
+            'automatic_minimum_seconds' => self::MIN_AUTOMATIC_AGE, 'warnings' => []];
         if (!array_key_exists('preprocessing', $item) || !is_array($item['preprocessing'])) {
             return self::unresolved($result,
                 'Preprocessing metadata unavailable; set manual validity / Pré-processamento não disponível; defina a validade manual.');
@@ -47,12 +54,13 @@ final class AvailabilityFreshness {
                 return self::unresolved($result,
                     'Invalid preprocessing metadata; set manual validity / Pré-processamento inválido; defina a validade manual.');
             }
-            // Zabbix 6.0 preprocessing: 19 = discard unchanged; 20 = discard unchanged with heartbeat.
-            if ((int) $step['type'] === 19) {
+            // Zabbix 6.0 fallback values: 19 = discard unchanged; 20 = discard
+            // unchanged with heartbeat. Prefer the frontend constants when present.
+            if ((int) $step['type'] === self::discardUnchangedType()) {
                 return self::unresolved($result,
                     'Discard unchanged has no heartbeat; set manual validity / Descartar inalterado não tem heartbeat; defina a validade manual.');
             }
-            if ((int) $step['type'] === 20) {
+            if ((int) $step['type'] === self::discardHeartbeatType()) {
                 $result['heartbeat_seconds'] = self::duration($step['params'] ?? null);
                 if (++$heartbeatCount > 1 || $result['heartbeat_seconds'] === null) {
                     return self::unresolved($result,
@@ -72,10 +80,13 @@ final class AvailabilityFreshness {
                 'Update interval is missing, invalid, a macro, includes a disabled period or a scheduling expression; set manual validity / Intervalo de coleta ausente, inválido, com macro, período desabilitado ou expressão de agendamento; defina a validade manual.');
         }
 
-        // Heartbeat fires at a collected value, not on a separate timer. Two polling intervals cover
-        // the next collection plus one late collection; regular items keep the existing 3-poll grace.
+        // Heartbeat fires at a collected value, not on a separate timer. Two polling
+        // intervals cover the next collection plus one late collection. Every item
+        // retains at least one hour of real evidence; frequent values still replace
+        // the previous state immediately, including a transition to DOWN.
         $interval = $result['interval_seconds'];
-        $age = max(3 * $interval, ($result['heartbeat_seconds'] ?? 0) + 2 * $interval);
+        $age = max(self::MIN_AUTOMATIC_AGE, 3 * $interval,
+            ($result['heartbeat_seconds'] ?? 0) + 2 * $interval);
         if ($age > self::MAX_AGE) {
             return self::unresolved($result,
                 'Automatic validity exceeds 86400 s; review collection or set a manual policy / Validade automática excede 86400 s; revise a coleta ou defina uma política manual.');
@@ -136,6 +147,20 @@ final class AvailabilityFreshness {
         $result['freshness_source'] = 'unresolved';
         $result['warnings'][] = $warning;
         return $result;
+    }
+
+    private static function discardUnchangedType(): int {
+        foreach (['ZBX_PREPROC_THROTTLE_VALUE', 'ZBX_PREPROC_DISCARD_UNCHANGED'] as $name) {
+            if (defined($name)) { return (int) constant($name); }
+        }
+        return 19;
+    }
+
+    private static function discardHeartbeatType(): int {
+        foreach (['ZBX_PREPROC_THROTTLE_TIMED_VALUE', 'ZBX_PREPROC_DISCARD_UNCHANGED_HEARTBEAT'] as $name) {
+            if (defined($name)) { return (int) constant($name); }
+        }
+        return 20;
     }
 
     private static function duration($value): ?int {

@@ -26,7 +26,8 @@ function policy($delay, $heartbeat = null, $manual = null) {
 $delay = '30s;1m/6-7,00:00-24:00';
 $value = policy($delay);
 verify($value['interval_seconds'] === 60, 'weekend interval supplies conservative 60-second polling bound');
-verify($value['max_age'] === 180, '30s base with 1m weekends has 180-second validity');
+verify($value['max_age'] === 3600, 'frequent flexible item keeps the one-hour evidence floor');
+verify($value['automatic_minimum_seconds'] === 3600, 'automatic floor remains auditable');
 verify($value['freshness_mode'] === 'auto' && $value['freshness_source'] === 'flexible_interval',
     'numeric flexible policy is auditable and automatic');
 verify($value['heartbeat_seconds'] === null && $value['warnings'] === [], 'ordinary flexible item needs no heartbeat or warning');
@@ -35,7 +36,7 @@ verify($withHeartbeat['max_age'] === 3720, 'heartbeat plus two 60-second polls i
 verify($withHeartbeat['interval_seconds'] === 60 && $withHeartbeat['heartbeat_seconds'] === 3600,
     'heartbeat and conservative polling metadata retained separately');
 verify($withHeartbeat['freshness_source'] === 'heartbeat_flexible_interval', 'combined source is auditable');
-verify(policy($delay, '30s')['max_age'] === 180, 'short heartbeat cannot reduce the three-poll grace');
+verify(policy($delay, '30s')['max_age'] === 3600, 'short heartbeat cannot reduce the one-hour evidence floor');
 
 foreach ([
     ['60;30/1-5,09:00-18:00', 60],
@@ -49,19 +50,22 @@ foreach ([
     ['1h;60s/1-5,9:00-18:00', 3600]
 ] as $case) {
     $result = policy($case[0]);
-    verify($result['interval_seconds'] === $case[1] && $result['max_age'] === 3 * $case[1],
+    verify($result['interval_seconds'] === $case[1]
+        && $result['max_age'] === max(Freshness::MIN_AUTOMATIC_AGE, 3 * $case[1]),
         'all positive base/flexible intervals bound cadence: ' . $case[0]);
     verify($result['freshness_source'] === 'flexible_interval', 'flexible source retained for valid case');
 }
 
 // Legacy simple intervals and manual validity retain their established behavior.
-verify(policy('30s')['max_age'] === 90 && policy('30s')['freshness_source'] === 'interval', 'simple polling unchanged');
+verify(policy('30s')['max_age'] === 3600 && policy('30s')['freshness_source'] === 'interval',
+    'simple polling receives the one-hour evidence floor');
 verify(policy('1m', '1h')['max_age'] === 3720 && policy('1m', '1h')['freshness_source'] === 'heartbeat',
     'simple heartbeat policy unchanged');
 $manual = policy($delay, null, 600);
 verify($manual['max_age'] === 600 && $manual['freshness_mode'] === 'manual' && $manual['freshness_source'] === 'manual',
     'explicit manual age is not replaced by inferred policy');
-verify($manual['interval_seconds'] === 60 && $manual['warnings'] === [], 'manual audit retains flexible polling bound');
+verify($manual['interval_seconds'] === 60 && count($manual['warnings']) === 1,
+    'manual audit retains polling metadata and warns below the automatic hourly window');
 $shortManual = policy($delay, null, 60);
 verify($shortManual['max_age'] === 60 && count($shortManual['warnings']) === 1, 'short manual validity warns without changing it');
 $shortHeartbeat = policy($delay, '1h', 180);
@@ -112,7 +116,7 @@ foreach ($invalidDelays as $invalidDelay) {
         'unsupported custom cadence can still use explicit manual policy');
 }
 $atSegmentLimit = policy('30' . str_repeat(';1/1,0:00-0:01', Freshness::MAX_FLEXIBLE_INTERVALS));
-verify($atSegmentLimit['max_age'] === 90, 'bounded parser accepts exactly its segment limit');
+verify($atSegmentLimit['max_age'] === 3600, 'bounded parser accepts exactly its segment limit and applies the floor');
 
 // The existing maximum prevents a long positive interval from inflating validity indefinitely.
 verify(policy('30s;28800s/1-7,00:00-24:00')['max_age'] === 86400, 'maximum automatic age is inclusive');
@@ -146,14 +150,15 @@ $item['history'] = '365d';
 $original = serialize($item);
 $unchanged = Freshness::resolve($item, null);
 verify(serialize($item) === $original, 'source item metadata is unchanged');
-verify($unchanged['max_age'] === 180, 'key macros and history retention do not affect polling resolution');
+verify($unchanged['max_age'] === 3600, 'key macros and history retention do not affect the hourly polling policy');
 verify(strpos(json_encode($unchanged), '{$PG.') === false, 'no secret macro metadata is copied into audit policy');
 $rule = ['up' => ['op' => 'eq', 'a' => 1], 'down' => null];
 $samples = [['clock' => 0, 'value' => 1], ['clock' => 60, 'value' => 1], ['clock' => 120, 'value' => 1]];
 $summary = Engine::summary(Engine::samples($samples, $rule, $value['max_age'], 0, 300), 0, 300);
 verify($summary['up'] === 300.0 && $summary['score'] === 100.0, 'resolved flexible policy allows observed samples to cover their validity');
 $summary = Engine::summary(Engine::samples([['clock' => 0, 'value' => 1]], $rule, $value['max_age'], 0, 2678400), 0, 2678400);
-verify($summary['up'] === 180.0 && $summary['unknown'] === 2678220.0, 'one sample is not extrapolated across July');
+verify($summary['up'] === 3600.0 && $summary['unknown'] === 2674800.0,
+    'one sample covers one hour but is not extrapolated across July');
 
 // Conservative cadence is deterministic and independent of flexible interval order.
 mt_srand(60828);
@@ -168,7 +173,8 @@ for ($trial = 0; $trial < 50; $trial++) {
             . sprintf('%02d:%02d-%02d:%02d', intdiv($fromMinute, 60), $fromMinute % 60, intdiv($toMinute, 60), $toMinute % 60);
     }
     $result = policy($base . ';' . implode(';', $intervals));
-    verify($result['interval_seconds'] === $maximum && $result['max_age'] === 3 * $maximum,
+    verify($result['interval_seconds'] === $maximum
+        && $result['max_age'] === max(Freshness::MIN_AUTOMATIC_AGE, 3 * $maximum),
         'random positive intervals retain their maximum bound');
     verify($result === policy($base . ';' . implode(';', array_reverse($intervals))),
         'interval ordering does not change the conservative policy');

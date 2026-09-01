@@ -38,6 +38,13 @@ near(Engine::summary(Engine::combine([$a, $b], 'any_down', 0, 1800), 0, 1800)['d
 near(Engine::summary(Engine::combine([$a, $b], 'mean', 0, 1800), 0, 1800)['down'], 600, 'mean = 10 minutes');
 $masked = Engine::combine([[[0, 60, 0, 1, 0]], Engine::unknown(0, 60)], 'any_down', 0, 60);
 near(Engine::summary($masked, 0, 60)['down'], 60, 'confirmed failure dominates missing check');
+$up = [[0, 60, 1, 0, 0]]; $unknown = Engine::unknown(0, 60); $down = [[0, 60, 0, 1, 0]];
+check(Engine::summary(Engine::combine([$up, $up], 'any_down', 0, 60), 0, 60)['up'] === 60.0,
+    'host is UP only when both required checks are UP');
+check(Engine::summary(Engine::combine([$up, $unknown], 'any_down', 0, 60), 0, 60)['unknown'] === 60.0,
+    'UP plus UNKNOWN keeps the host UNKNOWN');
+check(Engine::summary(Engine::combine([$down, $unknown], 'any_down', 0, 60), 0, 60)['down'] === 60.0,
+    'DOWN plus UNKNOWN keeps the host DOWN');
 $weighted = Engine::combine([[[0, 1000000, 1, 0, 0]], [[0, 1000000, .999984, .000016, 0]], [[0, 1000000, 1, 0, 0]]], 'mean', 0, 1000000, [4, 2, 1]);
 near(Engine::summary($weighted, 0, 1000000)['score'], (100 * 4 + 99.9984 * 2 + 100) / 7, '4-2-1 weighting');
 check(Engine::summary([], 0, 0)['score'] === null, 'empty period is not 100');
@@ -147,9 +154,12 @@ $pgItem = array_replace($pollItem, ['type' => '0', 'key_' => $pgKey,
     'preprocessing' => [['type' => '20', 'params' => '1h']]]);
 $pollAge = Freshness::resolve($pollItem, null);
 $pgAge = Freshness::resolve($pgItem, null);
-check($pollAge['max_age'] === 180 && $pollAge['freshness_source'] === 'interval', '60-second polling keeps its own 180-second validity');
+check($pollAge['max_age'] === 3600 && $pollAge['freshness_source'] === 'interval',
+    '60-second ICMP keeps an hourly evidence window');
 check($pgAge['max_age'] === 3720 && $pgAge['freshness_source'] === 'heartbeat', 'hourly heartbeat accounts for next and delayed collection');
 check($pgAge['interval_seconds'] === 60 && $pgAge['heartbeat_seconds'] === 3600, 'numeric audit metadata');
+check($pollAge['automatic_minimum_seconds'] === 3600 && $pgAge['automatic_minimum_seconds'] === 3600,
+    'hourly automatic minimum is exported for both sources');
 check($pgAge['warnings'] === [], 'ordinary heartbeat is resolvable');
 $override = Freshness::resolve($pgItem, 180);
 check($override['max_age'] === 180 && $override['freshness_mode'] === 'manual', 'legacy or explicit override is preserved');
@@ -159,7 +169,8 @@ check(count(Freshness::resolve(array_replace($pgItem, ['delay' => '{$PG.UPDATE.I
     'known heartbeat warns about short manual age even when polling is a macro');
 check(Freshness::resolve(array_replace($pgItem, ['delay' => '300']), null)['max_age'] === 4200, 'heartbeat margin follows actual polling interval');
 check(Freshness::resolve(array_replace($pollItem, ['delay' => '2h']), null)['max_age'] === 21600, 'time suffix accepted');
-check(Freshness::resolve(array_replace($pgItem, ['preprocessing' => [['type' => 20, 'params' => '30s']]]), null)['max_age'] === 180, 'short heartbeat cannot shorten polling grace');
+check(Freshness::resolve(array_replace($pgItem, ['preprocessing' => [['type' => 20, 'params' => '30s']]]), null)['max_age'] === 3600,
+    'short heartbeat cannot shorten the hourly evidence floor');
 foreach ([
     array_replace($pollItem, ['delay' => '{$UPDATE.INTERVAL}']),
     array_replace($pollItem, ['delay' => '60;0/1-5,09:00-18:00']),
@@ -273,14 +284,14 @@ $report = (new Report())->build(Config::validate($config), '2026-05', $from + 72
 $tech = $report['departments'][0]['technologies'][0];
 near($tech['summary']['score'], 100, 'hourly PG plus minute ICMP remain fully available');
 near($tech['summary']['unknown'], 0, 'hourly heartbeat does not create artificial gaps');
-check($tech['hosts'][0]['sources'][0]['max_age'] === 3720 && $tech['hosts'][0]['sources'][1]['max_age'] === 180,
-    'each item exports its own resolved policy');
+check($tech['hosts'][0]['sources'][0]['max_age'] === 3720 && $tech['hosts'][0]['sources'][1]['max_age'] === 3600,
+    'PostgreSQL exports heartbeat tolerance and ICMP exports the hourly floor');
 $withGap = true;
 $report = (new Report())->build(Config::validate($config), '2026-05', $from + 7200);
 $summary = $report['departments'][0]['summary'];
-near($summary['unknown'], 480, 'missing ICMP samples expire on ICMP policy, not PostgreSQL heartbeat');
+near($summary['unknown'], 0, 'an ICMP gap shorter than one hour remains covered by the last real sample');
 near($summary['down'], 60, 'confirmed ICMP outage is preserved');
-check($summary['score'] === null, 'real missing data prevents a final percentage');
+near($summary['score'], 100 * 7140 / 7200, 'confirmed ICMP outage changes the score without an artificial gap');
 $actualPgItem['delay'] = '{$PG.UPDATE.INTERVAL}'; $withGap = false; $historyIds = [];
 $report = (new Report())->build(Config::validate($config), '2026-05', $from + 7200);
 $tech = $report['departments'][0]['technologies'][0];

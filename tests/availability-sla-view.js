@@ -201,7 +201,7 @@ const tests = [
             p.nodes['gav-export'].fire('click');
             assert.equal(p.blobs.length, 1); assert.equal(p.blobs[0].type, 'application/json');
             const payload = JSON.parse(await p.blobs[0].text());
-            assert.equal(payload.format, 'governance-availability-v3'); assert.equal(payload.module_version, '1.11.0');
+            assert.equal(payload.format, 'governance-availability-v3'); assert.equal(payload.module_version, '1.12.0');
             assert.equal(payload.assumptions.automatic_source_fallback, false);
             assert.equal(payload.assumptions.immutable_close, false);
             assert.equal(payload.assumptions.sla.daily_timeline_available, false);

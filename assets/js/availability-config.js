@@ -54,7 +54,7 @@
                 <div class="gav-toolbar gav-check-heading"><h4>${t('Verificação por item', 'Item check')}</h4><button type="button" data-action="remove-check" class="btn-alt gav-remove">${t('Remover', 'Remove')}</button></div>
                 <div class="gav-check-source">
                     ${field(t('Chave exata do item', 'Exact item key'), input('key', check.key, 'required maxlength="2048" placeholder="icmpping" spellcheck="false"'), '', t('Copie do host, mantendo as macros. Uma chave por verificação.', 'Copy from the host, keeping macros. One key per check.'))}
-                    ${field(t('Validade da amostra', 'Sample validity'), `<select data-field="age_mode">${options({auto: t('Automática por item', 'Automatic per item'), manual: t('Manual (segundos)', 'Manual (seconds)')}, age === null ? 'auto' : 'manual')}</select>`)}
+                    ${field(t('Janela da evidência', 'Evidence window'), `<select data-field="age_mode">${options({auto: t('Automática (mínimo de 1 hora)', 'Automatic (one-hour minimum)'), hour: t('Uma hora exata', 'Exactly one hour'), manual: t('Manual (segundos)', 'Manual (seconds)')}, age === null ? 'auto' : (Number(age) === 3600 ? 'hour' : 'manual'))}</select>`, '', t('Por quanto tempo a última amostra representa o estado. Uma nova amostra substitui o estado imediatamente.', 'How long the latest sample represents the state. A new sample replaces the state immediately.'))}
                     ${field(t('Segundos', 'Seconds'), input('max_age', age ?? 180, 'min="1" max="86400" step="1"', 'number'), 'gav-manual-age')}
                 </div>
                 <p class="gav-muted gav-validity-hint"></p>
@@ -124,14 +124,17 @@
             });
             root.querySelectorAll('.gav-check').forEach(check => {
                 const itemsActive = get(check.closest('.gav-technology'), 'source') === 'items';
-                const manual = get(check, 'age_mode') === 'manual';
+                const ageMode = get(check, 'age_mode');
+                const manual = ageMode === 'manual';
                 const age = check.querySelector('[data-field="max_age"]');
                 check.querySelector('.gav-manual-age').hidden = !manual;
                 age.disabled = !itemsActive || !manual;
                 age.required = itemsActive && manual;
                 check.querySelector('.gav-validity-hint').textContent = manual
-                    ? t('Validade fixa somente deste item. Considere o intervalo gravado e o heartbeat, quando existir.', 'Fixed validity for this item only. Consider the stored interval and heartbeat, when present.')
-                    : t('Usa o intervalo e o heartbeat deste item, com margem. Itens cuja cadência não puder ser interpretada exigem validade manual.', 'Uses this item’s interval and heartbeat, with a margin. Items with an uninterpretable cadence require manual validity.');
+                    ? t('Janela fixa somente deste item. Após expirar sem nova amostra, o estado passa a desconhecido.', 'Fixed window for this item. After it expires without a new sample, the state becomes unknown.')
+                    : ageMode === 'hour'
+                        ? t('Cada valor real representa o estado por até uma hora. Um novo 0 ou 1 substitui o anterior imediatamente.', 'Each real value represents the state for up to one hour. A new 0 or 1 replaces the previous state immediately.')
+                        : t('Usa no mínimo uma hora e amplia a janela quando o intervalo ou heartbeat do item exigir. Cadência não interpretável exige uma janela manual.', 'Uses at least one hour and extends the window when the item interval or heartbeat requires it. An uninterpretable cadence requires a manual window.');
                 const explicit = get(check, 'down_mode') === 'explicit';
                 check.querySelector('.gav-down-rule').hidden = !explicit;
                 check.querySelectorAll('.gav-rule').forEach(ruleNode => {
@@ -171,7 +174,8 @@
                     if (value.source === 'sla') return {...value, slaid: get(tech, 'slaid'), serviceid: get(tech, 'serviceid')};
                     return {...value, groups: get(tech, 'groups').trim(), mode: get(tech, 'mode'),
                         checks: [...tech.querySelectorAll('.gav-check')].map(check => ({key: get(check, 'key').trim(),
-                            max_age: get(check, 'age_mode') === 'manual' ? Number(get(check, 'max_age')) : null,
+                            max_age: get(check, 'age_mode') === 'auto' ? null
+                                : (get(check, 'age_mode') === 'hour' ? 3600 : Number(get(check, 'max_age'))),
                             up: readRule(check.querySelector('[data-side="up"]')),
                             down: get(check, 'down_mode') === 'explicit' ? readRule(check.querySelector('[data-side="down"]')) : null}))};
                 })

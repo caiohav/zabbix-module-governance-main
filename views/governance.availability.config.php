@@ -1,7 +1,7 @@
 <?php
 $base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$this->addCssFile($base . 'css/governance.css?v=1.11.0');
-$this->addCssFile($base . 'css/availability.css?v=1.11.0');
+$this->addCssFile($base . 'css/governance.css?v=1.12.0');
+$this->addCssFile($base . 'css/availability.css?v=1.12.0');
 $this->includeJsFile('governance.availability.config.js.php');
 $pt = $data['is_pt'];
 $t = static function($ptText, $enText) use ($pt) { return $pt ? $ptText : $enText; };
@@ -42,7 +42,8 @@ ob_start();
         <ul>
             <li><?= $t('Na fonte por itens, uma falha de host ou serviço deixa o host indisponível; sobreposições não são contadas duas vezes. Todas as verificações precisam existir em cada host selecionado.', 'With the item source, a host or service failure makes the host unavailable; overlaps are not counted twice. Every check must exist on each selected host.') ?></li>
             <li><?= $t('Na fonte por itens, grupo por nome inclui subgrupos; ID seleciona apenas o grupo exato. São usados os hosts cadastrados hoje, inclusive desabilitados com histórico.', 'With the item source, group names include subgroups; IDs select the exact group. Current hosts are used, including disabled hosts with history.') ?></li>
-            <li><?= $t('A validade automática considera o intervalo de coleta e o heartbeat de cada item. Se não for possível interpretar a cadência, configure a validade manualmente.', 'Automatic validity considers the collection interval and heartbeat of each item. If the cadence cannot be interpreted, set validity manually.') ?></li>
+            <li><?= $t('A janela automática mantém cada amostra real por no mínimo uma hora e considera o intervalo de coleta e o heartbeat de cada item. Um novo valor substitui o anterior imediatamente; após a janela sem nova amostra, o estado fica desconhecido. Se não for possível interpretar a cadência, configure a janela manualmente.', 'The automatic window keeps each real sample for at least one hour and considers each item’s polling interval and heartbeat. A new value replaces the previous one immediately; after the window without a new sample, the state becomes unknown. If cadence cannot be interpreted, set the window manually.') ?></li>
+            <li><?= $t('Dentro de cada host: todas as verificações em 1 confirmam disponibilidade; qualquer 0 confirma indisponibilidade; se não houver queda e alguma verificação estiver sem evidência, o host permanece desconhecido.', 'Within each host: all checks at 1 confirm availability; any 0 confirms downtime; if there is no outage and any check lacks evidence, the host remains unknown.') ?></li>
             <li><?= $t('Na fonte por itens, a política estrita exige cobertura completa. A política sobre dados disponíveis calcula apenas sobre estados observados, sem tratar lacunas como disponibilidade ou queda. Retenha o histórico bruto para avaliar todo o mês; trends não o substituem. Manutenções não são descontadas.', 'With the item source, the strict policy requires complete coverage. The available-data policy calculates only from observed states without treating gaps as availability or downtime. Retain raw history to evaluate the entire month; trends do not replace it. Maintenance is not excluded.') ?></li>
             <li><?= $t('A fonte SLA exige um SLA mensal e um serviço selecionado no relatório nativo. Nesta versão, aceita apenas meses encerrados e usa o calendário, o fuso e as exclusões do SLA. Seu resumo mensal não fornece linha do tempo diária.', 'The SLA source requires a monthly SLA and one service selected in the native report. This version accepts closed months only and uses the SLA schedule, time zone and exclusions. Its monthly summary does not provide a daily timeline.') ?></li>
             <li><?= $t('Os pesos continuam no módulo. Não há substituição automática entre itens e SLA se a fonte escolhida estiver indisponível. Alterar regras pode mudar meses anteriores; esta versão não realiza fechamento imutável.', 'Weights remain in the module. There is no automatic fallback between items and SLA if the selected source is unavailable. Rule changes may affect previous months; this version does not create immutable monthly closes.') ?></li>
@@ -50,7 +51,7 @@ ob_start();
         </ul>
     </details>
     <div class="gav-notice" id="gav-legacy-notice" hidden>
-        <?= $t('As validades antigas foram mantidas como manuais. Para usar o heartbeat do PostgreSQL sem afetar o ICMP, selecione “Automática por item” em cada verificação e salve.', 'Existing validity settings were preserved as manual. To use the PostgreSQL heartbeat without affecting ICMP, select “Automatic per item” on each check and save.') ?>
+        <?= $t('As janelas antigas foram mantidas como manuais. Para aplicar o mínimo de uma hora ao ICMP e usar o heartbeat do PostgreSQL, selecione “Automática” em cada verificação e salve.', 'Existing windows were preserved as manual. To apply the one-hour minimum to ICMP and use the PostgreSQL heartbeat, select “Automatic” on each check and save.') ?>
     </div>
     <?php if (!empty($data['conflict'])): ?>
     <div class="gav-notice gav-error" role="alert">

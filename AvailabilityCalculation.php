@@ -212,7 +212,8 @@ final class AvailabilityCalculation {
                 $item = $index[$host['hostid']][$check['key']] ?? null;
                 $source = ['key' => $check['key'], 'itemid' => $item ? (string) $item['itemid'] : null,
                     'sample_count' => 0, 'max_gap_seconds' => null, 'first_clock' => null, 'last_clock' => null,
-                    'seed_clock' => null, 'history_queried' => false];
+                    'seed_clock' => null, 'history_queried' => false,
+                    'up_sample_count' => 0, 'down_sample_count' => 0, 'unknown_sample_count' => 0];
                 if (!$item || !in_array((int) $item['value_type'], [0, 3], true)) {
                     $source += ['max_age' => null, 'freshness_mode' => $check['max_age'] === null ? 'auto' : 'manual',
                         'freshness_source' => 'unresolved', 'interval_seconds' => null, 'heartbeat_seconds' => null,
@@ -305,6 +306,9 @@ final class AvailabilityCalculation {
             $clock = (int) $sample['clock'];
             if ($clock >= $from) {
                 $current['source']['sample_count']++;
+                $sampleState = AvailabilityEngine::state($sample['value'], $current['rule']);
+                $current['source'][$sampleState === 1 ? 'up_sample_count'
+                    : ($sampleState === 0 ? 'down_sample_count' : 'unknown_sample_count')]++;
                 if ($current['source']['first_clock'] === null) { $current['source']['first_clock'] = $clock; }
                 $current['source']['last_clock'] = $clock;
                 if ($current['last'] !== null) {
@@ -486,7 +490,7 @@ final class AvailabilityCalculation {
         $state['report']['rows'] = $state['progress']['rows'];
         $method = empty($state['report']['has_sla']) ? 'checkpointed-history'
             : (empty($state['report']['has_items']) ? 'checkpointed-sla' : 'checkpointed-items-and-sla');
-        $state['report']['processing'] = ['method' => $method, 'version' => '1.11.0',
+        $state['report']['processing'] = ['method' => $method, 'version' => '1.12.0',
             'data_policy' => $state['report']['data_policy'] ?? 'strict',
             'started_at' => $state['started_at'], 'completed_at' => time(),
             'elapsed_seconds' => max(0, time() - $state['started_at']), 'scope_frozen_at' => $state['scope_frozen_at'],

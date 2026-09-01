@@ -368,6 +368,24 @@ const tests = [
         assert.equal(tech.querySelectorAll('.gav-check').length, 6);
         assert.match(p.nodes['gav-config-status'].textContent, /Máximo de 6/);
     }],
+    ['automatic, exact-hour and manual evidence windows roundtrip explicitly', () => {
+        const automaticItem = {...item, checks: [{...check, max_age: null}]};
+        const p = page(configuration(automaticItem)), tech = p.techs()[0];
+        assert.equal(field(tech, 'age_mode').value, 'auto');
+        assert.equal(p.data().departments[0].technologies[0].checks[0].max_age, null);
+        p.change(field(tech, 'age_mode'), 'hour');
+        assert.equal(field(tech, 'max_age').disabled, true);
+        assert.equal(p.data().departments[0].technologies[0].checks[0].max_age, 3600);
+        assert.match(tech.querySelector('.gav-validity-hint').textContent, /novo 0 ou 1 substitui/);
+        const reopened = page(p.data()), reopenedTech = reopened.techs()[0];
+        assert.equal(field(reopenedTech, 'age_mode').value, 'hour');
+        assert.equal(reopened.data().departments[0].technologies[0].checks[0].max_age, 3600);
+        reopened.change(field(reopenedTech, 'age_mode'), 'manual');
+        reopened.change(field(reopenedTech, 'max_age'), '4000');
+        assert.equal(reopened.data().departments[0].technologies[0].checks[0].max_age, 4000);
+        reopened.change(field(reopenedTech, 'age_mode'), 'auto');
+        assert.equal(reopened.data().departments[0].technologies[0].checks[0].max_age, null);
+    }],
     ['English SLA help and source labels are available', () => {
         const p = page(configuration(sla), 'en'), tech = p.techs()[0];
         assert.match(tech.textContent, /Calculation source/);
