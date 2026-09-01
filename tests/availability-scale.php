@@ -32,6 +32,7 @@ class ScaleEndpoint {
             }
             return $items;
         }
+        if ($this->name === 'Trend') { return []; }
         $pg = (int) $options['itemids'][0] % 10 === 1;
         $interval = $pg ? 3600 : 30;
         $first = (int) floor(($options['time_from'] - API::$from) / $interval) - 1;

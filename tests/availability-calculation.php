@@ -50,6 +50,7 @@ class API {
     public static $hosts = [];
     public static $items = [];
     public static $history = [];
+    public static $trends = [];
     public static $calls = [];
     public static $failItem = null;
     public static function __callStatic($name, $arguments) { return new CalculationEndpoint($name); }
@@ -72,7 +73,16 @@ class CalculationEndpoint {
                 return in_array($item['hostid'], $options['hostids']) && in_array($item['key_'], $options['filter']['key_']);
             }));
         }
-        verify($this->name === 'History', 'known endpoint');
+        verify(in_array($this->name, ['History', 'Trend'], true), 'known endpoint');
+        if ($this->name === 'Trend') {
+            verify(count($options['itemids']) === 1 && $options['limit'] === 1001, 'bounded trend query per item');
+            $id = $options['itemids'][0];
+            $rows = array_values(array_filter(API::$trends[$id] ?? [], static function($row) use ($options) {
+                return $row['clock'] >= $options['time_from'] && $row['clock'] <= $options['time_till'];
+            }));
+            // trend.get does not promise an order; exercise the runner's own sorting.
+            return array_slice(array_reverse($rows), 0, $options['limit']);
+        }
         verify(count($options['itemids']) === 1, 'history page scoped to one item');
         verify($options['limit'] <= Calculation::PAGE_ROWS + 1, 'bounded page');
         verify($options['sortfield'] === 'clock', 'only a supported Zabbix6 history sort field');
@@ -89,7 +99,7 @@ class CalculationEndpoint {
     }
 }
 function fixture(int $hostCount = 2): void {
-    API::$calls = []; API::$items = []; API::$history = []; API::$hosts = []; API::$failItem = null;
+    API::$calls = []; API::$items = []; API::$history = []; API::$trends = []; API::$hosts = []; API::$failItem = null;
     API::$groups = [['groupid' => '1', 'name' => 'Equipes'], ['groupid' => '2', 'name' => 'Equipes/Banco'],
         ['groupid' => '3', 'name' => 'Equipes externas']];
     for ($i = 1; $i <= $hostCount; $i++) {
@@ -107,6 +117,11 @@ function configuration(string $mode = 'any_down', int $age = 180): array {
                 ['key' => 'service', 'max_age' => $age, 'up' => ['op' => 'eq', 'a' => 1], 'down' => null]]]]]]];
 }
 function sample(int $clock, $value, int $ns = 0): array { return ['clock' => $clock, 'ns' => $ns, 'value' => (string) $value]; }
+function trendRow(int $clock, $minimum, $maximum, int $num = 60): array {
+    return ['clock' => (string) $clock, 'num' => (string) $num,
+        'value_min' => (string) $minimum, 'value_avg' => (string) $minimum,
+        'value_max' => (string) $maximum];
+}
 function oracle(array $config, int $from, int $to): array {
     $techs = []; $weights = [];
     foreach ($config['departments'][0]['technologies'] as $tech) {
@@ -209,6 +224,36 @@ API::$history['1-ping'] = [sample($from + 500, 1), sample($from + 7 * 86400 - 10
 $report = Calculation::result(finishCalculation(Calculation::create($config, '2026-05', -1, $from + 9 * 86400)));
 equalSummary($report['departments'][0]['summary'], oracle($config, $from, $from + 9 * 86400), 'sparse chunks oracle');
 verify($report['departments'][0]['summary']['score'] === null, 'no backward extrapolation into missing seed');
+
+// Closed months with incomplete detailed history may use a complete conservative
+// hourly trend series. Mixed binary hours are fully DOWN; absent hours stay UNKNOWN.
+fixture(1); $config = configuration('any_down', 3600);
+$monthTo = strtotime('2026-06-01 UTC');
+for ($clock = $from; $clock < $monthTo; $clock += 3600) {
+    $offset = intdiv($clock - $from, 3600);
+    API::$trends['1-ping'][] = trendRow($clock, $offset === 10 ? 0 : 1, 1, 60);
+    if ($offset !== 20) { API::$trends['1-service'][] = trendRow($clock, 1, 1, 1); }
+}
+$report = Calculation::result(finishCalculation(Calculation::create($config, '2026-05', -1, $monthTo + 86400)));
+$host = $report['departments'][0]['technologies'][0]['hosts'][0];
+$sources = $host['sources'];
+verify(!$report['partial'] && $sources[0]['trend_fallback_attempted'] && $sources[1]['trend_fallback_attempted'],
+    'only a closed incomplete month attempts the fallback');
+verify($sources[0]['data_source'] === 'trends_conservative'
+    && $sources[0]['resolution_seconds'] === 3600
+    && $sources[0]['trend_row_count'] === 744 && $sources[0]['trend_mixed_hour_count'] === 1
+    && $sources[0]['trend_down_hour_count'] === 0 && $sources[0]['trend_up_hour_count'] === 743,
+    'mixed trend hour is audited separately and conservatively classified DOWN');
+verify($sources[1]['data_source'] === 'trends_conservative'
+    && $sources[1]['resolution_seconds'] === 3600
+    && $sources[1]['trend_row_count'] === 743 && $sources[1]['trend_mixed_hour_count'] === 0,
+    'missing trend hour does not invent a row');
+verify($host['summary']['down'] == 3600.0 && $host['summary']['unknown'] == 3600.0
+    && $host['summary']['score'] === null,
+    'conservative outage and absent trend hour remain distinct in host totals');
+verify($sources[0]['summary']['down'] == 3600.0 && $sources[1]['summary']['unknown'] == 3600.0,
+    'source summaries use the selected trend series');
+verify($report['rows'] === 1487, 'trend rows participate in processing audit totals');
 
 // Missing/non-numeric/unresolved checks are real unknown data, not a failed execution.
 fixture(1); $config = configuration();

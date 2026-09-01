@@ -13,7 +13,7 @@ class CTimezoneHelper {
     public static function getSystemTimezone(): string { return 'UTC'; }
 }
 class API {
-    public static $config = [], $groups = [], $hosts = [], $items = [], $history = [], $calls = [], $sla = [], $service = [];
+    public static $config = [], $groups = [], $hosts = [], $items = [], $history = [], $trends = [], $calls = [], $sla = [], $service = [];
     public static function __callStatic($name, $arguments) { return new ObservedViewEndpoint($name); }
 }
 class ObservedViewEndpoint {
@@ -42,6 +42,11 @@ class ObservedViewEndpoint {
                 }));
                 usort($rows, static function($a, $b) { return [(int) $a['clock'], (int) $a['ns']] <=> [(int) $b['clock'], (int) $b['ns']]; });
                 return array_slice($rows, 0, $options['limit']);
+            case 'Trend':
+                return array_slice(array_values(array_filter(API::$trends[(string) $options['itemids'][0]] ?? [],
+                    static function($row) use ($options) {
+                        return (int) $row['clock'] >= $options['time_from'] && (int) $row['clock'] <= $options['time_till'];
+                    })), 0, $options['limit']);
             case 'Sla': return (string) $options['slaids'][0] === API::$sla['slaid'] ? [API::$sla] : [];
             case 'Service': return (string) $options['serviceids'][0] === API::$service['serviceid'] ? [API::$service] : [];
         }
@@ -67,7 +72,7 @@ class ObservedViewEndpoint {
 
 function observedViewCases(): array {
     return ['observed90', 'strict', 'legacy', 'observed100', 'allunknown', 'mean', 'weights', 'mixed',
-        'mixed_unknown', 'calendar', 'timezone', 'item_timezone', 'notqueried', 'seed', 'flexible', 'precision', 'native', 'native_observed', 'escaped'];
+        'mixed_unknown', 'calendar', 'timezone', 'item_timezone', 'notqueried', 'seed', 'flexible', 'trend', 'precision', 'native', 'native_observed', 'escaped'];
 }
 function observedViewItem(string $name = 'Item service', string $group = '1', float $weight = 1): array {
     return ['name' => $name, 'source' => 'items', 'weight' => $weight, 'target' => 99.9, 'groups' => $group,
@@ -80,6 +85,11 @@ function observedViewSla(): array {
 }
 function observedViewRow(int $clock, $value): array {
     return ['clock' => (string) $clock, 'ns' => '0', 'value' => (string) $value];
+}
+function observedViewTrendRow(int $clock, $minimum, $maximum, int $num = 60): array {
+    return ['clock' => (string) $clock, 'num' => (string) $num,
+        'value_min' => (string) $minimum, 'value_avg' => (string) $minimum,
+        'value_max' => (string) $maximum];
 }
 function observedViewSamples(int $from, int $to, int $downFrom, int $step = 3600): array {
     $clocks = [];
@@ -101,7 +111,7 @@ function observedViewFixture(string $case): array {
     $from = strtotime('2026-07-01 00:00:00 UTC'); $to = strtotime('2026-08-01 00:00:00 UTC');
     $duration = $to - $from;
     API::$groups = [['groupid' => '1', 'name' => 'Test services'], ['groupid' => '2', 'name' => 'No evidence'], ['groupid' => '3', 'name' => 'Confirmed down']];
-    API::$hosts = API::$items = API::$history = API::$calls = [];
+    API::$hosts = API::$items = API::$history = API::$trends = API::$calls = [];
     API::$sla = ['slaid' => '9007199254740993', 'name' => 'Synthetic monthly SLA', 'period' => '2', 'status' => '1',
         'slo' => '99', 'timezone' => 'UTC', 'effective_date' => (string) strtotime('2025-01-01 UTC'),
         'schedule' => [], 'excluded_downtimes' => [], 'service_tags' => []];
@@ -161,6 +171,14 @@ function observedViewFixture(string $case): array {
         API::$config['timezone'] = 'America/Cuiaba';
         $localFrom = strtotime('2026-07-01 04:00:00 UTC'); $localTo = strtotime('2026-08-01 04:00:00 UTC');
         API::$history['201'] = observedViewSamples($localFrom, $localTo, $localTo);
+    }
+    if ($case === 'trend') {
+        API::$history['201'] = [];
+        for ($clock = $from; $clock < $to; $clock += 3600) {
+            $hour = intdiv($clock - $from, 3600);
+            if ($hour === 20) { continue; }
+            API::$trends['201'][] = observedViewTrendRow($clock, $hour === 10 ? 0 : 1, 1);
+        }
     }
     if ($case === 'precision') { API::$history['201'] = observedViewSamples($from, $to, $to - 1); }
     if ($case === 'escaped') {

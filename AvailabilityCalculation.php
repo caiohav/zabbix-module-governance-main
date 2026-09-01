@@ -14,9 +14,9 @@ use RuntimeException;
  */
 final class AvailabilityCalculation {
     // Version of the resumable server-side state, not the exported report JSON.
-    // v2 adds daily host points and enriched daily indicators; v1 checkpoints
-    // must restart instead of mixing partially processed result shapes.
-    const FORMAT = 2;
+    // v3 adds the conservative hourly-trend fallback. Older checkpoints must
+    // restart instead of mixing detailed and reduced source semantics.
+    const FORMAT = 3;
     const MAX_HOSTS = 200;
     const PAGE_ROWS = 5000;
     const MAX_ROWS = 20000000;
@@ -146,6 +146,7 @@ final class AvailabilityCalculation {
             case 'sla_verify': $this->verifySla($state); break;
             case 'check': $this->startCheck($state); break;
             case 'history': $this->historyPage($state); break;
+            case 'trend': $this->trendFallback($state); break;
             case 'host': $this->finishHost($state); break;
             case 'technology': $this->finishTechnology($state); break;
             case 'department': $this->finishDepartment($state); break;
@@ -213,7 +214,12 @@ final class AvailabilityCalculation {
                 $source = ['key' => $check['key'], 'itemid' => $item ? (string) $item['itemid'] : null,
                     'sample_count' => 0, 'max_gap_seconds' => null, 'first_clock' => null, 'last_clock' => null,
                     'seed_clock' => null, 'history_queried' => false,
-                    'up_sample_count' => 0, 'down_sample_count' => 0, 'unknown_sample_count' => 0];
+                    'up_sample_count' => 0, 'down_sample_count' => 0, 'unknown_sample_count' => 0,
+                    'data_source' => 'history', 'resolution_seconds' => 1,
+                    'trend_fallback_attempted' => false,
+                    'trend_row_count' => 0, 'trend_up_hour_count' => 0,
+                    'trend_down_hour_count' => 0, 'trend_mixed_hour_count' => 0,
+                    'trend_unknown_hour_count' => 0];
                 if (!$item || !in_array((int) $item['value_type'], [0, 3], true)) {
                     $source += ['max_age' => null, 'freshness_mode' => $check['max_age'] === null ? 'auto' : 'manual',
                         'freshness_source' => 'unresolved', 'interval_seconds' => null, 'heartbeat_seconds' => null,
@@ -258,7 +264,11 @@ final class AvailabilityCalculation {
             'cursor' => max(0, $state['report']['from'] - ($check['source']['max_age'] ?? 0))];
         if ($check['source']['max_age'] === null) {
             $state['current_check']['series'] = AvailabilityEngine::unknown($state['report']['from'], $state['report']['to']);
-            $this->finishCheck($state);
+            if (!$state['report']['partial'] && $check['source']['itemid'] !== null) {
+                $state['current_check']['source']['trend_fallback_attempted'] = true;
+                $state['phase'] = 'trend';
+            }
+            else { $this->finishCheck($state); }
         }
         else { $state['phase'] = 'history'; }
     }
@@ -332,7 +342,112 @@ final class AvailabilityCalculation {
             throw new RuntimeException('Timeline complexity limit reached / Limite de complexidade temporal atingido.');
         }
         $current['cursor'] = $end;
-        if ($end >= $to) { $this->finishCheck($state); }
+        if ($end >= $to) {
+            $historySummary = AvailabilityEngine::summary($current['series'], $from, $to);
+            if (!$state['report']['partial'] && $historySummary['coverage'] < 100.0) {
+                $current['source']['trend_fallback_attempted'] = true;
+                $state['phase'] = 'trend';
+            }
+            else { $this->finishCheck($state); }
+        }
+    }
+
+    /**
+     * Trends retain only hourly min/max/average/count. For binary states a mixed
+     * hour cannot recover outage duration or overlap, so it is conservatively
+     * classified as fully DOWN. The complete trend month replaces history only
+     * when it has strictly more known coverage; sources are never spliced.
+     */
+    private function trendFallback(array &$state): void {
+        $current = &$state['current_check'];
+        $from = $state['report']['from'];
+        $to = $state['report']['to'];
+        try {
+            $rows = $this->query($state, 'Trend', [
+                'output' => ['itemid', 'clock', 'num', 'value_min', 'value_avg', 'value_max'],
+                'itemids' => [$current['source']['itemid']],
+                // Include the UTC trend hour overlapping a non-hour-aligned report boundary.
+                'time_from' => max(0, $from - 3599), 'time_till' => $to - 1, 'limit' => 1001
+            ]);
+        }
+        catch (RuntimeException $e) {
+            $current['source']['warnings'][] = 'Trend fallback unavailable; detailed history result retained / '
+                . 'Fallback por trends indisponível; resultado do histórico detalhado mantido. Detalhe: '
+                . $e->getMessage();
+            $this->finishCheck($state);
+            return;
+        }
+        $state['progress']['rows'] += count($rows);
+        if ($state['progress']['rows'] > self::MAX_ROWS) {
+            throw new RuntimeException('Calculation exceeds 20 million source rows; narrow the scope / Cálculo excede 20 milhões de linhas de origem; reduza o escopo.');
+        }
+        if (count($rows) > 1000) {
+            $current['source']['warnings'][] = 'Trend row limit exceeded; detailed history result retained / Limite de linhas de trends excedido; resultado do histórico detalhado mantido.';
+            $this->finishCheck($state);
+            return;
+        }
+        usort($rows, static function(array $a, array $b): int {
+            return ((int) ($a['clock'] ?? 0)) <=> ((int) ($b['clock'] ?? 0));
+        });
+        $series = [];
+        $cursor = $from;
+        $previousClock = null;
+        foreach ($rows as $row) {
+            if (!isset($row['clock'], $row['num']) || !is_numeric($row['clock']) || !is_numeric($row['num'])
+                    || (int) $row['num'] < 1 || !array_key_exists('value_min', $row)
+                    || !array_key_exists('value_max', $row) || !is_numeric($row['value_min'])
+                    || !is_numeric($row['value_max'])) {
+                $current['source']['warnings'][] = 'Invalid trend row; detailed history result retained / Linha de trend inválida; resultado do histórico detalhado mantido.';
+                $this->finishCheck($state);
+                return;
+            }
+            $clock = (int) $row['clock'];
+            if ($previousClock !== null && $clock <= $previousClock) {
+                $current['source']['warnings'][] = 'Duplicate or unordered trend hour; detailed history result retained / Hora de trend duplicada ou desordenada; resultado do histórico detalhado mantido.';
+                $this->finishCheck($state);
+                return;
+            }
+            $previousClock = $clock;
+            $start = max($from, $clock);
+            $end = min($to, $clock + 3600);
+            if ($end <= $start) { continue; }
+            if ($start < $cursor) {
+                $current['source']['warnings'][] = 'Overlapping trend hours; detailed history result retained / Horas de trend sobrepostas; resultado do histórico detalhado mantido.';
+                $this->finishCheck($state);
+                return;
+            }
+            AvailabilityEngine::append($series, [$cursor, $start, 0.0, 0.0, 1.0]);
+            [$trendState, $mixed] = self::trendState($row, $current['rule']);
+            $current['source']['trend_row_count']++;
+            $current['source'][$mixed ? 'trend_mixed_hour_count'
+                : ($trendState === 1 ? 'trend_up_hour_count'
+                    : ($trendState === 0 ? 'trend_down_hour_count' : 'trend_unknown_hour_count'))]++;
+            AvailabilityEngine::append($series, [$start, $end, $trendState === 1 ? 1.0 : 0.0,
+                $trendState === 0 ? 1.0 : 0.0, $trendState === -1 ? 1.0 : 0.0]);
+            $cursor = $end;
+        }
+        AvailabilityEngine::append($series, [$cursor, $to, 0.0, 0.0, 1.0]);
+        $historySummary = AvailabilityEngine::summary($current['series'], $from, $to);
+        $trendSummary = AvailabilityEngine::summary($series, $from, $to);
+        if ($current['source']['trend_row_count'] > 0
+                && $trendSummary['coverage'] > $historySummary['coverage'] + 0.0000001) {
+            $current['series'] = $series;
+            $current['source']['data_source'] = 'trends_conservative';
+            $current['source']['resolution_seconds'] = 3600;
+            $current['source']['warnings'][] = 'Hourly trends replaced incomplete detailed history; every mixed hour is fully DOWN / Trends horárias substituíram o histórico detalhado incompleto; cada hora mista conta integralmente como DOWN.';
+        }
+        $this->finishCheck($state);
+    }
+
+    /** Return [state, mixed]. A mixed hour with any confirmed DOWN endpoint is DOWN. */
+    private static function trendState(array $row, array $rule): array {
+        $minimum = (float) $row['value_min'];
+        $maximum = (float) $row['value_max'];
+        $minimumState = AvailabilityEngine::state($minimum, $rule);
+        $maximumState = AvailabilityEngine::state($maximum, $rule);
+        if ($minimum == $maximum) { return [$minimumState, false]; }
+        if ($minimumState === 0 || $maximumState === 0) { return [0, true]; }
+        return [-1, true];
     }
 
     private function finishCheck(array &$state): void {
@@ -488,9 +603,9 @@ final class AvailabilityCalculation {
         $state['status'] = 'complete';
         $state['phase'] = 'complete';
         $state['report']['rows'] = $state['progress']['rows'];
-        $method = empty($state['report']['has_sla']) ? 'checkpointed-history'
+        $method = empty($state['report']['has_sla']) ? 'checkpointed-items'
             : (empty($state['report']['has_items']) ? 'checkpointed-sla' : 'checkpointed-items-and-sla');
-        $state['report']['processing'] = ['method' => $method, 'version' => '1.12.0',
+        $state['report']['processing'] = ['method' => $method, 'version' => '1.13.0',
             'data_policy' => $state['report']['data_policy'] ?? 'strict',
             'started_at' => $state['started_at'], 'completed_at' => time(),
             'elapsed_seconds' => max(0, time() - $state['started_at']), 'scope_frozen_at' => $state['scope_frozen_at'],

@@ -33,7 +33,8 @@ $report = slaReport($state); $department = $report['departments'][0];
 verifySla($state['progress']['slas_total'] === 3 && $state['progress']['slas_done'] === 3, 'All three SLAs are assessed');
 verifySla($state['progress']['checks_total'] === 0 && $state['progress']['hosts_total'] === 0, 'Native SLA does not pretend to assess item hosts');
 verifySla(count(API::$calls) === 12, 'Bounded native pipeline: definition, service, SLI, definition verification per source');
-verifySla(!array_intersect(array_column(API::$calls, 0), ['HostGroup', 'Host', 'Item', 'History']), 'Native-only scope never queries item history');
+verifySla(!array_intersect(array_column(API::$calls, 0), ['HostGroup', 'Host', 'Item', 'History', 'Trend']),
+    'Native-only scope never queries item history or trends');
 verifySla($department['aggregation_compatible'] === true, 'Identical monthly calendars are comparable');
 approximate($department['summary']['score'], 99.96511776753713, 'Weights 4/2/1 preserve the true SLI, not dashboard rounding');
 approximate($department['summary']['down'], 3270 * 2 / 7, 'Equivalent downtime is weighted, not a union');

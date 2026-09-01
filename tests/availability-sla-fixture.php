@@ -83,6 +83,7 @@ class SlaIntegrationEndpoint {
             }
             return $rows;
         }
+        if ($this->endpoint === 'Trend') { return []; }
         throw new RuntimeException('Unexpected test endpoint: ' . $this->endpoint);
     }
     public function getSli(array $options): array {

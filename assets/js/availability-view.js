@@ -102,7 +102,8 @@
                 scope_sla_service: t('Validando serviço do SLA', 'Validating SLA service'),
                 sla: t('Consultando SLI mensal', 'Reading monthly SLI'),
                 sla_verify: t('Conferindo a definição do SLA', 'Verifying SLA definition'),
-                history: t('Lendo histórico', 'Reading history'), host: t('Consolidando host', 'Aggregating host'),
+                history: t('Lendo histórico', 'Reading history'), trend: t('Lendo trends horárias', 'Reading hourly trends'),
+                host: t('Consolidando host', 'Aggregating host'),
                 technology: t('Consolidando tecnologia', 'Aggregating technology'), department: t('Consolidando departamento', 'Aggregating department'),
                 finish: t('Preparando relatório completo', 'Preparing complete report'), complete: t('Processamento concluído', 'Processing completed')
             };
@@ -569,7 +570,7 @@
         exportButton.disabled = root.dataset.reportStale === '1';
         exportButton.addEventListener('click', () => {
             if (root.dataset.reportStale === '1') return;
-            const payload = {format: 'governance-availability-v3', module_version: '1.12.0',
+            const payload = {format: 'governance-availability-v3', module_version: '1.13.0',
                 assumptions: {aggregation: 'weighted mean only for matching periods, schedules and exclusions',
                     data_policy: observedPolicy ? 'observed' : 'strict',
                     items: {schedule: '24x7', membership: 'current', maintenance_excluded: false,

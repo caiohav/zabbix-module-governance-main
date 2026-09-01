@@ -233,6 +233,21 @@ try {
         observedViewCheck(strpos($html, $pt ? 'Intervalos flexíveis: janela calculada pelo maior intervalo de coleta e pelo mínimo horário.' : 'Flexible intervals: window calculated from the longest polling interval and the hourly minimum.') !== false, 'flexible cadence derivation is explained');
     }
 
+    $trendTechnology = $reports['trend']['departments'][0]['technologies'][0];
+    $trendSource = $trendTechnology['hosts'][0]['sources'][0];
+    observedViewCheck($trendSource['data_source'] === 'trends_conservative'
+        && $trendSource['trend_row_count'] === 743 && $trendSource['trend_mixed_hour_count'] === 1,
+        'real runner report retains conservative trend provenance and audit counts');
+    observedViewNear($trendSource['summary']['down'], 3600, 'mixed trend hour is fully down');
+    observedViewNear($trendSource['summary']['unknown'], 3600, 'missing trend hour stays unknown');
+    foreach ([true, false] as $pt) {
+        $html = $renderer->render($reports['trend'], $pt);
+        observedViewCheck(strpos($html, $pt ? 'Trends horárias conservadoras' : 'Conservative hourly trends') !== false,
+            'selected trend source is visible');
+        observedViewCheck(strpos($html, $pt ? 'mistas como DOWN' : 'mixed as DOWN') !== false,
+            'conservative mixed-hour rule is visible');
+    }
+
     foreach (['native', 'native_observed'] as $case) {
         $report = $reports[$case]; $tech = $report['departments'][0]['technologies'][0]; $html = $renderer->render($report);
         observedViewCheck((float) $tech['summary']['score'] === 100.0 && !isset($tech['observation']) && $report['rows'] === 0, $case . ': native SLI is neither recomputed nor replaced');

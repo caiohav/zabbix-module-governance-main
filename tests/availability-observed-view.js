@@ -102,6 +102,13 @@ const tests = [
         assert.equal(flexible.series[2].data[0], 3660 / 86400 * 100,
             'the last frequent sample remains evidence for the automatic one-hour window');
         assert.ok(flexible.series[2].data.slice(1).every(coverage => coverage === 0));
+        const trend = page(reports.trend).option('daily');
+        assert.equal(trend.series[0].data[0], 22 / 23 * 100,
+            'one mixed hour is DOWN while the absent trend hour is excluded from observed score');
+        assert.equal(trend.series[2].data[0], 23 / 48 * 100,
+            'coverage includes the second group host that has no known state');
+        assert.ok(trend.series[0].data.slice(1).every(score => score === 100));
+        assert.ok(trend.series[2].data.slice(1).every(coverage => coverage === 50));
         const timezoneReport = reports.item_timezone.departments[0], timezone = page(reports.item_timezone).option('daily');
         assert.deepEqual(Array.from(timezone.xAxis[0].data), timezoneReport.observation.daily.map(day => day.day));
         assert.equal(timezone.xAxis[0].data[0], '2026-07-01');
@@ -110,12 +117,12 @@ const tests = [
     }],
     ['JSON v3 preserves policy, observations, nulls and full precision without network access', async () => {
         for (const name of ['observed90', 'observed100', 'allunknown', 'mean', 'weights', 'mixed', 'mixed_unknown',
-            'calendar', 'timezone', 'item_timezone', 'notqueried', 'seed', 'flexible', 'precision', 'native_observed']) {
+            'calendar', 'timezone', 'item_timezone', 'notqueried', 'seed', 'flexible', 'trend', 'precision', 'native_observed']) {
             const report = reports[name], presentation = page(report);
             presentation.nodes['gav-export'].fire('click');
             const payload = JSON.parse(await presentation.blobs[0].text());
             assert.equal(payload.format, 'governance-availability-v3');
-            assert.equal(payload.module_version, '1.12.0');
+            assert.equal(payload.module_version, '1.13.0');
             assert.equal(payload.assumptions.data_policy, 'observed');
             assert.match(payload.assumptions.items.unknown_policy, /ignore unknown intervals and hosts/);
             assert.equal(payload.assumptions.items.reported_score, 'observation.score');

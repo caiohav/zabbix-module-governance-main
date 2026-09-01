@@ -3,6 +3,24 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Novidades 1.13.0 — Fallback conservador para trends
+
+- Em meses encerrados, cada verificação tenta primeiro o histórico detalhado. Se
+  sua cobertura ficar incompleta, o módulo consulta `trend.get` para o mês
+  inteiro e usa as trends somente quando elas aumentarem a cobertura.
+- Histórico e trends nunca são emendados na mesma fonte. Quando selecionadas, as
+  trends substituem toda a série daquela verificação e ficam identificadas nos
+  detalhes, gráficos e JSON.
+- Hora com `min=1` e `max=1` é `UP`; hora com `min=0` e `max=0` é `DOWN`;
+  hora mista (`min=0`, `max=1`) conta integralmente como `DOWN`; hora sem trend
+  permanece `UNKNOWN`. `value_avg` não é usado para itens inteiros binários.
+- O painel mostra quantas horas foram UP, DOWN, mistas e não classificáveis.
+  A resolução conservadora é de uma hora e pode superestimar quedas curtas.
+- O mês atual permanece somente no histórico detalhado, pois a hora corrente
+  pode ainda não estar consolidada nas trends.
+- O checkpoint interno passa ao formato 3; cálculos iniciados em versões
+  anteriores precisam ser reiniciados para não misturar métodos.
+
 ## Novidades 1.12.0 — Evidência horária e diagnóstico por estado
 
 - A validade automática de itens agora mantém uma amostra real por no mínimo uma hora. Isso alinha o ICMP frequente aos itens com descarte/heartbeat sem criar médias horárias: qualquer novo `0` ou `1` substitui o estado imediatamente.
@@ -72,10 +90,10 @@ itens, SLAs ou retenções no Zabbix.
 4. Abra os detalhes da tecnologia para conferir cobertura, hosts com/sem estado,
    verificações não consultadas, validade, amostras e primeiro/último registro.
 
-O modo automático passou a reconhecer intervalos flexíveis numéricos positivos,
+O modo automático reconhece intervalos flexíveis numéricos positivos,
 como `30s;1m/6-7,00:00-24:00`. Antes, essa configuração era recusada e o histórico
-não era consultado. Agora o maior intervalo (60s neste exemplo) determina a
-validade conservadora de 180s. Com heartbeat de 1h e coleta de 60s, são 3720s.
+não era consultado. O maior intervalo continua auditado, mas a janela automática
+tem mínimo de 3600s. Com heartbeat de 1h e coleta de 60s, são 3720s.
 Agendamentos, macros de intervalo, base zero e janelas que suspendem coleta
 continuam exigindo validade manual: não se adivinha a cadência pelas amostras.
 
@@ -109,9 +127,10 @@ estado conhecido nesses 100s. O modo observado produz 90%, cobertura de hosts
 50% e 1/2 hosts com dados. O modo estrito continua inconclusivo. Se ninguém tiver
 estado conhecido, ambos permanecem sem indicador.
 
-A apuração continua baseada em histórico bruto, validade finita e dados reais;
-não usa trends, não estende amostras por todo o mês e não substitui itens por SLA
-nativo. A fonte SLA opcional mantém seu calendário e suas restrições anteriores.
+A apuração prefere histórico bruto, validade finita e dados reais. Em mês
+encerrado com cobertura incompleta, pode usar trends horárias conservadoras para
+a fonte inteira; nunca estende uma amostra por todo o mês nem substitui itens por
+SLA nativo. A fonte SLA opcional mantém seu calendário e suas restrições anteriores.
 O JSON passa a `governance-availability-v3`: `data_policy` identifica a escolha,
 `observation.score` contém o indicador observado, `observation.coverage` mantém
 a cobertura do escopo, e `summary` preserva a consolidação estrita para auditoria.
@@ -165,7 +184,7 @@ da meta do SLA. O tema claro/escuro e português/inglês são mantidos.
 - **Cobertura SLA não é cobertura de amostras**: representa o tempo programado
   avaliado pelo SLA. Seu SLI segue os estados e regras dos serviços nativos,
   que podem ser diferentes das condições configuradas na fonte por itens.
-- Não há fallback automático entre fontes, nem preenchimento artificial de
+- Não há fallback automático entre itens e SLA, nem preenchimento artificial de
   lacunas com 100%. Uma resposta inválida da API interrompe o processamento;
   ausência legítima de SLA/serviço/SLI recebe uma explicação de indisponibilidade
   do indicador, sem assumir disponibilidade ou queda.
@@ -181,9 +200,11 @@ da meta do SLA. O tema claro/escuro e português/inglês são mantidos.
   Integrações que consomem o JSON devem verificar o campo `format`.
 
 A fonte SLA permite aproveitar um indicador já preservado pelo Zabbix. Ela não
-recupera o histórico bruto expirado dos itens. Em **Histórico de itens**, a política
-estrita continua inconclusiva quando faltam evidências. A política observada da
-versão 1.10.0 permite apurar somente a parcela conhecida, sem certificar o mês todo.
+recupera o histórico bruto expirado dos itens. A partir da versão 1.13, a fonte
+por itens pode usar trends horárias conservadoras quando elas existirem e tiverem
+maior cobertura; lacunas restantes mantêm a política estrita inconclusiva. A
+política observada permite apurar somente a parcela conhecida, sem certificar o
+mês todo.
 
 ## Novidades 1.8.0 — Qualidade sem bloquear a página
 
@@ -440,9 +461,11 @@ renomeação atômica. Não coloque essa pasta temporária em diretório públic
 
 - Fonte por itens: calendário 24×7, com fuso configurável; o mês atual considera
   apenas o tempo transcorrido. Manutenções não são excluídas automaticamente.
-- A fonte por itens usa **histórico bruto**, com resolução de um segundo. Trends
-  agregadas não permitem reconstruir quedas e não são usadas como substituto.
-  Configure retenção de histórico compatível com os meses que deseja consultar.
+- A fonte por itens prefere **histórico bruto**, com resolução de um segundo. Em
+  mês encerrado cuja cobertura detalhada esteja incompleta, consulta trends e
+  pode substituir a série inteira por uma aproximação conservadora de uma hora.
+  Trends não reconstroem duração ou sobreposição intrahorária: qualquer hora
+  mista é integralmente DOWN e horas ausentes continuam UNKNOWN.
 - A fonte por itens usa as regras e a composição de hosts/grupos **atuais**, inclusive hosts
   desabilitados que ainda tenham histórico. Alterações podem mudar resultados
   de meses passados. Não há fechamento mensal imutável nem histórico de membros.

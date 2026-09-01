@@ -76,7 +76,7 @@ function currentHostOracle(array $checks, string $hostid, int $from, int $second
 }
 
 $formatState = ObservedCalculation::create(observedConfig(), '2026-05', -1, strtotime('2026-05-01 UTC') + 100);
-verify($formatState['format'] === 2, 'daily host checkpoints use state format 2');
+verify($formatState['format'] === 3, 'trend-aware daily host checkpoints use state format 3');
 $formatState['format'] = 1;
 rejects(static function() use ($formatState) { (new ObservedCalculation())->advance($formatState); },
     'pre-host-daily checkpoints are rejected instead of being mixed into a new report');
