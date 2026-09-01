@@ -3,6 +3,12 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Novidades 1.13.1 — Cabeçalho de qualidade simplificado
+
+- Remove o título repetido e o texto introdutório da área interna de Qualidade.
+- Mantém o título oficial do widget e posiciona a configuração ao lado das abas.
+- Atualiza a versão do CSS para impedir que o navegador reutilize o layout anterior.
+
 ## Novidades 1.13.0 — Fallback conservador para trends
 
 - Em meses encerrados, cada verificação tenta primeiro o histórico detalhado. Se

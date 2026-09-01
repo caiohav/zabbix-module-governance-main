@@ -59,7 +59,8 @@ main:has(.gqp) { min-width: 0; }
 }
 
 .gqp .gqp-pages-toolbar { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.gqp .gqp-pages-toolbar > button { flex: 0 0 auto; }
+.gqp .gqp-pages-toolbar > button, .gqp .gqp-pages-toolbar > .gqp-config-link { flex: 0 0 auto; }
+.gqp .gqp-config-link { white-space: nowrap; }
 .gqp .gqp-pages {
     display: flex;
     align-items: stretch;
@@ -240,6 +241,7 @@ main:has(.gqp) { min-width: 0; }
     .gqp .gqp-page-actions { justify-content: space-between; }
     .gqp .gqp-pages-toolbar { flex-wrap: wrap; }
     .gqp .gqp-pages-toolbar > nav { flex-basis: 100%; }
+    .gqp .gqp-pages-toolbar > .gqp-config-link { order: -1; margin-left: auto; }
     .gqp .gqp-field-grid { grid-template-columns: 1fr; }
     .gqp .gqp-field-wide { grid-column: auto; }
     .gqp .gqp-editor-footer { flex-wrap: wrap; }

@@ -122,7 +122,7 @@ const tests = [
             presentation.nodes['gav-export'].fire('click');
             const payload = JSON.parse(await presentation.blobs[0].text());
             assert.equal(payload.format, 'governance-availability-v3');
-            assert.equal(payload.module_version, '1.13.0');
+            assert.equal(payload.module_version, '1.13.1');
             assert.equal(payload.assumptions.data_policy, 'observed');
             assert.match(payload.assumptions.items.unknown_policy, /ignore unknown intervals and hosts/);
             assert.equal(payload.assumptions.items.reported_score, 'observation.score');

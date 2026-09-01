@@ -15,6 +15,11 @@ foreach ([[true, true], [false, false]] as $settings) {
     viewCheck(substr_count($html, 'data-card-id=') === 5, 'all card structures present immediately');
     viewCheck(strpos($html, 'groupids%5B0%5D=10') !== false, 'page tabs retain scope');
     viewCheck(strpos($html, '<noscript>') !== false && strpos($html, 'aria-live="polite"') !== false, 'accessibility and JS fallback');
+    viewCheck(strpos($html, '<h2>' . htmlspecialchars($data['page_title'], ENT_QUOTES, 'UTF-8') . '</h2>') === false,
+        'dashboard body does not repeat the widget title');
+    viewCheck(strpos($html, 'Indicadores por página') === false && strpos($html, 'Indicators by page') === false,
+        'redundant quality heading description is omitted');
+    viewCheck(strpos($html, 'governance.quality.config') !== false, 'configuration link remains available beside the tabs');
     $data['cards'][0]['title'] = '<img src=x onerror=alert(1)>';
     $data['page_name'] = '</script><script>alert(1)</script>';
     $html = $renderer->render($data);

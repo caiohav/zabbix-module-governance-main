@@ -1,7 +1,7 @@
 <?php
 $base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
 $this->addCssFile($base . 'css/governance.css?v=1.8.0');
-$this->addCssFile($base . 'css/quality-pages.css?v=1.8.0');
+$this->addCssFile($base . 'css/quality-pages.css?v=1.13.1');
 $this->includeJsFile('governance.quality.view.js.php');
 $pt = $data['is_pt'];
 $t = static function($a, $b) use ($pt) { return $pt ? $a : $b; };
@@ -21,14 +21,14 @@ $metrics = [
 ob_start();
 ?>
 <div class="gov-container gqp <?= $data['is_dark'] ? 'gov-theme-dark' : '' ?>" id="gqp-dashboard" data-lang="<?= $pt ? 'pt' : 'en' ?>" data-echarts="<?= $e($base) ?>js/echarts.min.js?v=1.8.0">
-    <div class="gqp-page-heading"><div class="gqp-heading-text"><h2><?= $e($data['page_title']) ?></h2>
-        <p><?= $t('Indicadores por página. A análise carrega em etapas, sem bloquear a navegação.', 'Indicators by page. Analysis loads in stages without blocking navigation.') ?></p></div>
-        <a class="btn-alt" href="<?= $e($url('governance.quality.config', $data['selected_page'])) ?>"><?= $t('Configurar páginas e cards', 'Configure pages and cards') ?></a></div>
-    <nav class="gqp-pages" aria-label="<?= $t('Páginas de qualidade', 'Quality pages') ?>">
-        <?php foreach ($data['pages'] as $page): ?>
-        <a class="gqp-page-link" href="<?= $e($url('governance.quality.view', $page['id'], $data['groupids'])) ?>" <?= $page['id'] === $data['selected_page'] ? 'aria-current="page"' : '' ?>><?= $e($page['name'] !== '' ? $page['name'] : $t('Qualidade', 'Quality')) ?></a>
-        <?php endforeach ?>
-    </nav>
+    <div class="gqp-pages-toolbar">
+        <nav class="gqp-pages" aria-label="<?= $t('Páginas de qualidade', 'Quality pages') ?>">
+            <?php foreach ($data['pages'] as $page): ?>
+            <a class="gqp-page-link" href="<?= $e($url('governance.quality.view', $page['id'], $data['groupids'])) ?>" <?= $page['id'] === $data['selected_page'] ? 'aria-current="page"' : '' ?>><?= $e($page['name'] !== '' ? $page['name'] : $t('Qualidade', 'Quality')) ?></a>
+            <?php endforeach ?>
+        </nav>
+        <a class="btn-alt gqp-config-link" href="<?= $e($url('governance.quality.config', $data['selected_page'])) ?>"><?= $t('Configurar páginas e cards', 'Configure pages and cards') ?></a>
+    </div>
     <?php echo (new CForm())->setId('gqp-token')->setAction('zabbix.php?action=governance.quality.run')->setAttribute('hidden', 'hidden'); ?>
     <section class="gqp-load-panel" aria-label="<?= $t('Carregamento da qualidade', 'Quality loading') ?>">
         <div class="gqp-load-actions"><p id="gqp-message" role="status" aria-live="polite" aria-atomic="true"><?= $e($data['error'] ?? $t('Carregando indicadores… Você pode continuar navegando.', 'Loading indicators… You can continue navigating.')) ?></p>
