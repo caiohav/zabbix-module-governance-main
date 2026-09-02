@@ -3,6 +3,13 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Novidades 1.13.2 — Painel de disponibilidade mais limpo
+
+- Remove o cabeçalho interno redundante e concentra configuração, cálculo e exportação em uma única barra.
+- Mantém explicações de auditoria acessíveis em controles recolhidos de informação.
+- Adiciona botões `i` às métricas de cobertura, indisponibilidade e tempo desconhecido.
+- Recolhe notas dos totais, contexto do gráfico diário e detalhes técnicos do processamento.
+
 ## Novidades 1.13.1 — Cabeçalho de qualidade simplificado
 
 - Remove o título repetido e o texto introdutório da área interna de Qualidade.

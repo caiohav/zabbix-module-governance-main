@@ -51,6 +51,20 @@ try {
     }
     observedViewCheck(count(API::$calls) === $callsBefore, 'rendering completed reports never makes a source query');
 
+    $cleanHtml = $renderer->render($reports['observed90'], true, true);
+    observedViewCheck(strpos($cleanHtml, 'Disponibilidade dos serviços') === false
+        && strpos($cleanHtml, 'GOVERNANÇA / INDICADORES MENSAIS') === false,
+        'the widget title is not followed by a redundant internal heading');
+    observedViewCheck(strpos($cleanHtml, 'class="gav-help gav-info-panel"') !== false
+        && strpos($cleanHtml, 'Entenda o cálculo') !== false,
+        'long interpretation guidance is kept in a collapsed information control');
+    observedViewCheck(substr_count($cleanHtml, 'class="gav-popover-info"')
+        === 3 * count($reports['observed90']['departments']),
+        'each department metric exposes its explanation through an information button');
+    observedViewCheck(strpos($cleanHtml, 'class="gav-chart-info"') !== false
+        && strpos($cleanHtml, 'class="gav-compact-info gav-processing-info gav-no-print"') !== false,
+        'chart guidance and technical processing details are collapsed by default');
+
     foreach ($reports as $case => $report) {
         $expectedHostCharts = 0;
         $html = $renderer->render($report, true, false);

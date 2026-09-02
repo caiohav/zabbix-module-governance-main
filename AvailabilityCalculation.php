@@ -605,7 +605,7 @@ final class AvailabilityCalculation {
         $state['report']['rows'] = $state['progress']['rows'];
         $method = empty($state['report']['has_sla']) ? 'checkpointed-items'
             : (empty($state['report']['has_items']) ? 'checkpointed-sla' : 'checkpointed-items-and-sla');
-        $state['report']['processing'] = ['method' => $method, 'version' => '1.13.1',
+        $state['report']['processing'] = ['method' => $method, 'version' => '1.13.2',
             'data_policy' => $state['report']['data_policy'] ?? 'strict',
             'started_at' => $state['started_at'], 'completed_at' => time(),
             'elapsed_seconds' => max(0, time() - $state['started_at']), 'scope_frozen_at' => $state['scope_frozen_at'],
