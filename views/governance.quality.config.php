@@ -5,6 +5,7 @@
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
 $this->addCssFile($moduleWebPath . 'css/governance.css?v=1.7.0');
 $this->addCssFile($moduleWebPath . 'css/quality-pages.css?v=1.13.2');
+$this->addCssFile($moduleWebPath . 'css/native-layout.css?v=1.17.0');
 $this->includeJsFile('governance.quality.config.js.php');
 
 $pt = $data['is_pt'];
@@ -31,7 +32,7 @@ ob_start();
     <?php endif ?>
     <details class="gqp-help"><summary><?= $t('Como configurar suas métricas', 'How to configure your metrics') ?></summary>
         <ul>
-            <li><?= $t('Filtros do card: tag e grupo são combinados com E. A regra é avaliada somente nesses hosts; escopos vazios não entram no índice. Escolha Não conformes para exibir o percentual de pendências.', 'Card filters: tag and group are combined with AND. The rule is evaluated only on those hosts; empty scopes do not enter the score. Choose Non-compliant to display the percentage of issues.') ?></li>
+            <li><?= $t('Selecione os hosts na tabela de condições usando Todas (E) ou Qualquer (OU). Depois escolha o que medir nesses hosts. O botão Testar usa o rascunho sem salvar e mostra até 50 hosts; o total considera todos os selecionados.', 'Select hosts in the conditions table using All (AND) or Any (OR). Then choose what to measure in those hosts. Test uses the unsaved draft and shows up to 50 hosts; the total includes all selected hosts.') ?></li>
             <li><?= $t('Use as abas para separar os assuntos. Renomear uma página mantém seus cards e seu endereço; trocar de aba preserva as alterações ainda não salvas.', 'Use tabs to separate topics. Renaming a page keeps its cards and address; switching tabs preserves unsaved edits.') ?></li>
             <li><?= $t('Tags: informe nomes ou aliases separados por vírgula. Sem valores aceitos, qualquer valor não vazio é considerado conforme.', 'Tags: enter names or aliases separated by commas. Without accepted values, any non-empty value is considered compliant.') ?></li>
             <li><?= $t('Grupos: um nome de grupo pai inclui seus subgrupos. Exemplo: Equipes inclui Equipes/Banco de Dados. Um ID seleciona apenas o grupo exato.', 'Groups: a parent group name includes its subgroups. For example, Teams includes Teams/Database. An ID selects only the exact group.') ?></li>

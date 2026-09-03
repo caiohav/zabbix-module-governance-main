@@ -30,6 +30,10 @@ final class QualityCalculation {
         $cards = [];
         foreach ($page['cards'] as $card) {
             $card += GovernanceConfig::crossFilters($card);
+            $card['selection'] = QualityConditions::fromCard($card);
+            if ($card['selection']['mode'] === 'custom') {
+                $card['selection']['_program'] = QualityConditions::compile($card['selection']['formula'], count($card['selection']['conditions']));
+            }
             $card['names'] = GovernanceConfig::splitList($card['tag_names']);
             $card['values'] = GovernanceConfig::splitList($card['tag_values']);
             $card['groups'] = GovernanceConfig::splitList($card['group_names']);
@@ -40,7 +44,7 @@ final class QualityCalculation {
         }
         $groups = array_values(array_unique(array_map('strval', $groupids)));
         sort($groups, SORT_STRING);
-        return ['format' => 2, 'status' => 'running', 'page' => $pageId, 'revision' => $revision,
+        return ['format' => 3, 'status' => 'running', 'page' => $pageId, 'revision' => $revision,
             'started_at' => time(), 'finished_at' => null, 'groupids' => $groups,
             'cards' => $cards, 'hostids' => [], 'cursor' => 0, 'item_cursor' => 0, 'item_count' => 0,
             'progress' => ['stage' => 'scope', 'hosts_total' => null, 'hosts_done' => 0, 'calls' => 0, 'api_ms' => []],
@@ -52,7 +56,7 @@ final class QualityCalculation {
         if ($state['status'] !== 'running') { return $state; }
         $phase = $state['progress']['stage'];
         try {
-            if (($state['format'] ?? 0) !== 2) {
+            if (($state['format'] ?? 0) !== 3) {
                 throw new QualityScopeException('Module updated. Reload the page and start a new analysis / Módulo atualizado. Recarregue a página e inicie uma nova análise.');
             }
             switch ($phase) {
@@ -141,8 +145,9 @@ final class QualityCalculation {
         if (in_array('tag', $types, true) || array_filter(array_column($state['cards'], 'scope_tag_name'))) { $options['selectTags'] = ['tag', 'value']; }
         if (in_array('inventory', $types, true)) { $options['selectInventory'] = array_values(array_unique(array_merge(['os', 'serialno_a', 'location', 'type', 'software'], array_filter(array_column($state['cards'], 'inventory_field'))))); }
         if (in_array('templates', $types, true)) { $options['selectParentTemplates'] = 'count'; }
-        if (array_filter(array_column($state['cards'], 'template_names'))) { $options['selectParentTemplates'] = ['templateid', 'host', 'name']; }
+        if (array_filter(array_column($state['cards'], 'template_names'), static function($v) { return $v !== ''; })) { $options['selectParentTemplates'] = ['templateid', 'host', 'name']; }
         if (in_array('hostgroups', $types, true) || array_filter(array_column($state['cards'], 'scope_group_names'))) { $options['selectGroups'] = ['groupid', 'name']; }
+        $options = QualityConditions::addSelects($options, $state['cards']);
         $rows = $this->query($state, 'Host', $options);
         $index = [];
         foreach ($rows as $host) {
@@ -155,14 +160,23 @@ final class QualityCalculation {
         foreach ($ids as $id) {
             if (!isset($index[$id]) || (int) $index[$id]['status'] !== HOST_STATUS_MONITORED) { throw self::changedScope(); }
             $host = $index[$id];
+            foreach (['selectTags' => 'tags', 'selectGroups' => 'groups', 'selectInventory' => 'inventory', 'selectParentTemplates' => 'parentTemplates'] as $select => $property) {
+                if (isset($options[$select]) && is_array($options[$select]) && !is_array($host[$property] ?? null)) {
+                    throw new RuntimeException('Incomplete host relationships.');
+                }
+            }
             if ((int) ($host['maintenance_status'] ?? 0) === HOST_MAINTENANCE_STATUS_ON) { $state['overview']['maintenance']++; }
             $availability = array_map('intval', array_column($host['interfaces'] ?? [], 'available'));
             if (in_array(INTERFACE_AVAILABLE_FALSE, $availability, true)) { $state['overview']['unavailable']++; }
             elseif (in_array(INTERFACE_AVAILABLE_TRUE, $availability, true)) { $state['overview']['available']++; }
             foreach ($state['cards'] as &$card) {
-                if (!self::inScope($host, $card)) { continue; }
+                if (!QualityConditions::matches($host, $card['selection'])) { continue; }
                 $card['total']++;
-                if (self::compliant($host, $card)) { $card['valid']++; }
+                $compliant = self::compliant($host, $card);
+                if (!empty($state['preview']) && count($state['preview_hosts']) < 50) {
+                    $state['preview_hosts'][] = ['hostid' => $id, 'name' => $host['name'], 'compliant' => $compliant];
+                }
+                if ($compliant) { $card['valid']++; }
                 elseif (count($card['examples']) < 10) { $card['examples'][] = ['hostid' => $id, 'name' => $host['name']]; }
             }
             unset($card);
@@ -190,6 +204,13 @@ final class QualityCalculation {
             'metrics' => ['high_problems' => ['status' => 'pending', 'value' => null],
                 'unsupported_items' => ['status' => 'pending', 'value' => null]]];
         unset($state['cards']);
+        if (!empty($state['preview'])) {
+            $state['result']['preview_hosts'] = $state['preview_hosts'];
+            $state['result']['sample_limit'] = 50;
+            unset($state['preview_hosts']);
+            $this->finish($state);
+            return;
+        }
         $state['progress']['stage'] = 'problems';
         if (!$total) {
             foreach ($state['result']['metrics'] as &$metric) { $metric = ['status' => 'complete', 'value' => 0]; }
@@ -268,22 +289,6 @@ final class QualityCalculation {
                 return false;
         }
         return false;
-    }
-
-    private static function inScope(array $host, array $card): bool {
-        if ($card['scope_tag_name'] !== '') {
-            $name = mb_strtolower($card['scope_tag_name'], 'UTF-8');
-            $value = mb_strtolower($card['scope_tag_value'], 'UTF-8');
-            $found = false;
-            foreach ($host['tags'] ?? [] as $tag) {
-                if (mb_strtolower(trim($tag['tag']), 'UTF-8') === $name
-                        && ($value === '' || mb_strtolower(trim($tag['value']), 'UTF-8') === $value)) { $found = true; break; }
-            }
-            if (!$found) { return false; }
-        }
-        $groups = GovernanceConfig::splitList($card['scope_group_names']);
-        return !$groups || self::compliant($host, ['type' => 'hostgroups', 'groups' => $groups,
-            'group_include_subgroups' => $card['scope_include_subgroups']]);
     }
 
     public static function projection(array $state): array {

@@ -4,6 +4,8 @@ namespace Modules\Governance;
 
 use InvalidArgumentException;
 
+require_once __DIR__ . '/QualityConditions.php';
+
 final class GovernanceConfig {
 
     public const MAX_QUALITY_PAGES = 12;
@@ -203,6 +205,7 @@ final class GovernanceConfig {
 
     public static function crossFilters(array $card): array {
         $result = [];
+        if (array_key_exists('selection', $card)) { $result['selection'] = QualityConditions::validate($card['selection']); }
         foreach (['scope_tag_name', 'scope_tag_value', 'scope_group_names', 'template_names'] as $key) {
             $result[$key] = self::qualityText($card[$key] ?? '', 255, true);
         }

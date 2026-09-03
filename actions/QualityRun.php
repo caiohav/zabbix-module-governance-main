@@ -9,6 +9,8 @@ use CWebUser;
 use Modules\Governance\QualityCalculation;
 use Modules\Governance\QualityJobException;
 use Modules\Governance\QualityJobStore;
+use Modules\Governance\GovernanceConfig;
+use Modules\Governance\QualityCatalog;
 
 /** Native Zabbix SID validation remains enabled for every authenticated POST. */
 class QualityRun extends CController {
@@ -16,12 +18,20 @@ class QualityRun extends CController {
     protected function checkInput(): bool {
         $valid = ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $this->validateInput([
             'operation' => 'required|string', 'page' => 'string', 'revision' => 'string',
-            'groupids' => 'array_db hstgrp.groupid', 'request_id' => 'string', 'job' => 'string', 'sequence' => 'int32'
+            'groupids' => 'array_db hstgrp.groupid', 'request_id' => 'string', 'job' => 'string', 'sequence' => 'int32', 'card_json' => 'string',
+            'lookup_type' => 'string', 'query' => 'string'
         ]);
         if ($valid) {
             $operation = $this->getInput('operation');
-            $valid = in_array($operation, ['start', 'step', 'status', 'cancel'], true);
-            if ($operation === 'start') {
+            $valid = in_array($operation, ['lookup', 'start', 'preview_start', 'step', 'status', 'cancel'], true);
+            if ($operation === 'lookup') {
+                $valid = $valid && QualityCatalog::valid($this->getInput('lookup_type', ''), $this->getInput('query', ''));
+            }
+            elseif ($operation === 'preview_start') {
+                $valid = $valid && preg_match('/^[a-f0-9]{64}$/D', $this->getInput('request_id', ''))
+                    && strlen($this->getInput('card_json', '')) <= 20000 && $this->getInput('card_json', '') !== '';
+            }
+            elseif ($operation === 'start') {
                 $valid = $valid && preg_match('/^[a-f0-9]{64}$/D', $this->getInput('request_id', ''))
                     && preg_match('/^[a-f0-9]{64}$/D', $this->getInput('revision', ''))
                     && strlen($this->getInput('page', '')) <= 100 && count($this->getInput('groupids', [])) <= 1000;
@@ -41,8 +51,24 @@ class QualityRun extends CController {
         $operation = $this->getInput('operation');
         $id = $this->getInput('job', '');
         try {
+            if ($operation === 'lookup') {
+                $this->respond(QualityCatalog::search($this->getInput('lookup_type'), $this->getInput('query'), function($service, $options) { return $this->catalogGet($service, $options); }));
+                return;
+            }
             $store = $this->jobStore();
-            if ($operation === 'start') {
+            if ($operation === 'preview_start') {
+                $card = json_decode($this->getInput('card_json'), true, 32);
+                $pages = GovernanceConfig::validateQualityPages([['id' => 'preview', 'name' => 'Preview', 'cards' => [$card]]]);
+                $config = ['quality_pages' => $pages];
+                $request = $this->getInput('request_id');
+                $id = hash('sha256', $owner . ':' . $request);
+                $job = $store->create($owner, $request, static function() use ($config): array {
+                    $state = QualityCalculation::create($config, 'preview', [], GovernanceConfig::qualityRevision($config));
+                    $state['preview'] = true; $state['preview_hosts'] = [];
+                    return $state;
+                });
+            }
+            elseif ($operation === 'start') {
                 $request = $this->getInput('request_id');
                 $id = hash('sha256', $owner . ':' . $request);
                 $page = $this->getInput('page', ''); $groups = $this->getInput('groupids', []);
@@ -62,6 +88,9 @@ class QualityRun extends CController {
             else { $job = $store->read($id, $owner); }
             $this->respond(QualityJobStore::projection($job));
         }
+        catch (\InvalidArgumentException $e) {
+            $this->respond(['status' => 'failed', 'error' => 'Review the condition and indicator fields / Revise os campos das condições e do indicador.']);
+        }
         catch (QualityJobException $e) {
             $busy = $e->getCode() === QualityJobStore::BUSY;
             $this->respond(['job' => $id, 'status' => $busy ? 'busy' : 'failed', 'error' => $e->getMessage()]);
@@ -72,6 +101,7 @@ class QualityRun extends CController {
         }
     }
     protected function jobStore(): QualityJobStore { return new QualityJobStore(); }
+    protected function catalogGet(string $service, array $options) { return API::$service()->get($options); }
     private function respond(array $data): void {
         $json = json_encode($data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
         $this->setResponse(new CControllerResponseData(['main_block' => $json === false

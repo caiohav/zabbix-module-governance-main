@@ -8,6 +8,15 @@ $config['quality_pages'][0]['cards'] = [];
 for ($i = 0; $i < 30; $i++) {
     $card = $base[$i % 5]; $card['id'] .= '-' . $i; $config['quality_pages'][0]['cards'][] = $card;
 }
+if (in_array('--custom', $argv, true)) {
+    foreach ($config['quality_pages'][0]['cards'] as &$card) {
+        $card['selection'] = ['version'=>1,'mode'=>'custom','formula'=>'(A or not A) and B','conditions'=>[
+            ['type'=>'tag','operator'=>'exists','name'=>'Departamento'],
+            ['type'=>'group','operator'=>'not_equals','value'=>'Missing group']
+        ]];
+    }
+    unset($card);
+}
 $total = 12001; $calls = 0;
 $engine = new Calculation(static function($service, $options) use ($total, &$calls) {
     $calls++;

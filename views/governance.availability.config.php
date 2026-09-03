@@ -2,6 +2,7 @@
 $base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
 $this->addCssFile($base . 'css/governance.css?v=1.13.2');
 $this->addCssFile($base . 'css/availability.css?v=1.13.2');
+$this->addCssFile($base . 'css/native-layout.css?v=1.17.0');
 $this->includeJsFile('governance.availability.config.js.php');
 $pt = $data['is_pt'];
 $t = static function($ptText, $enText) use ($pt) { return $pt ? $ptText : $enText; };
@@ -19,9 +20,11 @@ ob_start();
     <section class="gav-report-settings">
         <label class="gav-field gav-timezone"><span><?= $t('Fuso horário do relatório', 'Report time zone') ?></span>
             <input type="text" id="gav-timezone" required maxlength="80" list="gav-timezones" value="<?= $e($data['config']['timezone']) ?>" aria-describedby="gav-timezone-help">
-            <small id="gav-timezone-help"><?= $t('Define os limites mensais da fonte por itens. Com SLA, alinhe este fuso ao do SLA para uma média departamental comparável.', 'Defines monthly boundaries for the item source. With SLA, align this time zone with the SLA for a comparable departmental mean.') ?></small>
         </label>
-        <div class="gav-setting-context"><strong><?= $t('Calendário por fonte', 'Calendar by source') ?></strong><p class="gav-muted"><?= $t('Itens usam calendário 24×7; SLA segue seu próprio calendário, fuso e exclusões. Os pesos do módulo se aplicam entre tecnologias do mesmo departamento.', 'Items use a 24×7 calendar; SLA follows its own schedule, time zone and exclusions. Module weights apply to technologies in the same department.') ?></p></div>
+        <details class="gav-setting-help"><summary><?= $t('Sobre o calendário e o fuso', 'About schedule and time zone') ?></summary>
+            <p id="gav-timezone-help"><?= $t('Define os limites mensais da fonte por itens. Com SLA, alinhe este fuso ao do SLA para uma média departamental comparável.', 'Defines monthly boundaries for the item source. With SLA, align this time zone with the SLA for a comparable departmental mean.') ?></p>
+            <p><?= $t('Itens usam calendário 24×7; SLA segue seu próprio calendário, fuso e exclusões. Os pesos do módulo se aplicam entre tecnologias do mesmo departamento.', 'Items use a 24×7 calendar; SLA follows its own schedule, time zone and exclusions. Module weights apply to technologies in the same department.') ?></p>
+        </details>
     </section>
     <section class="gav-report-settings">
         <label class="gav-field gav-timezone"><span><?= $t('Tratamento de dados ausentes (itens)', 'Missing data policy (items)') ?></span>
@@ -30,12 +33,12 @@ ob_start();
                 <option value="strict"<?= $dataPolicy === 'strict' ? ' selected' : '' ?>><?= $t('Exigir cobertura completa', 'Require complete coverage') ?></option>
                 <option value="observed"<?= $dataPolicy === 'observed' ? ' selected' : '' ?>><?= $t('Calcular sobre dados disponíveis', 'Calculate from available data') ?></option>
             </select>
-            <small id="gav-data-policy-scope"><?= $t('Política global apenas para a fonte por itens. O SLA nativo não é alterado.', 'Global policy for the item source only. Native SLA is not changed.') ?></small>
         </label>
-        <div class="gav-setting-context"><strong><?= $t('Critério explícito, cobertura visível', 'Explicit criteria, visible coverage') ?></strong>
+        <details class="gav-setting-help"><summary><?= $t('Sobre o tratamento de dados ausentes', 'About missing data handling') ?></summary>
+            <p id="gav-data-policy-scope"><?= $t('Política global apenas para a fonte por itens. O SLA nativo não é alterado.', 'Global policy for the item source only. Native SLA is not changed.') ?></p>
             <p class="gav-muted" id="gav-data-policy-help"><?= $t('Exigir cobertura completa mantém o critério atual: lacunas deixam o resultado incompleto. Calcular sobre dados disponíveis exclui períodos e hosts sem evidência de estado; a cobertura permanece visível.', 'Require complete coverage preserves the current criteria: gaps leave the result incomplete. Calculate from available data excludes periods and hosts without state evidence; coverage remains visible.') ?></p>
             <p class="gav-muted"><?= $t('Todas as verificações continuam obrigatórias em cada host. Chaves ausentes ou validade não resolvida ainda exigem atenção. Ausência de dados não vira disponibilidade nem queda.', 'Every check remains required on each host. Missing keys or unresolved validity still require attention. Missing data is not treated as availability or downtime.') ?></p>
-        </div>
+        </details>
     </section>
     <datalist id="gav-timezones"><option value="America/Cuiaba"></option><option value="America/Sao_Paulo"></option><option value="America/Manaus"></option><option value="UTC"></option><option value="Europe/Lisbon"></option></datalist>
     <details class="gav-help"><summary><?= $t('Como o cálculo funciona e quais são os limites', 'How the calculation works and its limits') ?></summary>

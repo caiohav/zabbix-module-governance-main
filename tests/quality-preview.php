@@ -16,21 +16,41 @@ if ($path === '/native.css') {
     exit;
 }
 if (!in_array($path, ['/', '/zabbix.php'], true)) { http_response_code(404); exit; }
-require __DIR__ . '/quality-render-fixture.php';
+require_once __DIR__ . '/quality-fixture.php';
 use Modules\Governance\QualityCalculation as Calculation;
 use Modules\Governance\QualityJobStore as Store;
 use Modules\Governance\GovernanceConfig as Config;
 $scenario = $_GET['preview_case'] ?? 'normal';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
-    if (($_POST['sid'] ?? '') !== 'local-fixture-only') { http_response_code(403); exit; }
+    if (!in_array($_POST['sid'] ?? '', ['local-fixture-only', 'preview-only'], true)) { http_response_code(403); exit; }
+    if (($_POST['operation'] ?? '') === 'lookup') {
+        require_once __DIR__ . '/../QualityCatalog.php';
+        echo json_encode(Modules\Governance\QualityCatalog::search($_POST['lookup_type'], $_POST['query'], static function($service) {
+            return $service === 'HostGroup' ? [['groupid'=>'10','name'=>'Equipes']] : [['templateid'=>'10001','name'=>'Linux by Zabbix agent','host'=>'Linux by Zabbix agent']];
+        })); exit;
+    }
     $fixture = new QualityFixture($scenario === 'empty' ? 0 : 501);
     $fixture->delay = $scenario === 'slow' ? 800000 : 80000;
     $fixture->fail = $scenario === 'failure' ? 'Item' : '';
+    foreach ($fixture->rows as &$row) {
+        if (isset($row['parentTemplates']) && !is_array($row['parentTemplates'])) {
+            $row['parentTemplates'] = $row['parentTemplates'] === '1' ? [['templateid' => '10001', 'host' => 'Linux by Zabbix agent', 'name' => 'Linux by Zabbix agent']] : [];
+        }
+    }
+    unset($row);
     $engine = new Calculation([$fixture, 'get']);
     $store = new Store(sys_get_temp_dir() . '/governance-quality-preview-' . substr(hash('sha256', __DIR__), 0, 16));
     try {
-        if ($_POST['operation'] === 'start') {
+        if ($_POST['operation'] === 'preview_start') {
+            $pages = Config::validateQualityPages([['id'=>'preview','name'=>'Preview','cards'=>[json_decode($_POST['card_json'], true)]]]);
+            $job = $store->create('1', $_POST['request_id'], static function() use ($pages) {
+                $config=['quality_pages'=>$pages];
+                $state=Calculation::create($config,'preview',[],Config::qualityRevision($config));
+                $state['preview']=true; $state['preview_hosts']=[]; return $state;
+            });
+        }
+        elseif ($_POST['operation'] === 'start') {
             $job = $store->create('1', $_POST['request_id'], static function() {
                 return Calculation::create(fixtureConfig(), $_POST['page'], $_POST['groupids'] ?? [], $_POST['revision']);
             });
@@ -38,12 +58,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         elseif ($_POST['operation'] === 'step') {
             $job = $store->step($_POST['job'], '1', (int) $_POST['sequence'], [$engine, 'advance']);
         }
+        elseif ($_POST['operation'] === 'cancel') { $job=$store->cancel($_POST['job'],'1',(int)$_POST['sequence']); }
         else { $job = $store->read($_POST['job'], '1'); }
         echo json_encode(Store::projection($job));
     }
     catch (Throwable $e) { echo json_encode(['status' => 'failed', 'error' => $e->getMessage()]); }
     exit;
 }
+require __DIR__ . '/quality-render-fixture.php';
 $pt = !isset($_GET['en']); $dark = !isset($_GET['light']);
 $data = qualityRenderData($pt, $dark, $_GET['page'] ?? 'main');
 $renderer = new QualityRenderer(); $html = $renderer->render($data);

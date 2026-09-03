@@ -3,6 +3,120 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Novidades 1.17.0 — Busca de grupos e templates
+
+Nos filtros de seleção e nas métricas, o botão **Selecionar…** abre uma busca
+por parte do nome. Digite pelo menos dois caracteres e clique **Buscar**; não
+há consultas automáticas ao abrir a janela ou digitar. Até 20 resultados são
+mostrados; refine o texto se houver mais. Templates também são buscados pelo
+nome técnico. A janela acompanha o tema e o idioma do usuário.
+
+A seleção adiciona o nome à lista existente, sem duplicá-lo. Grupos continuam
+respeitando a opção de subgrupos. IDs digitados manualmente selecionam o grupo
+exato. Nomes contendo vírgula não podem ser inseridos nessa lista: nesses casos,
+use o ID manualmente, observando que ele não expande subgrupos. Nomes salvos não
+acompanham renomeações no Zabbix; revise a regra se renomear o objeto.
+
+A consulta exige Super Admin e SID nativo, não salva configurações e não calcula
+hosts. Usa uma chamada limitada às APIs [hostgroup.get](https://www.zabbix.com/documentation/6.0/en/manual/api/reference/hostgroup/get)
+ou [template.get](https://www.zabbix.com/documentation/6.0/en/manual/api/reference/template/get),
+com apenas os campos do catálogo. O cálculo de disponibilidade não foi alterado.
+
+## Novidades 1.16.0 — Expressões personalizadas na seleção de hosts
+
+Além de Todas (E) e Qualquer (OU), o tipo de cálculo agora oferece
+**Expressão personalizada**. Exemplo:
+
+- A: grupo de hosts = `DBD/PostgreSQL`.
+- B: grupo de hosts = `DBD/MSSQL`.
+- C: tag `Departamento` = `DBD`.
+- Expressão: `(A or B) and C`.
+
+Depois, em **Medir o indicador**, escolha o template ou campo que deseja
+verificar na população selecionada. A prévia usa a mesma expressão do painel.
+
+Use os operadores `and`, `or`, `not` em inglês, mesmo na interface portuguesa,
+e parênteses. Precedência: `not`, depois `and`, depois `or`. Todos os rótulos
+existentes devem aparecer na expressão; referências inexistentes são rejeitadas.
+Maiúsculas/minúsculas são aceitas. Limites: 20 condições, 512 bytes de expressão
+e 256 tokens. Não são aceitos scripts, chamadas de função ou operadores de código.
+
+Adicionar ou remover uma linha limpa a expressão, inclusive seu rascunho ao
+trocar de modo, para impedir que a renumeração dos rótulos altere silenciosamente
+a seleção. A expressão precisa ser revisada antes de salvar ou testar novamente.
+As configurações anteriores continuam válidas sem migração persistida automática.
+
+O interpretador é limitado à lógica booleana e compila uma vez por indicador,
+antes de percorrer os hosts; não executa código nem faz novas consultas à API.
+Testes incluem tabelas-verdade, precedência, sintaxe inválida, referência ausente,
+equivalência prévia/painel, navegador local e escala com
+`php tests/quality-scale.php --custom`.
+
+## Novidades 1.15.1 — Refinamento visual e testes em navegador
+
+- Combinação das condições visível: `A E B` / `A OU B`.
+- Botão Cancelar prévia; resultados atrasados não reaparecem após cancelar.
+- Respostas incompletas, totais inválidos e hosts duplicados são rejeitados,
+  sem exibir falsamente uma seleção vazia bem-sucedida.
+- Campos da configuração de Disponibilidade alinhados; explicações de fuso e
+  dados ausentes ficam recolhidas, sem mudanças no cálculo ou nas regras salvas.
+- Conferência local em navegador real, com dados fictícios e estilos Zabbix 6:
+  português/inglês, claro/escuro, 1440 e 700 px. Sem erros JavaScript ou overflow
+  horizontal da página. Prévia em etapas confirmou 251 hosts e amostra de 50.
+
+Teste de navegador opcional: iniciar `php -S 127.0.0.1:8771 tests/browser-preview.php`
+e executar `node tests/editor-browser.cjs` com Playwright e Microsoft Edge disponíveis.
+O teste usa perfil isolado/headless e bloqueia requisições fora de 127.0.0.1.
+Não acessa a sessão nem o servidor real. Os CSS nativos usados pelo harness vêm
+do diretório temporário `governance-zabbix6-css` (arquivos blue-theme.css/dark-theme.css).
+A conferência na instalação real permanece pendente.
+
+## Novidades 1.15.0 — Condições de seleção e prévia sob demanda
+
+O editor de Qualidade separa **1. Selecionar hosts** e **2. Medir o indicador**.
+A tabela de condições usa linhas A–T, com tipo, operador, valor e Remover.
+Adicione até 20 condições por indicador e combine com Todas (E) ou Qualquer (OU).
+Essa organização é inspirada no [formulário de ações do Zabbix 6.0](https://www.zabbix.com/documentation/6.0/en/manual/config/notifications/action).
+Não é uma reprodução integral: ainda não oferece expressão livre nem modo misto E/OU.
+
+Exemplo: para contar hosts do departamento DBD no grupo DBD com o template Linux:
+
+1. Seleção: Todas (E).
+2. Condição A: Tag, É igual a, nome `Departamento`, valor `DBD`.
+3. Condição B: Grupo de hosts, Possui / pertence, valor `DBD`; incluir subgrupos se desejado.
+4. Indicador: Template vinculado, template `Linux` (substituir pelo nome exato ou ID real).
+5. Percentual exibido: Em conformidade. Para medir os que faltam, escolher Não conformes.
+6. Clicar em **Testar seleção e indicador** para conferir antes de salvar.
+
+Condições disponíveis: tag igual/diferente/existente/ausente; grupo ou template
+presente/ausente; campo de inventário preenchido/vazio. “Tag diferente” significa
+ausência do par nome+valor informado, incluindo hosts sem essa tag. Para exigir
+que a tag exista e tenha outro valor, combine Existe E Não é igual a.
+Listas de grupos/templates na mesma linha usam OU; a negação exclui toda a lista.
+Comparações ignoram caixa e espaços nas extremidades. Templates/tags são diretos,
+sem herança. As regras anteriores são convertidas ao abrir o editor, preservando
+seu significado, e só são persistidas quando o usuário salva.
+
+A prévia usa o rascunho sem salvar e não consulta nada automaticamente. Ela
+executa a mesma seleção e medição do painel em lotes de 100 hosts, sem consultar
+os contadores operacionais. Exibe total exato, atendem/não atendem e amostra de até
+50 hosts. O limite de segurança é 50.000 hosts cadastrados consultados, antes da
+seleção; não há truncamento silencioso. A prévia usa todos os hosts monitorados
+acessíveis, **sem o filtro global de grupos aplicado no painel**. Com esse filtro
+vazio, o resultado é equivalente ao painel no mesmo estado dos hosts.
+
+Editar, remover ou trocar de página invalida a prévia; respostas atrasadas não
+reaparecem. Consultas autenticadas mantêm o SID nativo e permissão de superadmin.
+Os checkpoints privados têm limites e expiração; nenhum dado de configuração
+é salvo pela prévia. A lista é uma amostra, não uma exportação de todos os hosts.
+
+Formulários e cabeçalhos usam apresentação mais compacta e uma camada visual
+comum à Qualidade e Disponibilidade. Os cálculos da Disponibilidade não mudaram.
+Não houve validação visual na instância autenticada nesta entrega.
+
+Testes: `php tests/quality-conditions.php`, `php tests/quality-preview-actions.php`
+e `node tests/quality-config.js`, além das suítes de regressão existentes.
+
 ## Novidades 1.14.0 — Filtros cruzados na Qualidade
 
 Cada card pode restringir os hosts avaliados por tag (nome e valor exatos) e/ou
