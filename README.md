@@ -3,6 +3,12 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Novidades 1.13.3 — Gráficos de barras e escala fixa
+
+- Disponibilidade e cobertura diárias passam a usar barras, inclusive por host.
+- Todos os eixos percentuais ficam fixos em 0–100%, também no comparativo mensal.
+- A meta permanece como referência; dados ausentes continuam nulos e os cálculos não mudam.
+
 ## Novidades 1.13.2 — Painel de disponibilidade mais limpo
 
 - Remove o cabeçalho interno redundante e concentra configuração, cálculo e exportação em uma única barra.

@@ -431,21 +431,15 @@
             const style = getComputedStyle(root);
             const muted = style.getPropertyValue('--gov-muted').trim();
             if (entry.kind === 'monthly') {
-                const monthlyScores = dept.technologies.map(tech => metric(tech).score);
-                const moduleTargets = dept.technologies.map(tech => Number(tech.target));
                 const nativeSlos = dept.technologies.map(tech => (tech.source || 'items') === 'sla'
                     && Number.isFinite(Number(tech.native_sla?.slo)) ? Number(tech.native_sla.slo) : null);
-                const scaleValues = [...monthlyScores, ...moduleTargets, ...nativeSlos]
-                    .filter(value => value !== null && Number.isFinite(Number(value))).map(Number);
-                const scaleMinimum = scaleValues.length ? Math.min(...scaleValues) : 0;
-                const monthlyFloor = Math.max(0, Math.floor((scaleMinimum - Math.max(.1, (100 - scaleMinimum) * .15)) * 10) / 10);
                 entry.chart.setOption({backgroundColor: 'transparent', animation: false, color: ['#60aa87', '#d99d40', '#9c86d8'],
                     textStyle: {fontFamily: style.fontFamily},
                     tooltip: {trigger: 'axis', renderMode: 'richText', backgroundColor: style.getPropertyValue('--gav-panel').trim(),
                         textStyle: {color: style.color}, valueFormatter: value => percent(Array.isArray(value) ? value[0] : value)},
                     legend: {top: 0, textStyle: {color: muted}},
                     grid: {left: 16, right: 78, top: 38, bottom: 22, containLabel: true},
-                    xAxis: {type: 'value', min: monthlyFloor, max: 100, axisLabel: {color: muted, formatter: '{value}%'},
+                    xAxis: {type: 'value', min: 0, max: 100, interval: 20, axisLabel: {color: muted, formatter: '{value}%'},
                         splitLine: {lineStyle: {color: 'rgba(128,128,128,.15)'}}},
                     yAxis: {type: 'category', inverse: true, data: dept.technologies.map(tech => tech.name),
                         axisLabel: {color: muted, width: 180, overflow: 'truncate', formatter: (name, index) =>
@@ -466,8 +460,6 @@
             const target = Number(entry.kind === 'host' ? technology.target
                 : selected < 0 ? dept.target : dept.technologies[selected].target);
             const values = data.map(dailyMetric);
-            const scores = values.map(value => value.score).filter(value => value !== null && Number.isFinite(Number(value)));
-            const scoreFloor = Math.max(0, Math.floor((Math.min(target, ...(scores.length ? scores : [target])) - .1) * 10) / 10);
             if (entry.context) entry.context.textContent = t(
                 'Cada ponto reaplica o critério do indicador ao respectivo dia; cobertura usa eixo separado e lacunas não viram disponibilidade. A média simples dos dias pode diferir do indicador mensal.',
                 'Each point reapplies the indicator criterion to that day; coverage uses a separate axis and gaps never become availability. A simple mean of the days may differ from the monthly indicator.');
@@ -490,17 +482,16 @@
                     axisLabel: {show: false}, axisTick: {show: false}},
                 {type: 'category', data: data.map(day => day.day), gridIndex: 1, axisLabel: {color: muted,
                     formatter: value => String(value).length >= 10 ? String(value).slice(8) : String(value)}}],
-                yAxis: [{type: 'value', name: t('Disponibilidade', 'Availability'), min: scoreFloor, max: 100, gridIndex: 0,
+                yAxis: [{type: 'value', name: t('Disponibilidade', 'Availability'), min: 0, max: 100, interval: 20, gridIndex: 0,
                     axisLabel: {color: muted, formatter: '{value}%'}, nameTextStyle: {color: muted}, splitLine: {lineStyle: {color: 'rgba(128,128,128,.15)'}}},
                 {type: 'value', min: 0, max: 100, interval: 100, gridIndex: 1,
                     axisLabel: {color: muted, formatter: '{value}%'}, nameTextStyle: {color: muted}, splitLine: {show: false}}],
-                series: [{name: t('Disponibilidade', 'Availability'), type: 'line', showSymbol: false, connectNulls: false,
-                    data: values.map(value => value.score), lineStyle: {width: 2}},
+                series: [{name: t('Disponibilidade', 'Availability'), type: 'bar', barMaxWidth: 23,
+                    data: values.map(value => value.score)},
                 {name: t('Meta', 'Target'), type: 'line', showSymbol: false, silent: true,
                     data: data.map(() => target), lineStyle: {width: 1, type: 'dotted'}},
-                {name: t('Cobertura', 'Coverage'), type: 'line', xAxisIndex: 1, yAxisIndex: 1, showSymbol: false,
-                    connectNulls: false, data: values.map(value => value.coverage), lineStyle: {width: 1.5},
-                    areaStyle: {opacity: .12}}]
+                {name: t('Cobertura', 'Coverage'), type: 'bar', xAxisIndex: 1, yAxisIndex: 1, barMaxWidth: 23,
+                    data: values.map(value => value.coverage)}]
             }, true);
             entry.chart.resize();
         };
@@ -570,7 +561,7 @@
         exportButton.disabled = root.dataset.reportStale === '1';
         exportButton.addEventListener('click', () => {
             if (root.dataset.reportStale === '1') return;
-            const payload = {format: 'governance-availability-v3', module_version: '1.13.2',
+            const payload = {format: 'governance-availability-v3', module_version: '1.13.3',
                 assumptions: {aggregation: 'weighted mean only for matching periods, schedules and exclusions',
                     data_policy: observedPolicy ? 'observed' : 'strict',
                     items: {schedule: '24x7', membership: 'current', maintenance_excluded: false,

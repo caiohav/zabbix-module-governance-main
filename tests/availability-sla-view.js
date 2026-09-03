@@ -117,10 +117,8 @@ const tests = [
         assert.deepEqual(Array.from(option.series[2].data, row => Array.from(row)),
             report.departments[0].technologies.map((tech, index) => [tech.native_sla.slo, index]));
         assert.equal(option.series[2].name, 'SLO nativo'); assert.equal(option.series[2].symbol, 'diamond');
-        const scaleMinimum = Math.min(...report.departments[0].technologies.flatMap(tech =>
-            [tech.summary.score, tech.target, tech.native_sla.slo]));
-        const expectedFloor = Math.max(0, Math.floor((scaleMinimum - Math.max(.1, (100 - scaleMinimum) * .15)) * 10) / 10);
-        assert.equal(option.xAxis.min, expectedFloor); assert.equal(option.xAxis.max, 100);
+        assert.equal(option.xAxis.min, 0); assert.equal(option.xAxis.max, 100);
+        assert.equal(option.series[0].type, 'bar');
         assert.equal(option.series[0].label.formatter({value: 100}), '100%');
         assert.equal(option.series[0].label.formatter({value: 99.99999999999999}), '<100%');
         assert.equal(p.network, 0);
@@ -152,6 +150,9 @@ const tests = [
         assert.deepEqual(Array.from(daily.series[2].data), item.daily.map(day => day.coverage));
         assert.equal(daily.series[0].name, 'Disponibilidade'); assert.equal(daily.series[1].name, 'Meta');
         assert.equal(daily.series[2].name, 'Cobertura'); assert.equal(daily.series[2].yAxisIndex, 1);
+        assert.equal(daily.series[0].type, 'bar'); assert.equal(daily.series[2].type, 'bar');
+        assert.equal(daily.series[1].type, 'line', 'target remains a reference line');
+        assert.ok(daily.yAxis.every(axis => axis.min === 0 && axis.max === 100));
         const original = p.activeChart('daily');
         p.selections[0].value = '0'; p.selections[0].fire('change');
         assert.equal(original.disposed, true); assert.equal(p.activeChart('daily'), undefined);
@@ -201,7 +202,7 @@ const tests = [
             p.nodes['gav-export'].fire('click');
             assert.equal(p.blobs.length, 1); assert.equal(p.blobs[0].type, 'application/json');
             const payload = JSON.parse(await p.blobs[0].text());
-            assert.equal(payload.format, 'governance-availability-v3'); assert.equal(payload.module_version, '1.13.2');
+            assert.equal(payload.format, 'governance-availability-v3'); assert.equal(payload.module_version, '1.13.3');
             assert.equal(payload.assumptions.automatic_source_fallback, false);
             assert.equal(payload.assumptions.immutable_close, false);
             assert.equal(payload.assumptions.sla.daily_timeline_available, false);

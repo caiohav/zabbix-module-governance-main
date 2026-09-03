@@ -122,7 +122,7 @@ const tests = [
             presentation.nodes['gav-export'].fire('click');
             const payload = JSON.parse(await presentation.blobs[0].text());
             assert.equal(payload.format, 'governance-availability-v3');
-            assert.equal(payload.module_version, '1.13.2');
+            assert.equal(payload.module_version, '1.13.3');
             assert.equal(payload.assumptions.data_policy, 'observed');
             assert.match(payload.assumptions.items.unknown_policy, /ignore unknown intervals and hosts/);
             assert.equal(payload.assumptions.items.reported_score, 'observation.score');
@@ -174,6 +174,8 @@ const tests = [
         const firstNode = presentation.hosts[0]; firstNode.details.open = true; firstNode.details.fire('toggle');
         const firstChart = presentation.activeChart('host', 0, 0, 0), first = presentation.option('host', 0, 0, 0);
         assert.ok(firstChart);
+        assert.equal(first.series[0].type, 'bar'); assert.equal(first.series[2].type, 'bar');
+        assert.ok(first.yAxis.every(axis => axis.min === 0 && axis.max === 100));
         assert.deepEqual(Array.from(first.xAxis[0].data), technology.observation.daily.map(day => day.day));
         assert.deepEqual(dailySeries(first), {score: technology.hosts[0].daily.map(point => point[0]),
             target: technology.hosts[0].daily.map(() => technology.target),
@@ -186,6 +188,8 @@ const tests = [
         assert.equal(presentation.activeChart('host', 0, 0, 0), undefined);
         const secondChart = presentation.activeChart('host', 0, 0, 1), second = presentation.option('host', 0, 0, 1);
         assert.ok(secondChart); assert.ok(second.series[0].data.every(score => score === null));
+        assert.ok(second.yAxis.every(axis => axis.min === 0 && axis.max === 100),
+            'entirely unknown hosts still use the fixed percentage scale');
         assert.ok(second.series[2].data.every(coverage => coverage === 0));
         assert.match(firstNode.textContent, /Abra para carregar/);
 
