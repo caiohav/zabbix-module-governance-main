@@ -2,7 +2,7 @@
 $base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
 $this->addCssFile($base . 'css/governance.css?v=1.8.0');
 $this->addCssFile($base . 'css/quality-pages.css?v=1.13.2');
-$this->addCssFile($base . 'css/native-layout.css?v=1.17.0');
+$this->addCssFile($base . 'css/native-layout.css?v=1.18.0');
 $this->includeJsFile('governance.quality.view.js.php');
 $pt = $data['is_pt'];
 $t = static function($a, $b) use ($pt) { return $pt ? $a : $b; };

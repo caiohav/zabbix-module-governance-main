@@ -20,6 +20,7 @@
         const validDataPolicy = value => ['strict', 'observed'].includes(value);
         const input = (name, value, extra = '', type = 'text') => `<input type="${type}" data-field="${name}" value="${esc(value)}" ${extra}>`;
         const field = (label, control, classes = '', hint = '') => `<label class="gav-field ${classes}"><span>${label}</span>${control}${hint ? `<small>${hint}</small>` : ''}</label>`;
+        const help = (title, content) => `<details class="gav-editor-help"><summary>${title}</summary>${content}</details>`;
         const options = (values, selected) => Object.entries(values).map(([value, label]) => `<option value="${value}"${value === selected ? ' selected' : ''}>${esc(label)}</option>`).join('');
         const validNativeId = value => typeof value === 'string' && value.length > 0 && value.length <= 19
             && value[0] !== '0' && !/[^0-9]/.test(value)
@@ -50,18 +51,20 @@
         </div>`;
         const checkHtml = (check = {key: '', up: {op: 'eq', a: 1}, down: null, max_age: null}, legacyAge = null) => {
             const age = Object.prototype.hasOwnProperty.call(check, 'max_age') ? check.max_age : legacyAge;
-            return `<section class="gav-check">
-                <div class="gav-toolbar gav-check-heading"><h4>${t('Verificação por item', 'Item check')}</h4><button type="button" data-action="remove-check" class="btn-alt gav-remove">${t('Remover', 'Remove')}</button></div>
+            return `<details class="gav-check" ${check.key ? '' : 'open'}>
+                <summary><strong class="gav-check-caption"></strong><span class="gav-check-meta"></span></summary>
+                <div class="gav-check-content">
                 <div class="gav-check-source">
-                    ${field(t('Chave exata do item', 'Exact item key'), input('key', check.key, 'required maxlength="2048" placeholder="icmpping" spellcheck="false"'), '', t('Copie do host, mantendo as macros. Uma chave por verificação.', 'Copy from the host, keeping macros. One key per check.'))}
-                    ${field(t('Janela da evidência', 'Evidence window'), `<select data-field="age_mode">${options({auto: t('Automática (mínimo de 1 hora)', 'Automatic (one-hour minimum)'), hour: t('Uma hora exata', 'Exactly one hour'), manual: t('Manual (segundos)', 'Manual (seconds)')}, age === null ? 'auto' : (Number(age) === 3600 ? 'hour' : 'manual'))}</select>`, '', t('Por quanto tempo a última amostra representa o estado. Uma nova amostra substitui o estado imediatamente.', 'How long the latest sample represents the state. A new sample replaces the state immediately.'))}
+                    ${field(t('Chave exata do item', 'Exact item key'), input('key', check.key, 'required maxlength="2048" placeholder="icmpping" spellcheck="false"'))}
+                    ${field(t('Janela da evidência', 'Evidence window'), `<select data-field="age_mode">${options({auto: t('Automática (mínimo de 1 hora)', 'Automatic (one-hour minimum)'), hour: t('Uma hora exata', 'Exactly one hour'), manual: t('Manual (segundos)', 'Manual (seconds)')}, age === null ? 'auto' : (Number(age) === 3600 ? 'hour' : 'manual'))}</select>`)}
                     ${field(t('Segundos', 'Seconds'), input('max_age', age ?? 180, 'min="1" max="86400" step="1"', 'number'), 'gav-manual-age')}
                 </div>
-                <p class="gav-muted gav-validity-hint"></p>
+                ${help(t('Sobre a chave e a janela de evidência', 'About item keys and evidence windows'), `<p>${t('Copie a chave do host, mantendo as macros. Uma chave por verificação. Uma nova amostra substitui o estado imediatamente.', 'Copy the key from the host, keeping macros. One key per check. A new sample replaces the state immediately.')}</p><p class="gav-validity-hint"></p>`)}
                 <div class="gav-check-grid"><div><strong>${t('Disponível quando', 'Available when')}</strong>${rule('up', check.up)}</div>
                     <div>${field(t('Indisponível quando', 'Unavailable when'), `<select data-field="down_mode">${options({complement: t('Qualquer outro valor válido', 'Any other valid value'), explicit: t('Condição específica', 'Explicit condition')}, check.down ? 'explicit' : 'complement')}</select>`)}
                         <div class="gav-down-rule">${rule('down', check.down ?? {op: 'eq', a: 0})}</div></div></div>
-            </section>`;
+                <div class="gav-node-actions"><button type="button" data-action="remove-check" class="btn-link gav-remove">${t('Remover verificação', 'Remove check')}</button></div>
+                </div></details>`;
         };
         const technologyHtml = (tech = {name: '', weight: 1, target: 99.9, mode: 'any_down', groups: '', checks: []}, open = false) => `<details class="gav-technology" ${open ? 'open' : ''}>
             <summary><strong>${esc(tech.name || t('Nova tecnologia', 'New technology'))}</strong><span class="gav-summary-meta"></span></summary>
@@ -70,24 +73,26 @@
                 ${field(t('Peso', 'Weight'), input('weight', tech.weight, 'min="0.001" max="100000" step="any" required', 'number'), 'gav-span-3')}
                 ${field(t('Meta (%)', 'Target (%)'), input('target', tech.target, 'min="0" max="100" step="any" required', 'number'), 'gav-span-3')}
                 ${field(t('Fonte do cálculo', 'Calculation source'), `<select data-field="source">${options({items: t('Histórico de itens (24×7)', 'Item history (24×7)'), sla: t('SLA nativo mensal', 'Native monthly SLA')}, tech.source ?? 'items')}</select>`, 'gav-span-6')}
-                <p class="gav-muted gav-span-6">${t('O peso continua sendo aplicado neste módulo. A fonte escolhida não é substituída pela outra se faltar histórico ou SLA.', 'The weight still applies in this module. The selected source is not replaced by the other when history or SLA data is missing.')}</p>
             </div>
+            ${help(t('Sobre pesos e fontes de cálculo', 'About weights and calculation sources'), `<p>${t('A porcentagem no cabeçalho representa o peso configurado desta tecnologia dividido pela soma dos pesos do departamento, não sua disponibilidade. A fonte escolhida não é substituída pela outra se faltar histórico ou SLA.', 'The header percentage is this technology’s configured weight divided by the department’s total weight, not its availability. The selected source is not replaced by the other when history or SLA data is missing.')}</p>`)}
             <div class="gav-items-source" data-source-panel="items"><div class="gav-config-grid">
                 ${field(t('Grupos de hosts', 'Host groups'), input('groups', tech.groups, 'required maxlength="1000" placeholder="Equipes/Banco de Dados"'), 'gav-span-6', t('Nomes ou IDs separados por vírgula. Nomes incluem subgrupos.', 'Comma-separated names or IDs. Names include subgroups.'))}
                 ${field(t('Consolidação dos hosts', 'Host aggregation'), `<select data-field="mode">${options({any_down: t('Indisponível se qualquer host cair', 'Unavailable if any host goes down'), mean: t('Média dos hosts (pesos iguais)', 'Mean of hosts (equal weights)')}, tech.mode ?? 'any_down')}</select>`, 'gav-span-6')}
             </div>
-            <div class="gav-checks-title"><h4>${t('Itens que determinam o estado de cada host', 'Items that determine each host state')}</h4><p class="gav-muted">${t('Todos são obrigatórios. Uma falha confirmada prevalece sobre outro item sem dados; quedas sobrepostas contam uma vez.', 'All are required. A confirmed failure takes precedence over another item with no data; overlapping outages count once.')}</p></div>
+            <div class="gav-checks-title"><h4>${t('Verificações por host', 'Checks per host')}</h4>${help(t('Como as verificações são combinadas', 'How checks are combined'), `<p>${t('Todos são obrigatórios. Uma falha confirmada prevalece sobre outro item sem dados; quedas sobrepostas contam uma vez.', 'All are required. A confirmed failure takes precedence over another item with no data; overlapping outages count once.')}</p>`)}</div>
             <div class="gav-checks">${(Array.isArray(tech.checks) && tech.checks.length ? tech.checks : [{key: '', up: {op: 'eq', a: 1}, down: null, max_age: null}]).map(check => checkHtml(check, tech.max_age ?? null)).join('')}</div>
             <div class="gav-toolbar gav-node-actions"><button type="button" data-action="add-check" class="btn-alt">${t('Adicionar verificação', 'Add check')}</button></div></div>
             <div class="gav-sla-source" data-source-panel="sla" hidden>
-                <p class="gav-notice">${t('Nesta versão, use um SLA de período mensal e apenas meses encerrados. O resultado segue o calendário, o fuso horário e as exclusões do SLA nativo; o resumo mensal não fornece linha do tempo diária.', 'In this version, use a monthly SLA and closed months only. Results follow the native SLA schedule, time zone and exclusions; the monthly summary does not provide a daily timeline.')}</p>
+                ${help(t('Requisitos do SLA mensal', 'Monthly SLA requirements'), `<p>${t('Nesta versão, use um SLA de período mensal e apenas meses encerrados. O resultado segue o calendário, o fuso horário e as exclusões do SLA nativo; o resumo mensal não fornece linha do tempo diária.', 'In this version, use a monthly SLA and closed months only. Results follow the native SLA schedule, time zone and exclusions; the monthly summary does not provide a daily timeline.')}</p><p>${t('Alinhe o fuso do relatório com o fuso do SLA para uma média departamental comparável. Esta fonte não consulta itens nem grupos de hosts.', 'Align the report time zone with the SLA time zone for a comparable departmental mean. This source does not query items or host groups.')}</p>`)}
                 <div class="gav-config-grid">
                     ${field('SLA ID', nativeIdControl('slaid', tech.slaid), 'gav-span-6', t('Copie filter_slaid do endereço do relatório nativo.', 'Copy filter_slaid from the native report address.'))}
                     ${field(t('Serviço ID', 'Service ID'), nativeIdControl('serviceid', tech.serviceid), 'gav-span-6', t('Copie filter_serviceid do mesmo relatório, com um serviço selecionado.', 'Copy filter_serviceid from the same report, with one service selected.'))}
                 </div>
+                <details class="gav-editor-help gav-sla-import"><summary>${t('Preencher IDs pelo endereço do relatório', 'Fill IDs from the report address')}</summary><div class="gav-config-grid">
                 ${field(t('Colar endereço do relatório nativo (opcional)', 'Paste native report address (optional)'), input('sla_url', '', 'maxlength="8192" autocomplete="off" spellcheck="false" placeholder="zabbix.php?action=slareport.list&amp;filter_slaid=…&amp;filter_serviceid=…"'), '', t('Use um relatório deste Zabbix. O endereço não é acessado nem salvo; somente os dois IDs são copiados.', 'Use a report from this Zabbix. The address is not visited or saved; only the two IDs are copied.'))}
+                </div>
                 <div class="gav-toolbar gav-node-actions"><button type="button" data-action="import-sla-url" class="btn-alt">${t('Preencher IDs do endereço', 'Fill IDs from address')}</button><p class="gav-muted gav-sla-import-status" role="status"></p></div>
-                <p class="gav-muted">${t('Alinhe o fuso do relatório com o fuso do SLA para uma média departamental comparável. Esta fonte não consulta itens nem grupos de hosts.', 'Align the report time zone with the SLA time zone for a comparable departmental mean. This source does not query items or host groups.')}</p>
+                </details>
             </div>
             <div class="gav-toolbar gav-node-actions"><button type="button" data-action="remove-technology" class="btn-alt gav-remove">${t('Remover tecnologia', 'Remove technology')}</button></div>
             </div></details>`;
@@ -125,6 +130,10 @@
             root.querySelectorAll('.gav-check').forEach(check => {
                 const itemsActive = get(check.closest('.gav-technology'), 'source') === 'items';
                 const ageMode = get(check, 'age_mode');
+                const siblings = [...check.parentElement.children];
+                check.querySelector('.gav-check-caption').textContent = `${siblings.indexOf(check) + 1}. ${get(check, 'key') || t('Nova verificação', 'New check')}`;
+                check.querySelector('.gav-check-meta').textContent = ageMode === 'auto' ? t('Janela automática', 'Automatic window')
+                    : ageMode === 'hour' ? t('Janela: 1 hora', 'Window: 1 hour') : `${t('Janela', 'Window')}: ${get(check, 'max_age')} s`;
                 const manual = ageMode === 'manual';
                 const age = check.querySelector('[data-field="max_age"]');
                 check.querySelector('.gav-manual-age').hidden = !manual;
@@ -154,7 +163,10 @@
                 const checks = tech.querySelectorAll('.gav-check').length;
                 const detail = get(tech, 'source') === 'sla' ? t('SLA nativo mensal', 'Native monthly SLA')
                     : `${checks} ${checks === 1 ? t('item', 'item') : t('itens', 'items')}`;
-                tech.querySelector('.gav-summary-meta').textContent = `${t('Peso', 'Weight')} ${number(get(tech, 'weight'))} · ${detail}`;
+                const weights = [...tech.closest('.gav-department-editor').querySelectorAll('.gav-technology')].map(node => Number(get(node, 'weight')));
+                const validWeights = weights.every(weight => Number.isFinite(weight) && weight >= 0.001 && weight <= 100000);
+                const share = validWeights ? (100 * Number(get(tech, 'weight')) / weights.reduce((sum, weight) => sum + weight, 0)).toLocaleString(pt ? 'pt-BR' : 'en-GB', {maximumFractionDigits: 2}) + '%' : '—';
+                tech.querySelector('.gav-summary-meta').textContent = `${t('Peso', 'Weight')} ${number(get(tech, 'weight'))} (${share}) · ${detail}`;
             });
             [...list.children].forEach(dept => {
                 dept.querySelector('summary strong').textContent = get(dept, 'name') || t('Novo departamento', 'New department');

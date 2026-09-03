@@ -158,6 +158,47 @@ function page(config, language = 'pt') {
 }
 
 const tests = [
+    ['compact checks preserve rules, reveal invalid fields and keep help collapsed', () => {
+        for (const language of ['pt', 'en']) {
+            const p = page(configuration(item), language), tech = p.techs()[0], checkNode = tech.querySelector('.gav-check');
+            const before = p.data();
+            assert.equal(checkNode.tagName, 'DETAILS');
+            assert.equal(checkNode.open, false);
+            assert.match(checkNode.querySelector('.gav-check-caption').textContent, /1\. ping/);
+            assert.match(checkNode.querySelector('.gav-check-meta').textContent, /180 s/);
+            assert.equal(checkNode.querySelector('.gav-editor-help').open, false);
+            checkNode.open = true; checkNode.open = false;
+            assert.equal(p.submit().defaultPrevented, false);
+            assert.deepEqual(p.data(), before, 'collapsing never changes saved rules');
+            p.change(field(checkNode, 'key'), '');
+            assert.equal(p.submit().defaultPrevented, true);
+            assert.equal(checkNode.open, true, 'invalid nested check expands');
+            assert.equal(tech.open, true);
+            p.change(field(checkNode, 'key'), '<unsafe>');
+            assert.match(checkNode.querySelector('.gav-check-caption').textContent, /<unsafe>/);
+            assert.equal(checkNode.querySelector('.gav-check-caption').children.length, 0, 'key is plain text');
+            tech.querySelector('[data-action="add-check"]').fire('click');
+            assert.equal(tech.querySelectorAll('.gav-check')[1].open, true, 'new check opens for editing');
+            assert.equal(p.network, 0);
+        }
+    }],
+    ['weight participation is local to department and never persisted', () => {
+        for (const language of ['pt', 'en']) {
+            const config = configuration({...item,weight:4}, {...item,weight:2}, {...sla,weight:1});
+            config.departments.push({name:'Other', target:99, technologies:[{...item,weight:10}]});
+            const p = page(config, language), techs = p.techs();
+            const fraction = language === 'pt' ? '57,14%' : '57.14%';
+            assert.ok(techs[0].querySelector('.gav-summary-meta').textContent.includes(fraction));
+            assert.match(techs[3].querySelector('.gav-summary-meta').textContent, /100%/);
+            assert.ok(!JSON.stringify(p.data()).includes('share'), 'presentation only');
+            p.change(field(techs[0], 'weight'), '3');
+            assert.match(techs[0].querySelector('.gav-summary-meta').textContent, /50%/);
+            p.change(field(techs[1], 'weight'), '');
+            assert.match(techs[0].querySelector('.gav-summary-meta').textContent, /—/);
+            assert.match(techs[3].querySelector('.gav-summary-meta').textContent, /100%/);
+            assert.equal(p.network, 0);
+        }
+    }],
     ['global data policy defaults only absent legacy values to strict and roundtrips explicit choices', () => {
         for (const policy of [undefined, 'strict', 'observed']) {
             const config = configuration(item, sla);

@@ -80,6 +80,36 @@ const assert = require('node:assert/strict');
                 assert.ok((await card.locator('.gqp-preview-output').innerText()).includes('251'),'Exact total independent of sample');
                 await card.locator('[data-field=title]').fill('Hosts com template Linux');
                 assert.equal(await card.locator('.gqp-preview-output').innerText(),'','Edits invalidate preview');
+            } else {
+                const tech = page.locator('.gav-technology').first();
+                await tech.locator(':scope > summary').click();
+                const check = tech.locator('.gav-check').first();
+                assert.equal(await check.getAttribute('open'),null,'Saved checks start collapsed');
+                assert.ok((await tech.locator(':scope > summary').innerText()).includes(name.endsWith('dark') ? '57,14%' : '57.14%'));
+                const before = await page.locator('#gav-payload').inputValue();
+                await check.locator(':scope > summary').click();
+                assert.equal(await page.locator('#gav-payload').inputValue(),before,'Expanding is presentation only');
+                await check.locator('.gav-editor-help > summary').click();
+                await check.locator('[data-field=age_mode]').selectOption('hour');
+                assert.equal(await check.locator('[data-field=max_age]').isVisible(),false);
+                await check.locator('[data-field=key]').fill('');
+                await check.locator(':scope > summary').click();
+                await page.locator('#gav-save').click();
+                assert.notEqual(await check.getAttribute('open'),null,'Invalid folded check is revealed');
+                assert.equal(posts.length,priorPosts,'Invalid draft cannot be submitted');
+                await check.locator('[data-field=key]').fill('icmpping');
+                await check.locator('.gav-editor-help > summary').click();
+                await page.screenshot({path:path.join(output,name+'-items.png'),fullPage:true});
+                await tech.locator('[data-field=source]').selectOption('sla');
+                await tech.locator('.gav-sla-import > summary').click();
+                await tech.locator('[data-field=sla_url]').fill('http://127.0.0.1:8771/zabbix.php?action=slareport.list&filter_slaid=7&filter_serviceid=42');
+                // The harness page is /, so use its same pathname just as the production editor requires.
+                await tech.locator('[data-field=sla_url]').fill('http://127.0.0.1:8771/?action=slareport.list&filter_slaid=7&filter_serviceid=42');
+                await tech.locator('[data-action=import-sla-url]').click();
+                assert.equal(await tech.locator('[data-field=slaid]').inputValue(),'7');
+                assert.equal(posts.length,priorPosts,'Editor and URL helper never query the server');
+                await tech.locator('[data-field=source]').selectOption('items');
+                assert.equal(await check.locator('[data-field=key]').inputValue(),'icmpping');
             }
             await page.screenshot({path:path.join(output,name+'.png'),fullPage:true});
             console.log(name, await page.evaluate(() => ({width:innerWidth,scroll:document.documentElement.scrollWidth,inputs:[...document.querySelectorAll('input[type=text],select')].filter(x=>x.getBoundingClientRect().width>0).slice(0,4).map(x=>getComputedStyle(x).backgroundColor)})));

@@ -3,6 +3,25 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Novidades 1.18.0 — Configuração de disponibilidade mais compacta
+
+As verificações salvas aparecem recolhidas, identificadas pela chave do item e
+pela janela de evidência. Clique na linha para editar. Novas verificações abrem
+automaticamente; campos inválidos são revelados ao tentar salvar.
+
+Explicações de pesos, fontes, evidência e SLA ficam em seções de ajuda que abrem
+ao clicar. O preenchimento de IDs pelo endereço do SLA também fica recolhido.
+Os controles continuam disponíveis em português/inglês e nos temas claro/escuro.
+
+O cabeçalho de cada tecnologia mostra sua participação no peso configurado do
+departamento: por exemplo, peso 4 em um total de 7 = 57,14%. Esse percentual é
+apenas uma referência de configuração, não o resultado da disponibilidade.
+Pesos inválidos mostram um traço no lugar da participação até serem corrigidos.
+
+Nenhuma mudança no cálculo, no formato salvo, nas fontes ou nas políticas de
+dados ausentes. Abrir/recolher campos e ajudas não altera o rascunho nem consulta
+o servidor. As regras anteriores são preservadas.
+
 ## Novidades 1.17.0 — Busca de grupos e templates
 
 Nos filtros de seleção e nas métricas, o botão **Selecionar…** abre uma busca

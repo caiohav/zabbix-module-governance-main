@@ -5,7 +5,7 @@
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
 $this->addCssFile($moduleWebPath . 'css/governance.css?v=1.7.0');
 $this->addCssFile($moduleWebPath . 'css/quality-pages.css?v=1.13.2');
-$this->addCssFile($moduleWebPath . 'css/native-layout.css?v=1.17.0');
+$this->addCssFile($moduleWebPath . 'css/native-layout.css?v=1.18.0');
 $this->includeJsFile('governance.quality.config.js.php');
 
 $pt = $data['is_pt'];

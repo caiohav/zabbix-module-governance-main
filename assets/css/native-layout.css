@@ -40,6 +40,22 @@
 #gav-config .gav-setting-help > summary { cursor: pointer; color: var(--gov-link); }
 #gav-config .gav-setting-help p { margin-top: 8px; }
 #gav-config input:not([type=hidden]), #gav-config select { min-height: 30px; padding: 5px 7px; font-size: 12px; border-radius: 2px; }
+#gav-config .gav-editor-help { margin: 8px 0; color: var(--gov-muted); font-size: 12px; }
+#gav-config .gav-editor-help > summary { cursor: pointer; color: var(--gov-link); }
+#gav-config .gav-editor-help p { margin: 8px 0; max-width: 800px; line-height: 1.5; }
+#gav-config .gav-check { border-left-width: 1px; border-radius: 0; padding: 0; margin: 6px 0; }
+#gav-config .gav-check > summary { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; list-style: none; }
+#gav-config .gav-check > summary::-webkit-details-marker { display: none; }
+#gav-config .gav-check > summary::before { content: '›'; flex: 0 0 10px; color: var(--gov-muted); }
+#gav-config .gav-check[open] > summary::before { transform: rotate(90deg); }
+#gav-config .gav-check-caption { min-width: 0; overflow-wrap: anywhere; font-size: 12px; font-weight: normal; }
+#gav-config .gav-check-meta { margin-left: auto; text-align: right; color: var(--gov-muted); flex-shrink: 0; font-size: 11px; }
+#gav-config .gav-check-content { padding: 12px; border-top: 1px solid var(--gov-border); }
+#gav-config .gav-check-source { display: block; }
+#gav-config .gav-check-source > .gav-field { display: grid; grid-template-columns: 220px minmax(160px, 540px); gap: 6px 12px; margin-bottom: 8px; }
+#gav-config .gav-check-grid { margin-top: 10px; gap: 18px; }
+#gav-config .gav-checks-title { margin-top: 14px; }
+#gav-config .gav-checks-title h4 { font-size: 13px; }
 .gov-container .gqp-expression { color: var(--gov-muted); margin: 4px 0 10px 232px; }
 .gov-container .gqp-rule-help { color: var(--gov-muted); margin: 8px 0; font-size: 12px; }
 .gov-container .gqp-rule-help > summary { cursor: pointer; color: var(--gov-link); }
@@ -56,6 +72,10 @@
 .gov-container .gqp-catalog-result { display: block; white-space: normal; overflow-wrap: anywhere; text-align: left; margin-bottom: 8px; }
 @media (max-width: 850px) {
     #gav-config .gav-timezone, #gav-config .gav-config-grid > .gav-field { grid-template-columns: 1fr; }
+    #gav-config .gav-check-source > .gav-field { grid-template-columns: 1fr; }
+    #gav-config .gav-check > summary { flex-wrap: wrap; }
+    #gav-config .gav-check-caption { flex: 1; }
+    #gav-config .gav-check-meta { flex-basis: 100%; text-align: left; margin-left: 20px; }
     #gav-config .gav-config-grid > .gav-field > small { grid-column: 1; }
     #gav-config .gav-setting-help, .gov-container .gqp-expression { margin-left: 0; }
     .gov-container.gqp-editor .gqp-field { grid-template-columns: 1fr; }
