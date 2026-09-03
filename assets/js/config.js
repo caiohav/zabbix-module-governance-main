@@ -87,17 +87,17 @@
             card.querySelectorAll('[data-for-type]').forEach((group) => {
                 const applicable = group.dataset.forType === type;
                 group.hidden = !applicable;
-                group.querySelectorAll('input').forEach((control) => {
+                group.querySelectorAll('input,select').forEach((control) => {
                     control.disabled = !applicable;
-                    control.required = applicable && control.dataset.field !== 'tag_values';
+                    control.required = applicable && ['tag_names', 'group_names'].includes(control.dataset.field);
                     if (!applicable) control.setCustomValidity('');
                 });
             });
             const hints = {
                 tag: t('Confere se o host tem uma das tags informadas com um valor aceito.', 'Checks whether the host has one of the specified tags with an accepted value.'),
                 hostgroups: t('Confere se o host pertence a um dos grupos informados, incluindo subgrupos selecionados por nome.', 'Checks whether the host belongs to a specified group, including subgroups selected by name.'),
-                inventory: t('Confere se ao menos um dos campos essenciais de inventário avaliados pelo módulo está preenchido.', 'Checks whether at least one of the essential inventory fields assessed by this module is populated.'),
-                templates: t('Confere se há ao menos um template vinculado ao host.', 'Checks whether the host has at least one linked template.'),
+                inventory: t('Confere o campo escolhido; sem seleção, aceita qualquer campo essencial preenchido.', 'Checks the selected field; without a selection, accepts any populated essential field.'),
+                templates: t('Avalia templates vinculados diretamente ao host, por nome exato ou ID. Não percorre templates herdados.', 'Checks templates directly linked to the host, by exact name or ID. Does not traverse inherited templates.'),
                 interface: t('Confere se há ao menos uma interface com IP ou DNS configurado.', 'Checks whether there is at least one interface with an IP address or DNS name configured.')
             };
             card.querySelector('.gqp-metric-hint').textContent = hints[type] || '';
@@ -105,6 +105,9 @@
             card.querySelector('.gqp-card-score').hidden = !getField(card, 'include_score').checked;
         };
         const makeCard = (data, open) => {
+            data = Object.assign({scope_tag_name: '', scope_tag_value: '', scope_group_names: '',
+                scope_include_subgroups: 1, group_include_subgroups: 1, template_names: '',
+                template_mode: 'any', inventory_field: '', display_mode: 'conformity'}, data);
             const card = element('details', 'gqp-card');
             card.dataset.cardId = data.id;
             card.open = !!open;
@@ -147,10 +150,42 @@
             const groups = input('group_names', data.group_names, 255);
             groups.placeholder = t('Equipes, Linux, 12', 'Teams, Linux, 12');
             const groupGroup = field(t('Grupos de hosts (nomes ou IDs)', 'Host groups (names or IDs)'), groups,
-                t('Nomes incluem subgrupos; IDs selecionam o grupo exato. Separe por vírgula.', 'Names include subgroups; IDs select the exact group. Separate entries with commas.'), 'gqp-field-wide');
+                t('Separe por vírgula. A opção de subgrupos se aplica a nomes; IDs selecionam o grupo exato.', 'Separate with commas. The subgroup option applies to names; IDs select the exact group.'), 'gqp-field-wide');
             groupGroup.dataset.forType = 'hostgroups';
             grid.append(tagGroup, valuesGroup, groupGroup);
-            body.append(grid, element('p', 'gqp-metric-hint gqp-muted'));
+            const choice = (key, options) => {
+                const control = element('select');
+                control.dataset.field = key;
+                Object.entries(options).forEach(([value, label]) => {
+                    const option = element('option', '', label); option.value = value; control.append(option);
+                });
+                control.value = String(data[key]);
+                return control;
+            };
+            const conditional = (type, label) => { label.dataset.forType = type; return label; };
+            const yesNo = {1: t('Incluir subgrupos por nome', 'Include subgroups by name'), 0: t('Somente grupo exato', 'Exact group only')};
+            grid.append(conditional('hostgroups', field(t('Subgrupos da regra', 'Rule subgroups'), choice('group_include_subgroups', yesNo))),
+                conditional('templates', field(t('Templates esperados (nomes ou IDs)', 'Expected templates (names or IDs)'), input('template_names', data.template_names, 255),
+                    t('Separe por vírgula. Vazio: qualquer template diretamente vinculado.', 'Separate with commas. Empty: any directly linked template.'))),
+                conditional('templates', field(t('Exigir templates', 'Require templates'), choice('template_mode', {any: t('Ao menos um dos informados', 'At least one listed'), all: t('Todos os informados', 'All listed')}))),
+                conditional('inventory', field(t('Campo de inventário', 'Inventory field'), choice('inventory_field', {
+                    '': t('Qualquer campo essencial', 'Any essential field'), os: t('SO', 'OS'), os_full: t('SO (completo)', 'OS (full)'),
+                    os_short: t('SO (curto)', 'OS (short)'), serialno_a: 'Serial A', serialno_b: 'Serial B', location: t('Localização', 'Location'),
+                    type: t('Tipo', 'Type'), software: 'Software', hardware: 'Hardware', name: t('Nome', 'Name'), contact: t('Contato', 'Contact')
+                }))));
+            const scope = element('details', 'gqp-help');
+            scope.open = !!(data.scope_tag_name || data.scope_group_names);
+            scope.append(element('summary', '', t('Hosts avaliados — filtros do card', 'Hosts evaluated — card filters')));
+            const scopeGrid = element('div', 'gqp-field-grid');
+            scopeGrid.append(field(t('Tag do escopo', 'Scope tag'), input('scope_tag_name', data.scope_tag_name, 255)),
+                field(t('Valor da tag', 'Tag value'), input('scope_tag_value', data.scope_tag_value, 255), t('Vazio: qualquer valor da tag.', 'Empty: any tag value.')),
+                field(t('Grupos do escopo', 'Scope groups'), input('scope_group_names', data.scope_group_names, 255), t('Nomes ou IDs separados por vírgula.', 'Comma-separated names or IDs.')),
+                field(t('Subgrupos do escopo', 'Scope subgroups'), choice('scope_include_subgroups', yesNo)));
+            scope.append(scopeGrid, element('p', 'gqp-muted', t('Tag E grupo: os dois filtros precisam ser atendidos. Vazio: todos os hosts monitorados do filtro da página. O percentual usa somente este escopo.', 'Tag AND group: both filters must match. Empty: all monitored hosts in the page filter. The percentage uses only this scope.')));
+            grid.append(field(t('Percentual exibido', 'Displayed percentage'), choice('display_mode', {
+                conformity: t('Em conformidade', 'Compliant'), non_conformity: t('Não conformes', 'Non-compliant')
+            })));
+            body.append(scope, grid, element('p', 'gqp-metric-hint gqp-muted'));
 
             const footer = element('div', 'gqp-card-footer');
             const scoreLabel = element('label', 'gqp-checkbox');
@@ -236,6 +271,15 @@
                     tag_names: getField(card, 'tag_names').value,
                     tag_values: getField(card, 'tag_values').value,
                     group_names: getField(card, 'group_names').value,
+                    scope_tag_name: getField(card, 'scope_tag_name').value,
+                    scope_tag_value: getField(card, 'scope_tag_value').value,
+                    scope_group_names: getField(card, 'scope_group_names').value,
+                    scope_include_subgroups: Number(getField(card, 'scope_include_subgroups').value),
+                    group_include_subgroups: Number(getField(card, 'group_include_subgroups').value),
+                    template_names: getField(card, 'template_names').value,
+                    template_mode: getField(card, 'template_mode').value,
+                    inventory_field: getField(card, 'inventory_field').value,
+                    display_mode: getField(card, 'display_mode').value,
                     include_score: getField(card, 'include_score').checked ? 1 : 0
                 }))
             }));
@@ -271,11 +315,17 @@
             if (panel) selectPage(panel.dataset.pageId, false);
             const card = control.closest('.gqp-card');
             if (card) card.open = true;
+            const section = control.closest('.gqp-help');
+            if (section) section.open = true;
             control.focus();
         };
         const updateValidity = (control) => {
             control.setCustomValidity('');
-            if (control.required && !control.value.trim()) {
+            if (control.dataset.field === 'scope_tag_value' && control.value.trim()
+                    && !getField(control.closest('.gqp-card'), 'scope_tag_name').value.trim()) {
+                control.setCustomValidity(t('Informe o nome da tag do escopo.', 'Enter the scope tag name.'));
+            }
+            else if (control.required && !control.value.trim()) {
                 control.setCustomValidity(t('Preencha este campo; espaços não são um valor válido.', 'Fill in this field; spaces are not a valid value.'));
             }
             else if (control.required && ['tag_names', 'group_names'].includes(control.dataset.field)
@@ -374,7 +424,7 @@
                     const panel = activePanel();
                     if (!panel || cards(panel).length >= maxCards) return;
                     const card = makeCard({ id: safeId('card'), type: 'tag', title: '', description: '',
-                        tag_names: '', tag_values: '', group_names: '', include_score: 1 }, true);
+                        tag_names: '', tag_values: '', group_names: '', include_score: 1, display_mode: 'non_conformity' }, true);
                     panel.querySelector('.gqp-card-list').append(card);
                     changed();
                     getField(card, 'title').focus();

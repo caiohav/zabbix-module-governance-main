@@ -31,6 +31,7 @@ ob_start();
     <?php endif ?>
     <details class="gqp-help"><summary><?= $t('Como configurar suas métricas', 'How to configure your metrics') ?></summary>
         <ul>
+            <li><?= $t('Filtros do card: tag e grupo são combinados com E. A regra é avaliada somente nesses hosts; escopos vazios não entram no índice. Escolha Não conformes para exibir o percentual de pendências.', 'Card filters: tag and group are combined with AND. The rule is evaluated only on those hosts; empty scopes do not enter the score. Choose Non-compliant to display the percentage of issues.') ?></li>
             <li><?= $t('Use as abas para separar os assuntos. Renomear uma página mantém seus cards e seu endereço; trocar de aba preserva as alterações ainda não salvas.', 'Use tabs to separate topics. Renaming a page keeps its cards and address; switching tabs preserves unsaved edits.') ?></li>
             <li><?= $t('Tags: informe nomes ou aliases separados por vírgula. Sem valores aceitos, qualquer valor não vazio é considerado conforme.', 'Tags: enter names or aliases separated by commas. Without accepted values, any non-empty value is considered compliant.') ?></li>
             <li><?= $t('Grupos: um nome de grupo pai inclui seus subgrupos. Exemplo: Equipes inclui Equipes/Banco de Dados. Um ID seleciona apenas o grupo exato.', 'Groups: a parent group name includes its subgroups. For example, Teams includes Teams/Database. An ID selects only the exact group.') ?></li>

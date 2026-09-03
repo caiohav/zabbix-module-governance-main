@@ -148,5 +148,17 @@ function page({replies = [], language = 'pt', configError = null, sid = true} = 
     const empty = page({replies: [payload(1, {status: 'complete', result: emptyResult})]}); await empty.tick(0);
     check(empty.nodes.score.textContent === '—' && !empty.nodes.empty.hidden && empty.nodes.cards.hidden, 'empty scope is not a successful 100 percent');
     check(empty.scripts.length === 0, 'empty scope does not load charts');
+    const scopedResult = result();
+    scopedResult.kpis[0] = {id: 'tag', score: 0, valid_count: 0, total_count: 1, display_mode: 'non_conformity', non_compliant: [{hostid: '2', name: 'Host'}]};
+    const scoped = page({replies: [payload(1, {result: scopedResult})]}); await scoped.tick(0);
+    check(scoped.card.selectors['.gov-card-chart'].textContent === '100%', 'Nonconformity percentage displayed');
+    check(scoped.card.selectors['.gov-card-score-sub'].textContent === '1 / 1 não conformes', 'Card denominator, not page denominator');
+    check(scoped.card.className.includes('critical'), 'Bad conformity stays critical despite inverted display');
+    const noScope = result(); noScope.overall_score = null;
+    noScope.kpis[0] = {id: 'tag', score: null, valid_count: 0, total_count: 0, non_compliant: []};
+    const noScopePage = page({replies: [payload(1, {result: noScope})]}); await noScopePage.tick(0);
+    check(noScopePage.card.selectors['.gov-card-chart'].textContent === '—', 'Empty card scope not zero or 100 percent');
+    check(noScopePage.card.selectors['.gov-card-score-sub'].textContent === 'Nenhum host no escopo', 'Empty card scope explicit');
+    check(noScopePage.scripts.length === 0, 'Empty cards do not load chart library');
     console.log(`PASS: ${assertions} quality JS assertions`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

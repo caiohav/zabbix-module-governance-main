@@ -29,16 +29,18 @@ final class QualityCalculation {
         $page = $page ?? ['id' => '', 'name' => '', 'cards' => []];
         $cards = [];
         foreach ($page['cards'] as $card) {
+            $card += GovernanceConfig::crossFilters($card);
             $card['names'] = GovernanceConfig::splitList($card['tag_names']);
             $card['values'] = GovernanceConfig::splitList($card['tag_values']);
             $card['groups'] = GovernanceConfig::splitList($card['group_names']);
             $card['valid'] = 0;
+            $card['total'] = 0;
             $card['examples'] = [];
             $cards[] = $card;
         }
         $groups = array_values(array_unique(array_map('strval', $groupids)));
         sort($groups, SORT_STRING);
-        return ['status' => 'running', 'page' => $pageId, 'revision' => $revision,
+        return ['format' => 2, 'status' => 'running', 'page' => $pageId, 'revision' => $revision,
             'started_at' => time(), 'finished_at' => null, 'groupids' => $groups,
             'cards' => $cards, 'hostids' => [], 'cursor' => 0, 'item_cursor' => 0, 'item_count' => 0,
             'progress' => ['stage' => 'scope', 'hosts_total' => null, 'hosts_done' => 0, 'calls' => 0, 'api_ms' => []],
@@ -50,6 +52,9 @@ final class QualityCalculation {
         if ($state['status'] !== 'running') { return $state; }
         $phase = $state['progress']['stage'];
         try {
+            if (($state['format'] ?? 0) !== 2) {
+                throw new QualityScopeException('Module updated. Reload the page and start a new analysis / Módulo atualizado. Recarregue a página e inicie uma nova análise.');
+            }
             switch ($phase) {
                 case 'scope': $this->scope($state); break;
                 case 'hosts': $this->hosts($state); break;
@@ -133,10 +138,11 @@ final class QualityCalculation {
             'filter' => ['status' => HOST_STATUS_MONITORED],
             'selectInterfaces' => ['type', 'available', 'useip', 'ip', 'dns'], 'preservekeys' => true];
         if ($state['groupids']) { $options['groupids'] = $state['groupids']; }
-        if (in_array('tag', $types, true)) { $options['selectTags'] = ['tag', 'value']; }
-        if (in_array('inventory', $types, true)) { $options['selectInventory'] = ['os', 'serialno_a', 'location', 'type', 'software']; }
+        if (in_array('tag', $types, true) || array_filter(array_column($state['cards'], 'scope_tag_name'))) { $options['selectTags'] = ['tag', 'value']; }
+        if (in_array('inventory', $types, true)) { $options['selectInventory'] = array_values(array_unique(array_merge(['os', 'serialno_a', 'location', 'type', 'software'], array_filter(array_column($state['cards'], 'inventory_field'))))); }
         if (in_array('templates', $types, true)) { $options['selectParentTemplates'] = 'count'; }
-        if (in_array('hostgroups', $types, true)) { $options['selectGroups'] = ['groupid', 'name']; }
+        if (array_filter(array_column($state['cards'], 'template_names'))) { $options['selectParentTemplates'] = ['templateid', 'host', 'name']; }
+        if (in_array('hostgroups', $types, true) || array_filter(array_column($state['cards'], 'scope_group_names'))) { $options['selectGroups'] = ['groupid', 'name']; }
         $rows = $this->query($state, 'Host', $options);
         $index = [];
         foreach ($rows as $host) {
@@ -154,6 +160,8 @@ final class QualityCalculation {
             if (in_array(INTERFACE_AVAILABLE_FALSE, $availability, true)) { $state['overview']['unavailable']++; }
             elseif (in_array(INTERFACE_AVAILABLE_TRUE, $availability, true)) { $state['overview']['available']++; }
             foreach ($state['cards'] as &$card) {
+                if (!self::inScope($host, $card)) { continue; }
+                $card['total']++;
                 if (self::compliant($host, $card)) { $card['valid']++; }
                 elseif (count($card['examples']) < 10) { $card['examples'][] = ['hostid' => $id, 'name' => $host['name']]; }
             }
@@ -172,10 +180,10 @@ final class QualityCalculation {
         $total = count($state['hostids']);
         $kpis = []; $scores = [];
         foreach ($total ? $state['cards'] : [] as $card) {
-            $score = round(100 * $card['valid'] / $total, 1);
-            if ($card['include_score']) { $scores[] = $score; }
+            $score = $card['total'] ? round(100 * $card['valid'] / $card['total'], 1) : null;
+            if ($card['include_score'] && $score !== null) { $scores[] = $score; }
             $kpis[] = ['id' => $card['id'], 'score' => $score, 'valid_count' => $card['valid'],
-                'total_count' => $total, 'non_compliant' => $card['examples']];
+                'total_count' => $card['total'], 'display_mode' => $card['display_mode'], 'non_compliant' => $card['examples']];
         }
         $state['result'] = ['overall_score' => $scores ? round(array_sum($scores) / count($scores), 1) : null,
             'total_hosts' => $total, 'kpis' => $kpis, 'overview' => $state['overview'],
@@ -227,11 +235,21 @@ final class QualityCalculation {
                 }
                 return false;
             case 'inventory':
-                foreach (['os', 'serialno_a', 'location', 'type', 'software'] as $field) {
+                foreach (!empty($card['inventory_field']) ? [$card['inventory_field']] : ['os', 'serialno_a', 'location', 'type', 'software'] as $field) {
                     if (trim($host['inventory'][$field] ?? '') !== '') { return true; }
                 }
                 return false;
-            case 'templates': return !empty($host['parentTemplates']);
+            case 'templates':
+                $expected = GovernanceConfig::splitList($card['template_names'] ?? '');
+                if (!$expected) { return !empty($host['parentTemplates']); }
+                $linked = [];
+                foreach ($host['parentTemplates'] ?? [] as $template) {
+                    foreach (['templateid', 'host', 'name'] as $key) {
+                        $linked[] = mb_strtolower(trim((string) ($template[$key] ?? '')), 'UTF-8');
+                    }
+                }
+                $matches = array_intersect($expected, $linked);
+                return $card['template_mode'] === 'all' ? count($matches) === count($expected) : (bool) $matches;
             case 'interface':
                 foreach ($host['interfaces'] ?? [] as $interface) {
                     $address = (int) ($interface['useip'] ?? 1) === 1 ? ($interface['ip'] ?? '') : ($interface['dns'] ?? '');
@@ -244,12 +262,28 @@ final class QualityCalculation {
                     $name = mb_strtolower(trim($group['name'] ?? ''), 'UTF-8');
                     foreach ($card['groups'] as $accepted) {
                         $prefix = rtrim($accepted, '/');
-                        if ($id === $accepted || $name === $prefix || ($prefix !== '' && strpos($name, $prefix . '/') === 0)) { return true; }
+                        if ($id === $accepted || $name === $prefix || (!empty($card['group_include_subgroups']) && $prefix !== '' && strpos($name, $prefix . '/') === 0)) { return true; }
                     }
                 }
                 return false;
         }
         return false;
+    }
+
+    private static function inScope(array $host, array $card): bool {
+        if ($card['scope_tag_name'] !== '') {
+            $name = mb_strtolower($card['scope_tag_name'], 'UTF-8');
+            $value = mb_strtolower($card['scope_tag_value'], 'UTF-8');
+            $found = false;
+            foreach ($host['tags'] ?? [] as $tag) {
+                if (mb_strtolower(trim($tag['tag']), 'UTF-8') === $name
+                        && ($value === '' || mb_strtolower(trim($tag['value']), 'UTF-8') === $value)) { $found = true; break; }
+            }
+            if (!$found) { return false; }
+        }
+        $groups = GovernanceConfig::splitList($card['scope_group_names']);
+        return !$groups || self::compliant($host, ['type' => 'hostgroups', 'groups' => $groups,
+            'group_include_subgroups' => $card['scope_include_subgroups']]);
     }
 
     public static function projection(array $state): array {

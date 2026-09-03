@@ -63,17 +63,17 @@
             if (leaving || !window.echarts) return;
             const colors = {good: '#2e7d32', warning: '#f57c00', critical: '#d32f2f'};
             const track = getComputedStyle(root).getPropertyValue('--gov-chart-track').trim() || 'rgba(128,128,128,.2)';
-            chartScores.forEach((score, container) => {
+            chartScores.forEach(({value: score, conformity}, container) => {
                 if (chartInstances.has(container)) return;
                 try {
                     container.textContent = '';
                     const chart = window.echarts.init(container);
                     chartInstances.set(container, chart);
                     chart.setOption({backgroundColor: 'transparent', series: [{type: 'gauge', startAngle: 90, endAngle: -270,
-                        pointer: {show: false}, progress: {show: true, roundCap: true, itemStyle: {color: colors[status(score)]}},
+                        pointer: {show: false}, progress: {show: true, roundCap: true, itemStyle: {color: colors[status(conformity)]}},
                         axisLine: {lineStyle: {width: 7, color: [[1, track]]}}, splitLine: {show: false},
                         axisTick: {show: false}, axisLabel: {show: false}, data: [{value: score}],
-                        detail: {formatter: () => number(score) + '%', fontSize: 14, color: colors[status(score)], offsetCenter: [0, 0]},
+                        detail: {formatter: () => number(score) + '%', fontSize: 14, color: colors[status(conformity)], offsetCenter: [0, 0]},
                         animationDuration: 300}]});
                 }
                 catch (error) {
@@ -116,7 +116,7 @@
                 el('hosts').textContent = number(total) + ' / ' + number(result.overview.registered) + ' ' + t('hosts analisados', 'hosts analyzed');
                 const help = !cards.size ? t('Adicione cards para calcular o índice.', 'Add cards to calculate the score.')
                     : !total ? t('Nenhum host monitorado encontrado para análise.', 'No monitored hosts found for analysis.')
-                        : result.overall_score === null ? t('Nenhum card participa do índice.', 'No card participates in the score.')
+                        : result.overall_score === null ? t('Nenhum card participante possui hosts no escopo.', 'No participating card has hosts in scope.')
                             : t('O índice considera apenas os cards participantes desta página.', 'The score includes only participating cards on this page.');
                 el('score-help').textContent = help;
                 if (!total) { el('cards').hidden = true; el('empty').hidden = false; el('empty').textContent = help; }
@@ -124,18 +124,24 @@
                     const node = cards.get(kpi.id);
                     node.className = 'gov-kpi-card gov-card-status-' + status(kpi.score);
                     const chart = node.querySelector('.gov-card-chart');
-                    chart.textContent = number(kpi.score) + '%';
-                    chart.setAttribute('aria-label', node.querySelector('h3').textContent + ': ' + number(kpi.score) + '%');
-                    chartScores.set(chart, kpi.score);
-                    node.querySelector('.gov-card-score-sub').textContent = number(kpi.valid_count) + ' / ' + number(total) + ' ' + t('em conformidade', 'compliant');
-                    node.querySelector('.gov-card-score-missing').textContent = number(100 - kpi.score) + '% ' + t('não conformes', 'non-compliant');
+                    const inverted = kpi.display_mode === 'non_conformity';
+                    const value = kpi.score === null ? null : inverted ? 100 - kpi.score : kpi.score;
+                    chart.textContent = value === null ? '—' : number(value) + '%';
+                    chart.setAttribute('aria-label', node.querySelector('h3').textContent + ': ' + chart.textContent);
+                    if (value !== null) chartScores.set(chart, {value, conformity: kpi.score});
+                    node.querySelector('.gov-card-score-sub').textContent = !kpi.total_count ? t('Nenhum host no escopo', 'No hosts in scope')
+                        : number(inverted ? kpi.total_count - kpi.valid_count : kpi.valid_count) + ' / ' + number(kpi.total_count) + ' '
+                            + (inverted ? t('não conformes', 'non-compliant') : t('em conformidade', 'compliant'));
+                    node.querySelector('.gov-card-score-missing').textContent = value === null ? ''
+                        : number(100 - value) + '% ' + (inverted ? t('em conformidade', 'compliant') : t('não conformes', 'non-compliant'));
                     const exceptions = node.querySelector('.gov-card-exceptions');
                     exceptions.replaceChildren();
-                    if (!kpi.non_compliant.length) { exceptions.textContent = t('100% de conformidade!', '100% compliant!'); }
+                    if (!kpi.total_count) { exceptions.textContent = t('Fora do índice desta página.', 'Excluded from this page score.'); }
+                    else if (!kpi.non_compliant.length) { exceptions.textContent = t('100% de conformidade!', '100% compliant!'); }
                     else {
                         const details = document.createElement('details'), summary = document.createElement('summary'), list = document.createElement('ul');
                         list.className = 'gov-nc-list';
-                        summary.textContent = number(total - kpi.valid_count) + ' ' + t('não conformes — ver amostra', 'non-compliant — view sample');
+                        summary.textContent = number(kpi.total_count - kpi.valid_count) + ' ' + t('não conformes — ver amostra', 'non-compliant — view sample');
                         kpi.non_compliant.forEach(host => {
                             const li = document.createElement('li'), link = document.createElement('a');
                             link.href = 'zabbix.php?action=host.edit&hostid=' + encodeURIComponent(host.hostid);
@@ -162,9 +168,11 @@
                     || !result.overview || !result.metrics) return false;
             const seen = new Set();
             for (const kpi of result.kpis) {
-                if (!cards.has(kpi.id) || seen.has(kpi.id) || !validNumber(kpi.score) || kpi.score > 100
-                        || !Number.isSafeInteger(kpi.valid_count) || kpi.valid_count < 0 || kpi.valid_count > result.total_hosts
-                        || kpi.total_count !== result.total_hosts || !Array.isArray(kpi.non_compliant) || kpi.non_compliant.length > 10) return false;
+                if (!cards.has(kpi.id) || seen.has(kpi.id)
+                        || !(kpi.total_count === 0 ? kpi.score === null : validNumber(kpi.score) && kpi.score <= 100)
+                        || !Number.isSafeInteger(kpi.valid_count) || kpi.valid_count < 0 || kpi.valid_count > kpi.total_count
+                        || !Number.isSafeInteger(kpi.total_count) || kpi.total_count < 0 || kpi.total_count > result.total_hosts
+                        || !Array.isArray(kpi.non_compliant) || kpi.non_compliant.length > Math.min(10, kpi.total_count - kpi.valid_count)) return false;
                 seen.add(kpi.id);
                 if (kpi.non_compliant.some(host => !/^[1-9][0-9]*$/.test(host.hostid) || typeof host.name !== 'string')) return false;
             }

@@ -3,6 +3,44 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Novidades 1.14.0 — Filtros cruzados na Qualidade
+
+Cada card pode restringir os hosts avaliados por tag (nome e valor exatos) e/ou
+grupos. Quando ambos são preenchidos, as condições são combinadas com **E**.
+Os grupos separados por vírgula são alternativas. Nomes podem incluir subgrupos;
+IDs selecionam somente o grupo exato. Os filtros do card são aplicados dentro do
+filtro da página e somente a hosts monitorados e acessíveis ao usuário.
+
+Na configuração do card, abra **Hosts avaliados — filtros do card** para definir
+o escopo. Em seguida configure a regra e escolha **Não conformes** no percentual
+exibido para medir as pendências:
+
+| Indicador | Escopo | Tipo e regra |
+| --- | --- | --- |
+| Departamento DBD fora do grupo | Tag `Departamento` = `DBD` | Grupo de hosts: `DBD`, incluindo subgrupos |
+| DBD sem template de SO | Tag `Departamento` = `DBD` | Templates: nomes exatos ou IDs dos templates Linux e Windows; exigir ao menos um |
+| PostgreSQL sem template | Grupo `DBD/PostgreSQL` | Templates: nome exato ou ID do template PostgreSQL |
+| MSSQL sem template | Grupo `DBD/MSSQL` | Templates: nome exato ou ID do template SQL Server |
+| DBD sem SO no inventário | Tag `Departamento` = `DBD` | Inventário: campo `SO` |
+
+Templates são comparados por ID, nome técnico ou nome visível exato, sem busca
+por fragmentos. São avaliados os vínculos **diretos** do host, não os templates
+herdados através de outros templates. Uma lista vazia mantém a regra antiga de
+qualquer template vinculado. Use IDs se o nome possuir vírgula.
+
+Comparações textuais ignoram maiúsculas/minúsculas e espaços nas extremidades.
+Uma tag de escopo sem valor exige apenas sua existência (mesmo com valor vazio).
+Tags herdadas de templates não fazem parte deste filtro.
+
+O percentual de cada card usa seu próprio denominador: 8 hosts irregulares em
+40 avaliados = 20%, mesmo que a página tenha mais hosts. O índice da página
+continua sendo a média de **conformidade** dos cards participantes (80% nesse
+exemplo). Cards sem hosts são neutros e ficam fora do índice. Inventário ausente
+ou campo vazio é uma não conformidade. Cards existentes mantêm suas regras e
+forma de exibição. A análise continua em lotes, sem consultas extras por host.
+
+Testes adicionais: `php tests/quality-cross-filters.php`.
+
 ## Novidades 1.13.3 — Gráficos de barras e escala fixa
 
 - Disponibilidade e cobertura diárias passam a usar barras, inclusive por host.

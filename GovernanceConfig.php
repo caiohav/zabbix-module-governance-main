@@ -84,7 +84,7 @@ final class GovernanceConfig {
                     'tag_values' => self::qualityText($card['tag_values'] ?? '', 255, true),
                     'group_names' => $groupNames,
                     'include_score' => (int) (bool) $includeScore
-                ];
+                ] + array_intersect_key(self::crossFilters($card), $card);
             }
 
             $result[] = ['id' => $id, 'name' => $name, 'cards' => $normalizedCards];
@@ -199,6 +199,37 @@ final class GovernanceConfig {
         }, explode(',', $value)), static function(string $item): bool {
             return $item !== '';
         })));
+    }
+
+    public static function crossFilters(array $card): array {
+        $result = [];
+        foreach (['scope_tag_name', 'scope_tag_value', 'scope_group_names', 'template_names'] as $key) {
+            $result[$key] = self::qualityText($card[$key] ?? '', 255, true);
+        }
+        if ($result['scope_tag_value'] !== '' && $result['scope_tag_name'] === '') {
+            throw new InvalidArgumentException('Specify the scope tag name / Informe o nome da tag do escopo.');
+        }
+        foreach (['scope_group_names', 'template_names'] as $key) {
+            if ($result[$key] !== '' && !self::splitList($result[$key])) {
+                throw new InvalidArgumentException('Specify a valid name or ID / Informe um nome ou ID válido: ' . $key);
+            }
+        }
+        foreach (['scope_include_subgroups', 'group_include_subgroups'] as $key) {
+            $value = $card[$key] ?? 1;
+            if (!in_array($value, [0, 1, '0', '1', false, true], true)) {
+                throw new InvalidArgumentException('Invalid subgroup option / Opção de subgrupos inválida.');
+            }
+            $result[$key] = (int) (bool) $value;
+        }
+        foreach (['template_mode' => ['any', 'all'], 'display_mode' => ['conformity', 'non_conformity'],
+                'inventory_field' => ['', 'os', 'os_full', 'os_short', 'serialno_a', 'serialno_b', 'location', 'type', 'software', 'hardware', 'name', 'contact']] as $key => $allowed) {
+            $value = $card[$key] ?? $allowed[0];
+            if (!is_string($value) || !in_array($value, $allowed, true)) {
+                throw new InvalidArgumentException('Invalid quality option / Opção de qualidade inválida: ' . $key);
+            }
+            $result[$key] = $value;
+        }
+        return $result;
     }
 
     private static function qualityList($value, int $limit, string $name): array {
