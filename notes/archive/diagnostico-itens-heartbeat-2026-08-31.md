@@ -1,5 +1,9 @@
 # Diagnóstico para correção futura — disponibilidade por item e heartbeat
 
+> Registro histórico da investigação. Não é uma lista de alterações a executar.
+> O estado posterior está no [roadmap](../roadmap-regras-interface-2026-09-03.md)
+> e na [validação de julho](../validacao-julho-1.18.0.md).
+
 Data da análise: 31/08/2026 (`America/Cuiaba`).
 
 Escopo desta etapa: análise e documentação. Nenhum código, configuração, item,
@@ -233,4 +237,3 @@ trends no indicador oficial.
   realmente sustentado por amostras, respeitando forward-fill e mostrando a
   cobertura. Isso atende à regra de ignorar ausência sem afirmar disponibilidade
   onde não há evidência.
-

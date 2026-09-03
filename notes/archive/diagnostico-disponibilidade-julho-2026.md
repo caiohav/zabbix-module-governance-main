@@ -1,5 +1,9 @@
 # Diagnóstico de disponibilidade — julho/2026
 
+> Registro histórico. As pendências abaixo descrevem o estado da época, não o
+> backlog atual. Consulte [a validação de julho na 1.18.0](../validacao-julho-1.18.0.md)
+> e [o roadmap atual](../roadmap-regras-interface-2026-09-03.md) antes de retomar trabalho.
+
 Data da avaliação: 28/08/2026, America/Cuiaba.
 
 Status: somente diagnóstico; implementação pendente de solicitação do usuário.

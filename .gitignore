@@ -11,3 +11,7 @@ Thumbs.db
 # Logs e arquivos temporários
 *.log
 .env
+
+# Pacotes gerados localmente (não são código-fonte)
+/dist/
+/zabbix-module-governance-*.zip

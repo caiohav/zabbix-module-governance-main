@@ -1,5 +1,9 @@
 # Especificação futura — estado do host por ICMP e PostgreSQL em janela de uma hora
 
+> Especificação histórica. Não reaplicar automaticamente as instruções desta
+> etapa; consulte o [roadmap atual](../roadmap-regras-interface-2026-09-03.md)
+> e a [validação no servidor](../validacao-julho-1.18.0.md).
+
 Data: 01/09/2026.
 
 Esta é apenas uma especificação para alteração futura. Nenhum código ou
@@ -164,4 +168,3 @@ aceita itens customizados, a janela deve continuar configurável por verificaç�
   consumam a mesma série por host.
 - `tests/availability.php`, `tests/availability-calculation.php` e
   `tests/availability-flexible.php`: adicionar os cenários acima.
-

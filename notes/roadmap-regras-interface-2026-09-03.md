@@ -1,5 +1,21 @@
 # Roadmap: regras personalizadas e interface nativa
 
+## Estado consolidado após validação e limpeza
+
+Implementação principal concluída na versão 1.18.0, instalada pelo usuário e
+validada na configuração e no cálculo de julho. As seções abaixo preservam o
+histórico: pendências de etapas antigas não são automaticamente tarefas atuais.
+A referência visual específica de ações não foi conferida diretamente; não
+foi requisito bloqueante para a entrega funcional validada.
+
+O usuário informou que precisa revisar regras, tags e grupos antes de definir
+a participação de homologação. Essa decisão continua com ele. Nenhuma mudança
+de escopo ou regras foi autorizada nesta limpeza.
+
+Projeto organizado: ZIP atual em `dist/`, versões antigas em arquivo externo,
+notas antigas em `notes/archive/`. Local de recuperação e detalhes em
+[notes/README.md](README.md). Não há implementação adicional autorizada pendente.
+
 ## Pedido e escopo
 
 Usuário considera confusa a interface 1.14.0. Quer selecionar os hosts por regras
@@ -135,3 +151,18 @@ marcado concluído. Atualizar esta seção com decisões, testes e pendências r
 - Navegador local isolado passou PT/EN, temas claro/escuro, 1440/700 px, edição da janela, campo inválido recolhido, troca de fonte preservando rascunho, importação de IDs sem acesso à URL e nenhuma requisição do editor. Capturas: C:/Users/46027/AppData/Local/Temp/governance-editor-qa-WaQpwP. Inspecionadas availability-dark.png e availability-light-mobile.png.
 - Motor, política de dados, schema e regras persistidas não foram alterados. Não houve gravação no servidor. Próximo passo: instalar/validar visualmente 1.18.0 no Zabbix real; roadmap funcional principal está concluído, sem novas funcionalidades inferidas.
 - Sintaxe PHP e diff check passaram. ZIP zabbix-module-governance-1.18.0.zip gerado/conferido: 42 entradas, manifesto 1.18.0 e novo editor incluído. Servidor PHP local de testes encerrado. Pacotes anteriores preservados.
+
+### Validação autenticada da instalação 1.18.0
+
+- Após confirmação de instalação pelo usuário, acesso via cua_repl ao navegador integrado funcionou com sessão existente. Não foi necessário login nem houve bloqueio de URL nesta tentativa. Não repetir a antiga afirmação de que só há controle do Edge externo: a ferramenta atual expõe o navegador integrado.
+- Página governance.availability.config carregou native-layout.css?v=1.18.0 e availability-config.js?v=1.18.0, verificados no DOM. Editor sem erros de console capturados e com status “No pending changes.” após expandir tecnologia, duas verificações e ajuda. Não editamos campos, não salvamos e não recalculamos meses.
+- Configuração observada: departamento DABD, tecnologia PostgreSQL, peso 1 (100%), grupo DABD/PostgreSQL; fonte por itens, consolidação any_down, política de dados disponíveis, America/Cuiaba. icmpping e pgsql.ping com as três macros preservadas; ambas usam janela automática e UP = 1. DOWN está no modo complemento (“Any other valid value”), não explicitamente = 0. Para itens estritamente binários é equivalente; outros valores numéricos válidos também seriam DOWN. Apenas comunicar, sem alteração automática.
+- Inspeção visual real: campos e verificações adaptados ao tema escuro e à largura estreita do painel, ajuda abre ao clicar. Abertura de detalhes não tornou o rascunho pendente. A conferência real cobriu configuração em inglês/escuro; PT/EN e claro/escuro completos permanecem os testes locais já registrados. Não afirmar nova validação numérica de SLA histórico.
+- Observação de automação: AX expõe summary como botão, mas locator Playwright por role=button não o encontrou; cliques pelos índices AX funcionaram. Nenhuma ação de salvamento foi tentada.
+
+### Validação mensal real — julho/2026
+
+- Executado Calculate month com regras existentes na versão 1.18.0. Resultado concluiu: 99,462366%, 4h de DOWN conservador, cobertura 75,758065%, 19/25 hosts com dados. Não é mais UNKNOWN agregado.
+- Detalhamento atribui 1h ao ICMP de dbd-pgsql-p-02 e 3h a precatoriohomologacao-rhel.pjmt.local (ICMP/PostgreSQL, sem dupla contagem). Trends mistas contam a hora inteira, portanto não equivalem à duração exata da queda. Os itens 104274/104312 do usuário aparecem UP nas horas disponíveis, sem DOWN.
+- Gráfico individual aberto/inspecionado: barras 0–100%, tema escuro, queda no dia 20 para dbd-pgsql-p-02. Nenhuma configuração ou runtime alterado. Agosto não recalculado.
+- Evidências, intervalos, seis hosts sem dados e limitações registrados em notes/validacao-julho-1.18.0.md. Não alterar escopo (inclusive host com nome de homologação) ou critério conservador sem direção do usuário. Não alegar validação independente de trends brutas; os detalhes vieram do relatório do módulo e foram confrontados com o código e a aritmética.

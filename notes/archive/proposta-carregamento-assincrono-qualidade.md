@@ -1,5 +1,9 @@
 # Qualidade: proposta de carregamento assíncrono
 
+> Proposta histórica, com implementação principal já concluída. Evoluções
+> hipotéticas não são pendências autorizadas. Consulte o
+> [roadmap atual](../roadmap-regras-interface-2026-09-03.md).
+
 Data: 28/08/2026. Base local: módulo 1.7.1.
 
 Atualização: implementação principal concluída na versão local 1.8.0, após solicitação do usuário.

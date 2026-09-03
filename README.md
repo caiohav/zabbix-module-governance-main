@@ -3,6 +3,18 @@
 Módulo de governança e auditoria de qualidade de dados para o frontend do
 Zabbix 6.0 LTS.
 
+## Organização do projeto
+
+- Arquivos PHP da raiz, `actions/`, `views/` e `assets/`: código do módulo e licença do ECharts.
+- `tests/`: testes automatizados e ambientes locais com dados simulados; não instalar no servidor.
+- `notes/`: roadmap e validações atuais; `notes/archive/` preserva diagnósticos antigos, não tarefas pendentes.
+- `dist/`: pacotes ZIP gerados, ignorados pelo Git. O pacote local atual é `dist/zabbix-module-governance-1.18.0.zip`.
+
+Para instalação, use o conteúdo do ZIP, não a pasta inteira do repositório.
+Os pacotes antigos foram retirados da pasta de trabalho de forma recuperável;
+o local do arquivo está registrado em `notes/README.md`. Nenhuma versão do
+módulo ou regra de cálculo foi alterada nessa organização.
+
 ## Novidades 1.18.0 — Configuração de disponibilidade mais compacta
 
 As verificações salvas aparecem recolhidas, identificadas pela chave do item e
