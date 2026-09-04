@@ -6,12 +6,14 @@
   formulários com o módulo e deixar um plano suficiente para implementação futura.
 - O diagnóstico inicial era somente documentação. O usuário autorizou a execução
   com **“comece a corrigir”** e autorizou continuar sem publicação em 04/09.
-  Lotes A/B/C/D implementados localmente até a **1.22.0**; validação instalada pendente.
+  Lotes A/B/C/D implementados na **1.22.0**; ajuste de gráficos implementado
+  localmente na **1.23.0**; validação instalada desta última pendente.
   Nenhuma implantação ou alteração de regras reais.
 - Base inspecionada: módulo 1.18.0; instância Zabbix **6.0.36**, em inglês e tema
   escuro, navegador integrado autenticado, em 03/09/2026.
 - Árvore limpa no início do diagnóstico; as notas desse diagnóstico foram
-  preservadas durante a implementação. Pacote local atual 1.22.0; servidor intocado.
+  preservadas durante a implementação. Pacote local atual 1.23.0; servidor ainda
+  está na 1.22.0 validada abaixo.
 - Este é um roadmap novo de refinamento visual. O roadmap funcional anterior
   continua concluído; não reabrir seus diagnósticos históricos como pendências.
 - Usuário está revisando regras, tags, grupos e inclusão de homologação por conta
@@ -608,6 +610,111 @@ menus, temas de alto contraste e impressão real. Não pedir publicação de tod
 as versões intermediárias. Não reabrir julho nem alterar políticas de ausência
 de dados, pesos, grupos/tags ou fontes do usuário. Não declarar homologação feita.
 
+## Verificação instalada após publicação — 04/09/2026
+
+- Usuário informou “publiquei”. Sessão autenticada existente no navegador integrado,
+  Zabbix 6.0.36, inglês/tema escuro. A aba inicialmente ainda tinha o documento
+  anterior em memória; um reload trouxe cabeçalho e controles novos.
+- Confirmadas referências `?v=1.22.0` dos três CSS e JS de apresentação em
+  Qualidade e Disponibilidade. Isto confirma as referências servidas e o layout
+  aplicado, não uma comparação byte a byte dos arquivos remotos com o ZIP.
+- Quatro páginas abriram sem erro visível: painel de Qualidade, configuração de
+  Qualidade, seleção de Disponibilidade e configuração de Disponibilidade.
+- Disponibilidade: Configure no cabeçalho, controles de 24 px e fundos #383838;
+  configuração geral e tecnologia expandida legíveis. Não iniciar cálculo mensal:
+  a aba disponível estava sem relatório e não havia link de resultado atual nela.
+- Qualidade: oito cards da página Geral; títulos de 13 px com title completo,
+  oito gráficos canvas sem fundo branco. Consulta automática ao abrir terminou
+  em 34 s (13:47:48 → 13:48:22 conforme a tela), 104 chamadas à API. Cards foram
+  exibidos antes de concluir a etapa de itens não suportados. Estado final
+  “Indicators updated.”, Refresh habilitado, sem erro/warning no console consultado.
+- Detalhes da consulta abriram e fecharam; mensagem de status permaneceu visível.
+  Não usar esta leitura como benchmark de carga concorrente nem garantia de duração.
+- Editor de Qualidade: Add condition abriu a janela nativa do módulo com campos
+  escuros e foco inicial. Cancel fechou sem adicionar condição; estado continuou
+  “All pages loaded”. Não clicar Add/Save/Test selection, nem alterar dados reais.
+- Menu Governance expandido/recolhido conferido com ícone e quatro entradas;
+  restaurado ao estado recolhido. Deixada a aba no painel de Qualidade concluído.
+- Nenhuma regra, grupo, tag, preferência de tema/idioma ou configuração foi salva.
+  Apenas documentação local alterada; não gerado outro pacote.
+
+Limites e próxima retomada:
+
+- Esta ainda não é homologação completa dos lotes: salvar/renomear, catálogo e
+  preview com regras reais não foram exercitados.
+- Claro, português e alto contraste continuam sem verificação instalada nesta rodada;
+  não mudar preferências do usuário sem autorização. QA local claro/PT/EN permanece
+  documentado nos lotes anteriores. Checklist completo abaixo permanece pendente.
+
+### Complemento — relatório instalado de agosto
+
+- Usuário abriu um resultado já calculado de agosto/2026. Inspeção somente leitura;
+  não houve reload, novo cálculo, exportação, impressão ou alteração de filtro.
+- Relatório final sem alertas de página/console: DABD 99,596774%, meta 99,9%,
+  3 h equivalentes de indisponibilidade; cobertura ponderada 75,967742%.
+  A própria tela explicita 19/25 hosts com estado e 6 sem estado conhecido.
+- Esses números são coerentes internamente com a política “dados disponíveis” e
+  modo “qualquer host fora”: os intervalos DOWN visíveis totalizam 3 h; hosts sem
+  dados reduzem cobertura, mas são ignorados enquanto outro host fornece estado.
+  Não interpretar isto como validação externa dos valores da base do Zabbix.
+- Tabelas de tecnologia/hosts carregaram com classes nativas e colunas numéricas
+  alinhadas à direita. Há 50 fontes (dois checks por host), todas com detalhes
+  recolhidos inicialmente; alertas reais de ausência/consulta ficam visíveis.
+- Trends efetivamente aparecem como fonte ativa. Em uma fonte expandida, a tela
+  mostrou resolução 1 h, 744 horas, 743 UP, zero DOWN, uma hora mista tratada como
+  DOWN e zero UNKNOWN. Dados detalhados de history ficaram dentro do diagnóstico,
+  em vez de parecerem a contagem da fonte trends.
+- Gráfico principal e gráfico de host renderizaram como barras, com fundo escuro
+  transparente e eixos visíveis de 0% a 100%. O primeiro gráfico de host só ganhou
+  um canvas após abrir; ao abrir o segundo, o primeiro foi recolhido e seu canvas
+  removido. Confirmado carregamento lazy e descarte da instância anterior.
+- Detalhes de fonte abriram e fecharam corretamente. Depois do teste, fonte, host
+  e tecnologia foram recolhidos; a aba ficou novamente na visão compacta.
+- Impressão instalada não foi aberta para não acionar diálogo/gerar saída do usuário;
+  restauração dos detalhes continua coberta apenas pelo QA local automatizado.
+- Observação de acabamento futuro: dentro da tecnologia, o aviso informativo de
+  substituição por trends se repete por fonte. É correto e não impede uso, mas
+  ainda ocupa espaço; pode ser agregado por host em outro lote, preservando os
+  avisos acionáveis de ausência e cobertura. Não alterar sem novo pedido.
+
+## Ajuste posterior — gráficos diários, 1.23.0, 04/09/2026
+
+- Pedido explícito: cobertura como linha sobre as barras de disponibilidade e
+  disponibilidade vermelha abaixo do limiar configurado.
+- `availability-view.js`: os gráficos diários de departamento, tecnologia e host
+  agora têm uma única grade e um único eixo de 0 a 100%. Disponibilidade permanece
+  `bar`; meta permanece `line` pontilhada; cobertura passa de segunda `bar` em
+  uma grade separada para `line` de 2 px sobreposta, acima das barras.
+- Cor da barra é calculada por ponto contra o target da fonte mostrada: verde se
+  valor >= meta, vermelho se abaixo e cor secundária se nulo/inválido. Assim, mudar
+  o seletor entre departamento e tecnologia também muda o limiar corretamente;
+  host usa a meta da tecnologia. Igualdade com a meta é sucesso.
+- Tooltip continua mostrando os três valores. Texto de contexto atualizado para
+  não mencionar eixo separado. Nenhum valor de série, cálculo, agregação, fonte,
+  política, peso, endpoint ou contrato do JSON foi modificado.
+- Manifesto e cache apenas do script de apresentação da Disponibilidade passam a
+  1.23.0. CSS e ECharts não mudaram; demais caches podem permanecer em 1.22.0.
+- Testes PHP/JS completos passaram, incluindo regras/cálculos, history/trends,
+  política observada/estrita, SLA, jobs, views, configuração e exportação. Testes
+  de symlink já identificados continuam indisponíveis neste Windows.
+- Testes unitários verificam cobertura `line`, disponibilidade `bar`, igualdade
+  com meta verde, abaixo da meta vermelho e nulo secundário. Séries numéricas
+  permanecem idênticas às fixtures anteriores.
+- `tests/reports-browser.cjs` passou nos temas claro/escuro e PT/EN: exatamente
+  um eixo X/Y, escala 0–100%, linha de cobertura, barra por meta, fundo transparente,
+  impressão e estados de dados. Capturas inspecionadas em
+  `C:/Users/46027/AppData/Local/Temp/governance-reports-qa-Dcpmum/`; a fixture trends
+  mostra visualmente a primeira barra vermelha, demais verdes e cobertura sobreposta.
+- `tests/native-layout-browser.cjs` também passou, preservando cabeçalhos,
+  navegação, exportação/impressão e ações de relatório; capturas em
+  `C:/Users/46027/AppData/Local/Temp/governance-native-qa-HmEDlg/`.
+- Sintaxe de todos os PHP/JS e `git diff --check` aprovados.
+- ZIP 1.23.0: 518.075 bytes, 41 entradas conferidas por SHA-256 contra o runtime.
+  SHA-256: `9E8B1AF310758C12A18C17AF79CD2213041D03F1562106DEC532909A83F7EB48`.
+  Comparado ao ZIP 1.22.0, somente manifesto, README, loader da view e
+  `availability-view.js` mudaram. Engines, actions, views PHP e CSS idênticos.
+  Versões anteriores preservadas; testes/notas não entram no pacote.
+
 ## Checklist de retomada
 
 - [x] Páginas nativas inspecionadas em sessão real, inclusive Create action/condição.
@@ -626,7 +733,11 @@ de dados, pesos, grupos/tags ou fontes do usuário. Não declarar homologação 
 - [ ] Validação instalada do lote C.
 - [x] QA local do lote D.
 - [x] Pacote cumulativo 1.22.0 conferido.
-- [ ] Validação instalada do lote D e temas de alto contraste.
+- [x] Validação instalada do lote D no tema escuro, incluindo relatório por itens/trends.
+- [ ] Validação instalada em tema claro/português, impressão e alto contraste.
+- [x] Implementação local da alteração de gráficos, 1.23.0.
+- [x] Pacote cumulativo 1.23.0 conferido.
+- [ ] Validação instalada da 1.23.0.
 
 Retomar por aqui, não pelas notas arquivadas. Não alegar que uma proposta já foi
 implementada. Marcar cada lote somente depois de código e testes concluídos.

@@ -76,9 +76,18 @@ const contrast = (first, second) => (Math.max(luminance(first), luminance(second
                 assert.equal(queries.length, beforePrint, 'Printing/disclosure never recalculates');
                 const bars = await page.locator('.gav-chart').first().evaluate(node => {
                     const option = echarts.getInstanceByDom(node).getOption();
-                    return [option.series[0].type, option.yAxis[0].min, option.yAxis[0].max, option.backgroundColor];
+                    const root = document.querySelector('#gav-dashboard'), style = getComputedStyle(root);
+                    const barColor = option.series[0].itemStyle.color;
+                    return {availability: option.series[0].type, coverage: option.series[2].type,
+                        axes: [option.xAxis.length, option.yAxis.length], min: option.yAxis[0].min,
+                        max: option.yAxis[0].max, background: option.backgroundColor,
+                        below: barColor({value: 99}), onTarget: barColor({value: 100}), missing: barColor({value: null}),
+                        expected: [style.getPropertyValue('--gov-critical').trim(), style.getPropertyValue('--gov-good').trim(),
+                            style.getPropertyValue('--gov-muted').trim()]};
                 });
-                assert.deepEqual(bars, ['bar', 0, 100, 'transparent']);
+                assert.deepEqual([bars.availability, bars.coverage, bars.axes, bars.min, bars.max, bars.background],
+                    ['bar', 'line', [1, 1], 0, 100, 'transparent']);
+                assert.deepEqual([bars.below, bars.onTarget, bars.missing], bars.expected);
                 if (scenario === 'trend' || scenario === 'notqueried') await page.screenshot({path: path.join(output, scenario + '-' + theme + '.png'), fullPage: true});
             }
         }

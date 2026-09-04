@@ -8,8 +8,9 @@ essa configuração nem excluir hosts automaticamente.
 
 - [Roadmap e histórico de execução](roadmap-regras-interface-2026-09-03.md)
 - [Novo roadmap de padronização visual](roadmap-padronizacao-visual-zabbix-2026-09-03.md):
-  lotes A/B/C/D implementados até a 1.22.0 e testados localmente. Próximo passo:
-  publicar o pacote cumulativo e validar na instalação. Alto contraste pendente.
+  lotes A/B/C/D implementados na 1.22.0 e ajuste de gráficos implementado na
+  1.23.0. Próximo passo: publicar o pacote cumulativo e validar na instalação.
+  Alto contraste pendente.
   Retomar por esse documento.
 - [Validação real de julho/2026](validacao-julho-1.18.0.md)
 - [Diagnósticos e propostas históricas](archive/): preservados para consulta.
@@ -22,8 +23,8 @@ essa configuração nem excluir hosts automaticamente.
   Total retirado do projeto: 5.465.494 bytes (aproximadamente 5,2 MiB).
 - O pacote da limpeza, `../dist/zabbix-module-governance-1.18.0.zip`, foi movido,
   não reconstruído, e permanece preservado. Após o novo pedido de implementação,
-  o runtime passou à 1.22.0; seu pacote é `../dist/zabbix-module-governance-1.22.0.zip`.
-  As versões 1.19.0, 1.20.0 e 1.21.0 também foram preservadas. Os pacotes novos são cumulativos.
+  o runtime passou à 1.23.0; seu pacote é `../dist/zabbix-module-governance-1.23.0.zip`.
+  As versões 1.19.0 a 1.22.0 também foram preservadas. Os pacotes novos são cumulativos.
 - Os 12 ZIPs foram conferidos por SHA-256 antes e depois da movimentação.
 - Para recuperar uma versão antiga, basta copiá-la da pasta de arquivo acima.
   Os ZIPs anteriormente versionados também permanecem no histórico do Git;

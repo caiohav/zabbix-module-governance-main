@@ -8,12 +8,24 @@ Zabbix 6.0 LTS.
 - Arquivos PHP da raiz, `actions/`, `views/` e `assets/`: código do módulo e licença do ECharts.
 - `tests/`: testes automatizados e ambientes locais com dados simulados; não instalar no servidor.
 - `notes/`: roadmap e validações atuais; `notes/archive/` preserva diagnósticos antigos, não tarefas pendentes.
-- `dist/`: pacotes ZIP gerados, ignorados pelo Git. O pacote local atual é `dist/zabbix-module-governance-1.22.0.zip`.
+- `dist/`: pacotes ZIP gerados, ignorados pelo Git. O pacote local atual é `dist/zabbix-module-governance-1.23.0.zip`.
 
 Para instalação, use o conteúdo do ZIP, não a pasta inteira do repositório.
 Os pacotes antigos foram retirados da pasta de trabalho de forma recuperável;
 o local do arquivo está registrado em `notes/README.md`. Nenhuma versão do
 módulo ou regra de cálculo foi alterada nessa organização.
+
+## Novidades 1.23.0 — Cobertura sobreposta e meta por barra
+
+Nos gráficos diários de departamento, tecnologia e host, Disponibilidade permanece
+em barras e Cobertura passa a ser uma linha sobreposta no mesmo eixo de 0 a 100%.
+A meta continua como linha pontilhada. Cada barra de disponibilidade fica verde
+quando atinge a meta configurada e vermelha quando fica abaixo; ausência de valor
+continua distinta, na cor secundária do tema. Tooltips mantêm disponibilidade,
+cobertura e meta com seus valores exatos.
+
+A mudança é somente de apresentação: séries, cálculo, política de dados, pesos,
+fontes e exportação JSON permanecem iguais. Pacote cumulativo sobre a 1.22.0.
 
 ## Novidades 1.22.0 — Relatórios mais compactos
 

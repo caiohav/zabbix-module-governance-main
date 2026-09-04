@@ -174,7 +174,9 @@ const tests = [
         const firstNode = presentation.hosts[0]; firstNode.details.open = true; firstNode.details.fire('toggle');
         const firstChart = presentation.activeChart('host', 0, 0, 0), first = presentation.option('host', 0, 0, 0);
         assert.ok(firstChart);
-        assert.equal(first.series[0].type, 'bar'); assert.equal(first.series[2].type, 'bar');
+        assert.equal(first.series[0].type, 'bar'); assert.equal(first.series[2].type, 'line');
+        assert.equal(first.series[0].itemStyle.color({value: 99}), '#be3c3c');
+        assert.equal(first.series[0].itemStyle.color({value: 100}), '#1f774b');
         assert.ok(first.yAxis.every(axis => axis.min === 0 && axis.max === 100));
         assert.deepEqual(Array.from(first.xAxis[0].data), technology.observation.daily.map(day => day.day));
         assert.deepEqual(dailySeries(first), {score: technology.hosts[0].daily.map(point => point[0]),

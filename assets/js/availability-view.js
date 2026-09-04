@@ -464,8 +464,8 @@
                 : selected < 0 ? dept.target : dept.technologies[selected].target);
             const values = data.map(dailyMetric);
             if (entry.context) entry.context.textContent = t(
-                'Cada ponto reaplica o critério do indicador ao respectivo dia; cobertura usa eixo separado e lacunas não viram disponibilidade. A média simples dos dias pode diferir do indicador mensal.',
-                'Each point reapplies the indicator criterion to that day; coverage uses a separate axis and gaps never become availability. A simple mean of the days may differ from the monthly indicator.');
+                'Cada ponto reaplica o critério do indicador ao respectivo dia; cobertura aparece como linha no mesmo eixo de 0 a 100%, e lacunas não viram disponibilidade. Barras abaixo da meta ficam vermelhas. A média simples dos dias pode diferir do indicador mensal.',
+                'Each point reapplies the indicator criterion to that day; coverage is a line on the same 0–100% axis, and gaps never become availability. Bars below target are red. A simple mean of the days may differ from the monthly indicator.');
             entry.chart.setOption({backgroundColor: 'transparent', animation: false,
                 textStyle: {fontFamily: style.fontFamily}, color: [palette.good, palette.warning, palette.coverage],
                 tooltip: {trigger: 'axis', renderMode: 'richText', backgroundColor: style.getPropertyValue('--gav-panel').trim(),
@@ -478,23 +478,21 @@
                             t('Meta: ', 'Target: ') + percent(target)].join('\n');
                     }},
                 legend: {top: 0, textStyle: {color: muted}},
-                axisPointer: {link: [{xAxisIndex: 'all'}]},
-                grid: [{left: 58, right: 22, top: 48, height: '52%'},
-                    {left: 58, right: 22, top: '78%', height: '10%'}],
-                xAxis: [{type: 'category', data: data.map(day => day.day), gridIndex: 0,
-                    axisLabel: {show: false}, axisTick: {show: false}},
-                {type: 'category', data: data.map(day => day.day), gridIndex: 1, axisLabel: {color: muted,
-                    formatter: value => String(value).length >= 10 ? String(value).slice(8) : String(value)}}],
-                yAxis: [{type: 'value', name: t('Disponibilidade', 'Availability'), min: 0, max: 100, interval: 20, gridIndex: 0,
-                    axisLabel: {color: muted, formatter: '{value}%'}, nameTextStyle: {color: muted}, splitLine: {lineStyle: {color: 'rgba(128,128,128,.15)'}}},
-                {type: 'value', min: 0, max: 100, interval: 100, gridIndex: 1,
-                    axisLabel: {color: muted, formatter: '{value}%'}, nameTextStyle: {color: muted}, splitLine: {show: false}}],
+                grid: {left: 58, right: 22, top: 48, bottom: 34},
+                xAxis: [{type: 'category', data: data.map(day => day.day),
+                    axisLabel: {color: muted, formatter: value => String(value).length >= 10 ? String(value).slice(8) : String(value)}}],
+                yAxis: [{type: 'value', name: t('Disponibilidade / cobertura', 'Availability / coverage'), min: 0, max: 100, interval: 20,
+                    axisLabel: {color: muted, formatter: '{value}%'}, nameTextStyle: {color: muted}, splitLine: {lineStyle: {color: 'rgba(128,128,128,.15)'}}}],
                 series: [{name: t('Disponibilidade', 'Availability'), type: 'bar', barMaxWidth: 23,
-                    data: values.map(value => value.score)},
+                    itemStyle: {color: info => info.value === null || info.value === undefined || !Number.isFinite(Number(info.value))
+                        ? muted : Number(info.value) >= target ? palette.good : palette.critical},
+                    data: values.map(value => value.score), z: 2},
                 {name: t('Meta', 'Target'), type: 'line', showSymbol: false, silent: true,
-                    data: data.map(() => target), lineStyle: {width: 1, type: 'dotted'}},
-                {name: t('Cobertura', 'Coverage'), type: 'bar', xAxisIndex: 1, yAxisIndex: 1, barMaxWidth: 23,
-                    data: values.map(value => value.coverage)}]
+                    data: data.map(() => target), lineStyle: {width: 1, type: 'dotted', color: palette.warning},
+                    itemStyle: {color: palette.warning}, z: 5},
+                {name: t('Cobertura', 'Coverage'), type: 'line', showSymbol: false, connectNulls: false,
+                    data: values.map(value => value.coverage), lineStyle: {width: 2, color: palette.coverage},
+                    itemStyle: {color: palette.coverage}, z: 4}]
             }, true);
             entry.chart.resize();
         };
