@@ -1,8 +1,8 @@
 <?php
 $base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$this->addCssFile($base . 'css/governance.css?v=1.7.0');
-$this->addCssFile($base . 'css/availability.css?v=1.13.2');
-$this->addCssFile($base . 'css/native-layout.css?v=1.18.0');
+$this->addCssFile($base . 'css/governance.css?v=1.22.0');
+$this->addCssFile($base . 'css/availability.css?v=1.22.0');
+$this->addCssFile($base . 'css/native-layout.css?v=1.22.0');
 $this->includeJsFile('governance.availability.view.js.php');
 $pt = $data['is_pt'];
 $t = static function($a, $b) use ($pt) { return $pt ? $a : $b; };
@@ -45,6 +45,17 @@ $date = static function($clock, ?string $zone = null) use ($timezone, $pt) {
 };
 ob_start();
 ?>
+<nav class="gov-page-actions <?= !empty($data['is_dark']) ? 'gov-theme-dark' : '' ?>" aria-label="<?= $t('Ações da página', 'Page actions') ?>">
+    <a class="btn-alt gov-action-link" href="zabbix.php?action=governance.availability.config"><?= $t('Configurar', 'Configure') ?></a>
+    <div class="gov-report-actions" id="gav-filter-actions">
+        <?php if ($report): ?><button type="button" id="gav-export" class="btn-alt" disabled><?= $t('Exportar JSON', 'Export JSON') ?></button>
+        <button type="button" id="gav-print" class="btn-alt" disabled><?= $t('Imprimir / PDF', 'Print / PDF') ?></button><?php endif ?>
+    </div>
+</nav>
+<?php
+$pageControls = new CObject(ob_get_clean());
+ob_start();
+?>
 <div class="gov-container gav <?= !empty($data['is_dark']) ? 'gov-theme-dark' : '' ?>" id="gav-dashboard" data-lang="<?= $pt ? 'pt' : 'en' ?>" data-timezone="<?= $e($data['config']['timezone']) ?>">
     <?php // A separate native POST form supplies Zabbix 6's SID; never nest it in the GET filters.
     echo (new CForm())->setId('gav-job-token')->setAction('zabbix.php?action=governance.availability.run')->setAttribute('hidden', 'hidden'); ?>
@@ -58,11 +69,6 @@ ob_start();
             <?php endforeach ?>
         </select></label>
         <button type="submit" id="gav-calculate" disabled><?= $t('Calcular mês', 'Calculate month') ?></button>
-        <div class="gav-filter-actions" id="gav-filter-actions">
-        <a class="btn-alt" href="zabbix.php?action=governance.availability.config"><?= $t('Configurar', 'Configure') ?></a>
-        <?php if ($report): ?><button type="button" id="gav-export" class="btn-alt" disabled><?= $t('Exportar JSON', 'Export JSON') ?></button>
-        <button type="button" id="gav-print" class="btn-alt" disabled><?= $t('Imprimir / PDF', 'Print / PDF') ?></button><?php endif ?>
-        </div>
     </form>
     <noscript><p class="gav-notice gav-error"><?= $t('Ative o JavaScript para iniciar ou continuar o cálculo em etapas. Abrir esta página não inicia consultas ao histórico.', 'Enable JavaScript to start or resume the staged calculation. Opening this page does not start history queries.') ?></p></noscript>
     <?php if ($data['error']): ?><div class="gav-notice gav-error" id="gav-page-error" role="alert"><?= $e($message($data['error'])) ?>
@@ -72,10 +78,14 @@ ob_start();
     <section class="gav-job gav-no-print" id="gav-job" aria-labelledby="gav-job-title" hidden>
         <div class="gav-toolbar"><h3 id="gav-job-title"><?= $t('Cálculo em etapas', 'Staged calculation') ?></h3><span class="gav-badge" id="gav-job-state"></span></div>
         <div class="gav-job-snapshot"><span class="gav-eyebrow"><?= $t('RETRATO DESTE CÁLCULO', 'THIS CALCULATION SNAPSHOT') ?></span><strong id="gav-job-snapshot"></strong>
-            <p class="gav-muted" id="gav-job-period"></p><p class="gav-muted" id="gav-job-snapshot-note"><?= $t('Regras e período fixados ao iniciar. Nenhum resultado parcial será publicado.', 'Rules and period are fixed at the start. No partial result will be published.') ?></p></div>
+            <p class="gav-muted" id="gav-job-period"></p></div>
         <p class="gav-job-message" id="gav-job-message" role="status" aria-live="polite" aria-atomic="true"></p>
         <div class="gav-job-progress-heading" aria-live="polite" aria-atomic="true"><span id="gav-job-stage"></span><strong id="gav-job-percent">—</strong></div>
-        <progress id="gav-job-progress" max="100" value="0" aria-label="<?= $t('Progresso do processamento', 'Processing progress') ?>" aria-describedby="gav-job-counts"></progress>
+        <progress id="gav-job-progress" max="100" value="0" aria-label="<?= $t('Progresso do processamento', 'Processing progress') ?>" aria-describedby="gav-job-message"></progress>
+        <div class="gav-job-actions"><button type="button" id="gav-job-pause" class="btn-alt" hidden><?= $t('Pausar', 'Pause') ?></button>
+            <button type="button" id="gav-job-resume" hidden><?= $t('Continuar cálculo', 'Resume calculation') ?></button>
+            <a id="gav-job-new" href="zabbix.php?action=governance.availability.view" hidden><?= $t('Escolher outro período', 'Choose another period') ?></a></div>
+        <details class="gov-diagnostics gav-job-diagnostics"><summary><?= $t('Detalhes do processamento', 'Processing details') ?></summary><p class="gav-muted" id="gav-job-snapshot-note"><?= $t('Regras e período fixados ao iniciar. Nenhum resultado parcial será publicado.', 'Rules and period are fixed at the start. No partial result will be published.') ?></p>
         <dl class="gav-job-counts" id="gav-job-counts">
             <div><dt><?= $t('Hosts concluídos / total', 'Hosts completed / total') ?></dt><dd id="gav-job-hosts">—</dd></div>
             <div><dt><?= $t('Verificações concluídas / total', 'Checks completed / total') ?></dt><dd id="gav-job-checks">—</dd></div>
@@ -84,10 +94,8 @@ ob_start();
             <div><dt><?= $t('Chamadas à API', 'API calls') ?></dt><dd id="gav-job-calls">—</dd></div>
         </dl>
         <p class="gav-muted gav-job-context" id="gav-job-context"></p>
-        <div class="gav-job-actions"><button type="button" id="gav-job-pause" class="btn-alt" hidden><?= $t('Pausar', 'Pause') ?></button>
-            <button type="button" id="gav-job-resume" hidden><?= $t('Continuar cálculo', 'Resume calculation') ?></button>
-            <a id="gav-job-new" href="zabbix.php?action=governance.availability.view" hidden><?= $t('Escolher outro período', 'Choose another period') ?></a></div>
         <p class="gav-muted gav-job-pause-help"><?= $t('Pausar ou sair impede novas etapas nesta aba, mas não interrompe uma consulta já enviada ao servidor. Reabra o endereço deste cálculo para continuar enquanto ele estiver disponível.', 'Pausing or leaving prevents new stages in this tab, but does not stop a query already sent to the server. Reopen this calculation’s address to resume while it remains available.') ?></p>
+        </details>
     </section>
     <script type="application/json" id="gav-job-data"><?= json_encode($job, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
     <?php if (!$data['config']['departments'] && !$job && !$data['error']): ?>
@@ -155,7 +163,7 @@ ob_start();
         <?php if ($observedPolicy && isset($department['observation']) && $department['observation']['participants'] < $department['observation']['total_sources']): $participation = $department['observation']; ?><p class="gav-notice"><?= $t('Tecnologias com indicador:', 'Technologies with an indicator:') ?> <strong><?= $e($participation['participants']) ?> / <?= $e($participation['total_sources']) ?></strong> · <?= $t('Peso participante / configurado:', 'Participating / configured weight:') ?> <strong><?= $e($participation['participating_weight']) ?> / <?= $e($participation['total_weight']) ?></strong>.
             <?= $t('Tecnologias sem dados ficam fora da média observada, mas continuam reduzindo a cobertura.', 'Technologies without data are excluded from the observed mean but still reduce coverage.') ?></p><?php endif ?>
         <?php foreach ($department['warnings'] ?? [] as $warning): ?><p class="gav-notice gav-error"><?= $e($message($warning)) ?></p><?php endforeach ?>
-        <div class="gav-table-scroll"><table class="gav-table"><thead><tr>
+        <div class="gav-table-scroll"><table class="list-table gav-table gav-technology-table"><thead><tr>
             <th><?= $t('Tecnologia', 'Technology') ?></th><th><?= $t('Peso / participação', 'Weight / share') ?></th>
             <th><?= $t('Indicador mensal', 'Monthly indicator') ?></th><th><?= $t('Meta', 'Target') ?></th><th><?= $t('Cobertura', 'Coverage') ?></th>
             <th><?= $t('Tempo indisponível¹', 'Downtime¹') ?></th><th><?= $t('Desconhecido¹', 'Unknown¹') ?></th>
@@ -235,18 +243,25 @@ ob_start();
                 <?php if ($observation['evidence_from'] !== null): ?><p class="gav-muted"><?= $t('Primeiro / último limite com estado conhecido:', 'First / last known-state boundary:') ?> <?= $e($date($observation['evidence_from'])) ?> → <?= $e($date($observation['evidence_to'])) ?>. <?= $t('Pode haver lacunas entre esses limites; o fim é exclusivo.', 'Gaps may exist between these boundaries; the end is exclusive.') ?></p><?php endif ?>
             <?php endif ?>
             <?php foreach ($tech['warnings'] as $warning): ?><p class="gav-notice gav-error"><?= $e($message($warning)) ?></p><?php endforeach ?>
-            <div class="gav-table-scroll"><table class="gav-table"><thead><tr><th>Host</th><th><?= $observedPolicy ? $t('Disponibilidade observada', 'Observed availability') : $t('Disponibilidade', 'Availability') ?></th><th><?= $t('Cobertura', 'Coverage') ?></th><th><?= $t('Indisponível', 'Down') ?></th><th><?= $t('Desconhecido', 'Unknown') ?></th><th><?= $t('Itens / observações', 'Items / notes') ?></th></tr></thead><tbody>
+            <div class="gav-table-scroll"><table class="list-table gav-table gav-hosts-table"><thead><tr><th>Host</th><th><?= $observedPolicy ? $t('Disponibilidade observada', 'Observed availability') : $t('Disponibilidade', 'Availability') ?></th><th><?= $t('Cobertura', 'Coverage') ?></th><th><?= $t('Indisponível', 'Down') ?></th><th><?= $t('Desconhecido', 'Unknown') ?></th><th><?= $t('Itens / observações', 'Items / notes') ?></th></tr></thead><tbody>
                 <?php foreach ($tech['hosts'] as $hi => $host): $sourceWarnings = []; $hs = $metric($host); ?><tr><th><?= $e($host['name']) ?></th><td><?= $e($percent($hs['score'])) ?><?php if ($observedPolicy && $hs['score'] === null): ?><small><?= $t('Sem estado conhecido', 'No known state') ?></small><?php endif ?></td><td><?= $e($percent($hs['coverage'])) ?></td><td><?= $e($duration($hs['down'])) ?></td><td><?= $e($duration($hs['unknown'])) ?></td><td>
-                    <?php foreach ($host['sources'] as $source): $trendSource = ($source['data_source'] ?? 'history') === 'trends_conservative'; ?><div class="gav-source"><code><?= $e($source['key']) ?></code><small><strong><?= $trendSource ? $t('Trends horárias conservadoras', 'Conservative hourly trends') : $t('Histórico detalhado', 'Detailed history') ?></strong> · <?= $t('resolução', 'resolution') ?> <?= $trendSource ? '1h' : '1s' ?> · ID <?= $e($source['itemid'] ?? '—') ?> · <?= ($source['freshness_mode'] ?? 'manual') === 'auto' ? $t('Janela automática', 'Automatic window') : $t('Janela manual', 'Manual window') ?>: <?= isset($source['max_age']) ? $e($source['max_age']) . 's' : $t('não resolvida', 'unresolved') ?><?php if (!empty($source['interval_seconds'])): ?> · <?= $t('coleta', 'polling') ?> <?= $e($source['interval_seconds']) ?>s<?php endif ?><?php if (!empty($source['heartbeat_seconds'])): ?> · heartbeat <?= $e($source['heartbeat_seconds']) ?>s<?php endif ?></small>
+                    <?php foreach ($host['sources'] as $source): $trendSource = ($source['data_source'] ?? 'history') === 'trends_conservative'; ?><div class="gav-source"><code><?= $e($source['key']) ?></code><small class="gav-source-state"><strong><?= $trendSource ? $t('Trends horárias conservadoras', 'Conservative hourly trends') : $t('Histórico detalhado', 'Detailed history') ?></strong></small>
+                        <?php if (!$trendSource): ?>
+                            <?php if (isset($source['history_queried']) && !$source['history_queried']): ?><small class="gav-warning gav-source-alert"><?= $t('Histórico não consultado: revise o item e a validade.', 'History not queried: review the item and validity.') ?></small>
+                            <?php elseif (($source['sample_count'] ?? 0) === 0 && empty($source['seed_clock'])): ?><small class="gav-warning gav-source-alert"><?= $t('Sem amostras no período ou na janela anterior.', 'No samples in the period or preceding window.') ?></small>
+                            <?php elseif (($source['unknown_sample_count'] ?? 0) > 0): ?><small class="gav-warning gav-source-alert"><?= $t('Há valores que não correspondem exclusivamente a UP ou DOWN.', 'Some values do not match exclusively UP or DOWN.') ?></small><?php endif ?>
+                        <?php endif ?>
+                        <details class="gav-source-details"><summary><?= $t('Detalhes da fonte', 'Source details') ?></summary><small><strong><?= $trendSource ? $t('Trends horárias conservadoras', 'Conservative hourly trends') : $t('Histórico detalhado', 'Detailed history') ?></strong> · <?= $t('resolução', 'resolution') ?> <?= $trendSource ? '1h' : '1s' ?> · ID <?= $e($source['itemid'] ?? '—') ?> · <?= ($source['freshness_mode'] ?? 'manual') === 'auto' ? $t('Janela automática', 'Automatic window') : $t('Janela manual', 'Manual window') ?>: <?= isset($source['max_age']) ? $e($source['max_age']) . 's' : $t('não resolvida', 'unresolved') ?><?php if (!empty($source['interval_seconds'])): ?> · <?= $t('coleta', 'polling') ?> <?= $e($source['interval_seconds']) ?>s<?php endif ?><?php if (!empty($source['heartbeat_seconds'])): ?> · heartbeat <?= $e($source['heartbeat_seconds']) ?>s<?php endif ?></small>
                         <?php if ($trendSource): ?><small class="gav-source-diagnostics"><?= $t('Horas com trend:', 'Trend hours:') ?> <?= $e($source['trend_row_count']) ?> · UP <?= $e($source['trend_up_hour_count']) ?> · DOWN <?= $e($source['trend_down_hour_count']) ?> · <?= $t('mistas como DOWN', 'mixed as DOWN') ?> <?= $e($source['trend_mixed_hour_count']) ?> · UNKNOWN <?= $e($source['trend_unknown_hour_count']) ?></small><?php elseif (!empty($source['trend_fallback_attempted'])): ?><small><?= $t('Trends consultadas, mas não substituíram o histórico porque não aumentaram a cobertura.', 'Trends were queried but did not replace history because they did not increase coverage.') ?></small><?php endif ?>
                         <?php if (strpos($source['freshness_source'] ?? '', 'flexible_interval') !== false): ?><small><?= $t('Intervalos flexíveis: janela calculada pelo maior intervalo de coleta e pelo mínimo horário.', 'Flexible intervals: window calculated from the longest polling interval and the hourly minimum.') ?></small><?php endif ?>
-                        <?php if (isset($source['history_queried']) && !$source['history_queried']): ?><small class="gav-warning"><?= $t('Histórico não consultado: revise o item e a validade.', 'History not queried: review the item and validity.') ?></small><?php else: ?>
+                        <?php if (isset($source['history_queried']) && !$source['history_queried']): ?><?php if ($trendSource): ?><small><?= $t('Histórico detalhado não consultado; a fonte usada foi trends.', 'Detailed history was not queried; trends were used.') ?></small><?php endif ?><?php else: ?>
                         <?php if (isset($source['sample_count']) || array_key_exists('max_gap_seconds', $source)): ?><small class="gav-source-diagnostics"><?php if (isset($source['sample_count'])): ?><?= $t('Amostras no período:', 'Samples in period:') ?> <?= $e($source['sample_count']) ?><?php if (isset($source['up_sample_count'])): ?> · UP <?= $e($source['up_sample_count']) ?> · DOWN <?= $e($source['down_sample_count']) ?> · UNKNOWN <?= $e($source['unknown_sample_count']) ?><?php endif ?><?php endif ?><?php if (array_key_exists('max_gap_seconds', $source)): ?><?= isset($source['sample_count']) ? ' · ' : '' ?><?= $t('Maior intervalo entre amostras:', 'Longest interval between samples:') ?> <?= isset($source['max_gap_seconds']) ? $e($duration($source['max_gap_seconds'])) : '—' ?><?php endif ?></small><?php endif ?>
                         <?php if (($source['sample_count'] ?? 0) === 0 && empty($source['seed_clock'])): ?><small class="gav-warning"><?= $t('Histórico consultado, mas nenhuma amostra foi encontrada no período ou na janela anterior.', 'History was queried, but no sample was found in the period or preceding window.') ?></small><?php elseif (($source['unknown_sample_count'] ?? 0) > 0): ?><small class="gav-warning"><?= $t('Há valores encontrados que não correspondem exclusivamente às regras de UP ou DOWN.', 'Some returned values do not match exactly one of the UP or DOWN rules.') ?></small><?php endif ?>
                         <?php if (array_key_exists('first_clock', $source) || array_key_exists('last_clock', $source)): ?><small><?= $t('Primeira / última amostra:', 'First / last sample:') ?> <?= isset($source['first_clock']) ? $e($date($source['first_clock'])) : '—' ?> / <?= isset($source['last_clock']) ? $e($date($source['last_clock'])) : '—' ?></small><?php endif ?>
                         <?php if (isset($source['seed_clock'])): ?><small><?= $t('Amostra anterior ao início, válida apenas até expirar:', 'Pre-period sample, valid only until expiry:') ?> <?= $e($date($source['seed_clock'])) ?></small><?php endif ?>
                         <?php endif ?>
-                        <?php if (isset($source['summary']['coverage']) || isset($source['summary']['unknown'])): ?><small><?= $t('Cobertura da fonte:', 'Source coverage:') ?> <?= $e($percent($source['summary']['coverage'] ?? null)) ?><?php if (isset($source['summary']['unknown'])): ?> · <?= $t('Tempo sem estado conhecido:', 'Time with unknown state:') ?> <?= $e($duration($source['summary']['unknown'])) ?><?php endif ?></small><?php endif ?>
+                        </details>
+                        <?php if (isset($source['summary']['coverage']) || isset($source['summary']['unknown'])): ?><small class="<?= ($source['summary']['unknown'] ?? 0) > 0 ? 'gav-warning' : '' ?>"><?= $t('Cobertura da fonte:', 'Source coverage:') ?> <?= $e($percent($source['summary']['coverage'] ?? null)) ?><?php if (isset($source['summary']['unknown'])): ?> · <?= $t('Tempo sem estado conhecido:', 'Time with unknown state:') ?> <?= $e($duration($source['summary']['unknown'])) ?><?php endif ?></small><?php endif ?>
                         <?php foreach ($source['warnings'] ?? [] as $warning): $sourceWarnings[$warning] = true; $sourceWarnings[$source['key'] . ': ' . $warning] = true; ?><small class="gav-warning"><?= $e($message($warning)) ?></small><?php endforeach ?>
                     </div><?php endforeach ?>
                     <?php foreach ($host['warnings'] as $warning): if (isset($sourceWarnings[$warning])) { continue; } ?><small class="gav-warning"><?= $e($message($warning)) ?></small><?php endforeach ?>
@@ -282,4 +297,4 @@ ob_start();
     </div>
     <?php endif ?>
 </div>
-<?php (new CWidget())->setTitle($data['page_title'])->addItem(new CObject(ob_get_clean()))->show();
+<?php (new CWidget())->setTitle($data['page_title'])->setControls($pageControls)->addItem(new CObject(ob_get_clean()))->show();

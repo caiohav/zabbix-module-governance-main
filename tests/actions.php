@@ -16,7 +16,7 @@ class CController {
     protected function validateInput($rules) { return true; }
 }
 class CControllerResponseFatal {}
-class CControllerResponseData { public $data; public function __construct($data) { $this->data = $data; } }
+class CControllerResponseData { public $title; public function getData() { return $this->data; } public function setTitle($title) { $this->title = $title; } public $data; public function __construct($data) { $this->data = $data; } }
 class CControllerResponseRedirect { public $data; public function __construct($url) {} public function setFormData($d) { $this->data = $d; } }
 class CUrl { public function __construct($url) {} public function setArgument($a, $b) { return $this; } }
 class CWebUser { public static $data = ['theme' => 'blue-theme']; public static function getLang() { return 'pt_BR'; } }

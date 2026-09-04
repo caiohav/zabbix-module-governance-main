@@ -15,7 +15,7 @@ if (preg_match('~^/modules/[^/]+/assets/(.+)$~', $url, $matches) || preg_match('
     header('Content-Type: ' . (substr($path, -4) === '.css' ? 'text/css' : 'application/javascript'));
     readfile($path); exit;
 }
-if ($url === '/preview-native.css') {
+if (in_array($url, ['/preview-native.css', '/native.css'], true)) {
     $path = sys_get_temp_dir() . '/governance-zabbix6-css/' . (isset($_GET['light']) ? 'blue-theme.css' : 'dark-theme.css');
     header('Content-Type: text/css');
     if (is_file($path)) { readfile($path); }
@@ -90,7 +90,7 @@ class PreviewAvailabilityApi {
     }
 }
 class CObject { private $value; public function __construct($value) { $this->value = $value; } public function __toString() { return $this->value; } }
-class CWidget { private $items = []; public function setTitle($title) { return $this; } public function addItem($item) { $this->items[] = $item; return $this; } public function show() { echo '<main>' . implode('', $this->items) . '</main>'; } }
+require_once __DIR__ . '/widget-fixture.php';
 class CTag {
     private $tag, $paired, $items = [], $attributes = [];
     public function __construct($tag, $paired = true, $items = null) { $this->tag = $tag; $this->paired = $paired; $this->addItem($items); }

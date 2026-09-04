@@ -166,7 +166,7 @@ class CController {
     protected function disableSIDvalidation() { $this->sidValidation = false; }
 }
 class CControllerResponseFatal {}
-class CControllerResponseData { public $data; public function __construct($data) { $this->data = $data; } }
+class CControllerResponseData { public $title; public function getData() { return $this->data; } public function setTitle($title) { $this->title = $title; } public $data; public function __construct($data) { $this->data = $data; } }
 class CControllerResponseRedirect {
     public $data = [], $url;
     public function __construct($url) { $this->url = $url; }
@@ -246,6 +246,8 @@ set_error_handler(static function($severity, $message, $file, $line) {
     throw new ErrorException($message, 0, $severity, $file, $line);
 }, E_WARNING | E_NOTICE);
 $editor = new QualityConfigHarness(); $editor->run();
+qualityAssert($editor->response->title === $editor->response->data['page_title'], 'editor sets browser title through native response');
+qualityAssert($editor->response->data['saved_page_ids'] === array_column($migrated, 'id'), 'editor identifies only saved pages for return navigation');
 qualityAssert($editor->response->data['pages'] === $migrated && $editor->response->data['selected_page'] === 'main', 'editor loads the migrated main page');
 qualityAssert($editor->response->data['revision'] === $revision && !$editor->response->data['conflict'], 'editor starts with the reviewed revision');
 qualityAssert($editor->response->data['is_dark'] === true, 'editor respects the inherited default dark theme');
@@ -258,6 +260,7 @@ qualityAssert($pageOnly->response->data['selected_page'] === 'main' && $pageOnly
 $draftView = new QualityConfigHarness();
 $draftView->input = ['quality_json' => json_encode($pages), 'quality_revision' => $revision, 'page' => 'groups']; $draftView->run();
 qualityAssert($draftView->response->data['draft_json'] === json_encode($pages) && $draftView->response->data['pages'] === $pages, 'submitted draft is preserved verbatim');
+qualityAssert($draftView->response->data['saved_page_ids'] === array_column($migrated, 'id'), 'returned draft cannot claim unsaved pages already exist');
 qualityAssert($draftView->response->data['selected_page'] === 'groups', 'draft retains selected page');
 $draftView->input = ['quality_json' => json_encode($pages)]; $draftView->run();
 qualityAssert($draftView->response->data['conflict'] && $draftView->response->data['revision'] === '', 'draft without revision remains blocked without an undefined input');

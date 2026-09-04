@@ -81,7 +81,7 @@
             </div>
             <div class="gav-checks-title"><h4>${t('Verificações por host', 'Checks per host')}</h4>${help(t('Como as verificações são combinadas', 'How checks are combined'), `<p>${t('Todos são obrigatórios. Uma falha confirmada prevalece sobre outro item sem dados; quedas sobrepostas contam uma vez.', 'All are required. A confirmed failure takes precedence over another item with no data; overlapping outages count once.')}</p>`)}</div>
             <div class="gav-checks">${(Array.isArray(tech.checks) && tech.checks.length ? tech.checks : [{key: '', up: {op: 'eq', a: 1}, down: null, max_age: null}]).map(check => checkHtml(check, tech.max_age ?? null)).join('')}</div>
-            <div class="gav-toolbar gav-node-actions"><button type="button" data-action="add-check" class="btn-alt">${t('Adicionar verificação', 'Add check')}</button></div></div>
+            <div class="gav-toolbar gav-node-actions"><button type="button" data-action="add-check" class="btn-link">${t('Adicionar verificação', 'Add check')}</button></div></div>
             <div class="gav-sla-source" data-source-panel="sla" hidden>
                 ${help(t('Requisitos do SLA mensal', 'Monthly SLA requirements'), `<p>${t('Nesta versão, use um SLA de período mensal e apenas meses encerrados. O resultado segue o calendário, o fuso horário e as exclusões do SLA nativo; o resumo mensal não fornece linha do tempo diária.', 'In this version, use a monthly SLA and closed months only. Results follow the native SLA schedule, time zone and exclusions; the monthly summary does not provide a daily timeline.')}</p><p>${t('Alinhe o fuso do relatório com o fuso do SLA para uma média departamental comparável. Esta fonte não consulta itens nem grupos de hosts.', 'Align the report time zone with the SLA time zone for a comparable departmental mean. This source does not query items or host groups.')}</p>`)}
                 <div class="gav-config-grid">
@@ -94,7 +94,7 @@
                 <div class="gav-toolbar gav-node-actions"><button type="button" data-action="import-sla-url" class="btn-alt">${t('Preencher IDs do endereço', 'Fill IDs from address')}</button><p class="gav-muted gav-sla-import-status" role="status"></p></div>
                 </details>
             </div>
-            <div class="gav-toolbar gav-node-actions"><button type="button" data-action="remove-technology" class="btn-alt gav-remove">${t('Remover tecnologia', 'Remove technology')}</button></div>
+            <div class="gav-toolbar gav-node-actions"><button type="button" data-action="remove-technology" class="btn-link gav-remove">${t('Remover tecnologia', 'Remove technology')}</button></div>
             </div></details>`;
         const departmentHtml = (dept = {name: '', target: 99.9, technologies: []}, open = true) => `<details class="gav-department-editor" ${open ? 'open' : ''}>
             <summary><strong>${esc(dept.name || t('Novo departamento', 'New department'))}</strong><span class="gav-summary-meta"></span></summary>
@@ -102,7 +102,7 @@
                 ${field(t('Nome do departamento', 'Department name'), input('name', dept.name, 'required maxlength="100" placeholder="Banco de Dados"'), 'gav-span-9')}
                 ${field(t('Meta do departamento (%)', 'Department target (%)'), input('target', dept.target, 'min="0" max="100" step="any" required', 'number'), 'gav-span-3')}
             </div><div class="gav-technologies">${dept.technologies.map(tech => technologyHtml(tech)).join('')}</div>
-            <div class="gav-toolbar gav-node-actions"><button type="button" data-action="add-technology" class="btn-alt">${t('Adicionar tecnologia', 'Add technology')}</button><button type="button" data-action="remove-department" class="btn-alt gav-remove">${t('Remover departamento', 'Remove department')}</button></div>
+            <div class="gav-toolbar gav-node-actions"><button type="button" data-action="add-technology" class="btn-link">${t('Adicionar tecnologia', 'Add technology')}</button><button type="button" data-action="remove-department" class="btn-link gav-remove">${t('Remover departamento', 'Remove department')}</button></div>
         </div></details>`;
         const get = (node, name) => node.querySelector(`[data-field="${name}"]`).value;
         const updateRules = () => {

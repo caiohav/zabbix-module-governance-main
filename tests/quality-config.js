@@ -31,7 +31,12 @@ class Element {
     closest(selector) { for (let n = this; n; n = n.parent) if (n.matches(selector)) return n; return null; }
     contains(node) { return node === this || this.children.some(c => c.contains(node)); }
     addEventListener(type, fn) { (this.events[type] ||= []).push(fn); }
-    fire(type) { const e = {target: this, preventDefault() { this.prevented = true; }}; for (let n = this; n; n = n.parent) for (const fn of n.events[type] || []) fn(e); return e; }
+    fire(type) { const e = {target: this, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; }}; for (let n = this; n; n = n.parent) { for (const fn of n.events[type] || []) fn(e); if(e.stopped) break; } return e; }
+    get tagName() { return this.tag.toUpperCase(); }
+    get isConnected() { return !!this.parent; }
+    click() { return this.fire('click'); }
+    showModal() { this.open = true; }
+    close() { this.open = false; }
     setCustomValidity(message) { this.validationMessage = message; }
     checkValidity() { return this.disabled || (!this.validationMessage && (!this.required || !!this.value)); }
     reportValidity() {}
@@ -52,6 +57,7 @@ for (const lang of ['pt', 'en']) {
     }
     for (const id of ['gov-add-page', 'gov-add-card', 'gov-save']) { const node = new Element('button'); node.id = id; root.append(node); }
     const find = id => root.querySelector('#' + id);
+    const back = new Element('a'); back.id = 'gov-back-dashboard'; back.dataset.savedPages = '["main"]'; root.append(back);
     find('gov-quality-page').value = 'main';
     find('gov-quality-data').textContent = JSON.stringify([{id: 'main', name: '', cards: [{id: 'old', type: 'inventory', title: 'Old', description: '', tag_names: '', tag_values: '', group_names: '', include_score: 1, scope_tag_name:'Departamento', scope_tag_value:'DBD', scope_group_names:'DBD,Other', scope_include_subgroups:0}]}]);
     const calls = []; let delayed = false, resolveDelayed;
@@ -67,6 +73,7 @@ for (const lang of ['pt', 'en']) {
     vm.runInNewContext(source, {document: {readyState: 'complete', getElementById: id => id === form.id ? form : id === root.id ? root : find(id), createElement: tag => new Element(tag)},
         window: {confirm: () => true, addEventListener() {}, fetch, crypto:require('node:crypto').webcrypto}, URLSearchParams, Uint8Array, AbortController, setTimeout, clearTimeout, console});
     assert.equal(find('gov-save').disabled, false, 'Editor initializes');
+    assert.equal(back.href, 'zabbix.php?action=governance.quality.view&page=main', 'Back opens selected saved page');
     const payload = () => JSON.parse(find('gov-quality-payload').value);
     assert.equal(payload()[0].cards[0].display_mode, 'conformity', 'Legacy display preserved');
     assert.equal(payload()[0].cards[0].selection.mode, 'all', 'Legacy intersection preserved');
@@ -78,13 +85,16 @@ for (const lang of ['pt', 'en']) {
     const field = key => cards[1].querySelector('[data-field="' + key + '"]');
     const set = (key, value) => { field(key).value = value; field(key).fire('change'); };
     set('title', 'DBD without OS template'); set('type', 'templates');
-    cards[1].querySelector('.gqp-add-condition').fire('click');
+    const dialog = () => root.querySelector('.gqp-condition-dialog');
+    const conditionSet = (key, value) => { const control = dialog().querySelector('[data-field="condition_' + key + '"]'); control.value = String(value); control.fire('change'); };
+    const apply = () => dialog().querySelector('.gqp-condition-apply').click();
+    const addCondition = fields => { cards[1].querySelector('.gqp-add-condition').click(); Object.entries(fields).forEach(([k,v]) => conditionSet(k,v)); apply(); assert.equal(dialog(),null); };
+    addCondition({name:'Departamento',value:'DBD'});
     const row1 = cards[1].querySelector('.gqp-conditions').children[0];
-    const conditionSet = (row, key, value) => { const control = row.querySelector('[data-field="condition_' + key + '"]'); control.value = value; control.fire('change'); };
-    conditionSet(row1, 'name', 'Departamento'); conditionSet(row1, 'value', 'DBD');
-    cards[1].querySelector('.gqp-add-condition').fire('click');
+    addCondition({type:'group',value:'DBD'});
     const row2 = cards[1].querySelector('.gqp-conditions').children[1];
-    conditionSet(row2, 'type', 'group'); conditionSet(row2, 'value', 'DBD');
+    assert.equal(row1.querySelectorAll('input,select').length,0,'Rows display descriptions, not editable controls');
+    assert.ok(row1.textContent.includes('Departamento') && row1.textContent.includes('DBD'));
     set('template_names', 'Linux,Windows'); set('template_mode', 'any');
     let saved = payload()[0].cards[1];
     assert.equal(saved.selection.conditions[0].value, 'DBD'); assert.equal(saved.selection.conditions[1].type, 'group'); assert.equal(saved.template_names, 'Linux,Windows');
@@ -102,6 +112,16 @@ for (const lang of ['pt', 'en']) {
     assert.ok(form.fire('submit').prevented, 'Unknown condition label rejected');
     set('selection_formula','(A or B)');
     cards[1].querySelector('.gqp-add-condition').fire('click');
+    conditionSet('name','Cancelled');
+    assert.equal(field('selection_formula').value,'(A or B)','Draft does not change formula');
+    assert.ok(form.fire('submit').prevented,'Parent form cannot save with pending condition');
+    dialog().querySelector('.gqp-condition-cancel').click();
+    assert.equal(field('selection_formula').value,'(A or B)','Cancel keeps formula');
+    row1.querySelector('.gqp-edit-condition').click();
+    conditionSet('value','DBD revised'); apply();
+    assert.equal(field('selection_formula').value,'(A or B)','Editing retains labels and formula');
+    row1.querySelector('.gqp-edit-condition').click(); conditionSet('value','DBD'); apply();
+    addCondition({type:'inventory',inventory:'os'});
     assert.equal(field('selection_formula').value,'','Adding condition invalidates formula');
     cards[1].querySelector('.gqp-conditions').children[2].querySelector('.gqp-remove-condition').fire('click');
     assert.equal(field('selection_formula').value,'','Removing condition never reinterprets shifted labels');
@@ -110,9 +130,16 @@ for (const lang of ['pt', 'en']) {
     assert.equal(field('template_names').disabled, false);
     assert.equal(field('inventory_field').disabled, true);
     assert.ok(!form.fire('submit').prevented, 'Valid crossed filters submit');
-    conditionSet(row1, 'name', '');
-    assert.ok(form.fire('submit').prevented, 'Tag value without name blocked');
-    conditionSet(row1, 'name', 'Departamento'); set('type', 'inventory'); set('inventory_field', 'os');
+    row1.querySelector('.gqp-edit-condition').click(); conditionSet('name', ''); apply();
+    assert.ok(dialog(), 'Tag value without name blocked in dialog');
+    assert.equal(payload()[0].cards[1].selection.conditions[0].name,'Departamento','Invalid draft never replaces applied condition');
+    dialog().querySelector('.gqp-condition-cancel').click();
+    row2.querySelector('.gqp-edit-condition').click(); conditionSet('value',', ,'); apply();
+    assert.ok(dialog(),'Comma-only group list is invalid'); dialog().querySelector('.gqp-modal-close').click();
+    row1.conditionData.name = ''; // Simulate a bad returned draft: save must reveal the condition editor.
+    assert.ok(form.fire('submit').prevented); assert.ok(dialog());
+    conditionSet('name','Departamento'); apply();
+    set('type', 'inventory'); set('inventory_field', 'os');
     assert.equal(field('template_names').disabled, true);
     assert.equal(field('inventory_field').disabled, false);
     assert.ok(!form.fire('submit').prevented, 'Inventory scope submits');
@@ -141,6 +168,7 @@ for (const lang of ['pt', 'en']) {
     preview.querySelector('button').fire('click'); await new Promise(resolve => setImmediate(resolve));
     assert.ok(preview.querySelector('.gqp-preview-output').textContent.includes(lang === 'pt' ? 'Não foi possível testar' : 'Could not test'), 'Missing KPI never becomes a zero-host success');
     find('gov-add-page').fire('click');
+    assert.equal(back.href, 'zabbix.php?action=governance.quality.view&page=main', 'Unsaved page returns to an existing page');
     assert.equal(payload().length, 2, 'Page creation preserves first page filters');
     assert.equal(payload()[0].cards[1].selection.conditions[0].value, 'DBD');
 }

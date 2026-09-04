@@ -1,8 +1,8 @@
 <?php
 $base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$this->addCssFile($base . 'css/governance.css?v=1.13.2');
-$this->addCssFile($base . 'css/availability.css?v=1.13.2');
-$this->addCssFile($base . 'css/native-layout.css?v=1.18.0');
+$this->addCssFile($base . 'css/governance.css?v=1.22.0');
+$this->addCssFile($base . 'css/availability.css?v=1.22.0');
+$this->addCssFile($base . 'css/native-layout.css?v=1.22.0');
 $this->includeJsFile('governance.availability.config.js.php');
 $pt = $data['is_pt'];
 $t = static function($ptText, $enText) use ($pt) { return $pt ? $ptText : $enText; };
@@ -10,14 +10,16 @@ $e = static function($value) { return htmlspecialchars((string) $value, ENT_QUOT
 $dataPolicy = array_key_exists('data_policy', $data['config']) ? $data['config']['data_policy'] : 'strict';
 ob_start();
 ?>
+<nav class="gov-page-actions <?= !empty($data['is_dark']) ? 'gov-theme-dark' : '' ?>" aria-label="<?= $t('Ações da página', 'Page actions') ?>">
+    <a class="btn-alt gov-action-link" href="zabbix.php?action=governance.availability.view"><?= $t('Voltar ao painel', 'Back to dashboard') ?></a>
+</nav>
+<?php
+$pageControls = new CObject(ob_get_clean());
+ob_start();
+?>
 <div class="gov-container gav <?= !empty($data['is_dark']) ? 'gov-theme-dark' : '' ?>" id="gav-config" data-lang="<?= $pt ? 'pt' : 'en' ?>">
-    <div class="gav-toolbar gav-page-heading">
-        <div><span class="gav-eyebrow"><?= $t('GOVERNANÇA / DISPONIBILIDADE', 'GOVERNANCE / AVAILABILITY') ?></span>
-            <h2><?= $t('Regras dos indicadores', 'Indicator rules') ?></h2>
-            <p class="gav-muted"><?= $t('Defina os serviços, seus pesos e a fonte de disponibilidade: histórico de itens ou SLA nativo mensal.', 'Define services, their weights and their availability source: item history or native monthly SLA.') ?></p></div>
-        <a class="btn-alt" href="zabbix.php?action=governance.availability.view"><?= $t('Voltar ao painel', 'Back to dashboard') ?></a>
-    </div>
-    <section class="gav-report-settings">
+    <section class="gav-report-settings" aria-labelledby="gav-settings-title">
+        <h3 id="gav-settings-title"><?= $t('Configurações gerais', 'General settings') ?></h3>
         <label class="gav-field gav-timezone"><span><?= $t('Fuso horário do relatório', 'Report time zone') ?></span>
             <input type="text" id="gav-timezone" required maxlength="80" list="gav-timezones" value="<?= $e($data['config']['timezone']) ?>" aria-describedby="gav-timezone-help">
         </label>
@@ -25,8 +27,6 @@ ob_start();
             <p id="gav-timezone-help"><?= $t('Define os limites mensais da fonte por itens. Com SLA, alinhe este fuso ao do SLA para uma média departamental comparável.', 'Defines monthly boundaries for the item source. With SLA, align this time zone with the SLA for a comparable departmental mean.') ?></p>
             <p><?= $t('Itens usam calendário 24×7; SLA segue seu próprio calendário, fuso e exclusões. Os pesos do módulo se aplicam entre tecnologias do mesmo departamento.', 'Items use a 24×7 calendar; SLA follows its own schedule, time zone and exclusions. Module weights apply to technologies in the same department.') ?></p>
         </details>
-    </section>
-    <section class="gav-report-settings">
         <label class="gav-field gav-timezone"><span><?= $t('Tratamento de dados ausentes (itens)', 'Missing data policy (items)') ?></span>
             <select id="gav-data-policy" required aria-describedby="gav-data-policy-help gav-data-policy-scope">
                 <?php if (!in_array($dataPolicy, ['strict', 'observed'], true)): ?><option value="" selected disabled><?= $t('Selecione uma política válida', 'Select a valid policy') ?></option><?php endif ?>
@@ -66,10 +66,13 @@ ob_start();
     <div id="gav-departments"></div>
     <div id="gav-config-empty" class="gav-empty" hidden><h3><?= $t('Crie o primeiro departamento', 'Create the first department') ?></h3>
         <p><?= $t('Exemplo: Banco de Dados, com PostgreSQL (peso 4), SQL Server (2) e Qlik Sense (1).', 'Example: Database, with PostgreSQL (weight 4), SQL Server (2) and Qlik Sense (1).') ?></p></div>
-    <div class="gav-editor-footer">
+    <div class="gov-list-actions">
         <button type="button" id="gav-add-department" class="btn-alt" disabled><?= $t('Adicionar departamento', 'Add department') ?></button>
-        <p id="gav-config-status" role="status"><?= $t('Carregando editor…', 'Loading editor…') ?></p>
+    </div>
+    <div class="gav-editor-footer">
         <button type="submit" id="gav-save" disabled><?= $t('Salvar regras', 'Save rules') ?></button>
+        <p id="gav-config-status" role="status" aria-live="polite"><?= $t('Carregando editor…', 'Loading editor…') ?></p>
+        <span class="gov-required-note"><span aria-hidden="true">*</span> <?= $t('Campos obrigatórios', 'Required fields') ?></span>
     </div>
     <noscript><p class="gav-notice gav-error"><?= $t('Ative o JavaScript para editar as regras. Nenhuma configuração foi alterada.', 'Enable JavaScript to edit rules. No configuration was changed.') ?></p></noscript>
     <input type="hidden" name="availability_json" id="gav-payload" value="">
@@ -80,4 +83,4 @@ ob_start();
 $form = (new CForm())->setId('gav-config-form')
     ->setAction('zabbix.php?action=governance.availability.save')
     ->addItem(new CObject(ob_get_clean()));
-(new CWidget())->setTitle($data['page_title'])->addItem($form)->show();
+(new CWidget())->setTitle($data['page_title'])->setControls($pageControls)->addItem($form)->show();

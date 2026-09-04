@@ -8,12 +8,85 @@ Zabbix 6.0 LTS.
 - Arquivos PHP da raiz, `actions/`, `views/` e `assets/`: código do módulo e licença do ECharts.
 - `tests/`: testes automatizados e ambientes locais com dados simulados; não instalar no servidor.
 - `notes/`: roadmap e validações atuais; `notes/archive/` preserva diagnósticos antigos, não tarefas pendentes.
-- `dist/`: pacotes ZIP gerados, ignorados pelo Git. O pacote local atual é `dist/zabbix-module-governance-1.18.0.zip`.
+- `dist/`: pacotes ZIP gerados, ignorados pelo Git. O pacote local atual é `dist/zabbix-module-governance-1.22.0.zip`.
 
 Para instalação, use o conteúdo do ZIP, não a pasta inteira do repositório.
 Os pacotes antigos foram retirados da pasta de trabalho de forma recuperável;
 o local do arquivo está registrado em `notes/README.md`. Nenhuma versão do
 módulo ou regra de cálculo foi alterada nessa organização.
+
+## Novidades 1.22.0 — Relatórios mais compactos
+
+Qualidade mostra o andamento em uma faixa compacta; horários e chamadas à API
+ficam em “Detalhes da consulta”. Cards têm títulos mais compactos, com o texto
+completo disponível ao passar o mouse, e cores ajustadas aos temas claro/escuro.
+
+Disponibilidade mantém o resumo da fonte e os alertas de cobertura visíveis.
+Janela, heartbeat, amostras e tentativas de histórico ficam em “Detalhes da fonte”.
+Quando trends são usadas, a contagem do histórico não é apresentada como se fosse
+a cobertura das trends. Tabelas usam o estilo de lista e alinham números à direita.
+Os detalhes do processamento também podem ser expandidos quando necessários.
+
+Gráficos continuam com fundo transparente e escala 0–100%: gauges em Qualidade,
+barras em Disponibilidade. Abrir detalhes não faz novas consultas. Metadados das
+fontes em seções expandidas continuam disponíveis na impressão; depois, a tela
+volta ao estado anterior. Gráficos de hosts continuam sendo carregados sob demanda.
+
+Pacote cumulativo. Sem mudança nas regras, pesos, fontes ou cálculos. Validado
+localmente com dados simulados em PT/EN e claro/escuro; validação instalada e
+temas de alto contraste ainda pendentes.
+
+## Novidades 1.21.0 — Condições em tabela e edição por janela
+
+As condições de Qualidade aparecem em uma tabela compacta: rótulo, descrição e
+ações Editar/Remover. Adicionar e Editar abrem uma janela com tipo, operador e
+campos pertinentes. Aplicar atualiza somente o rascunho; Cancelar, Escape ou X
+descartam a edição da janela. Salvar todas as páginas continua sendo necessário.
+
+Editar mantém o rótulo e a fórmula. Adicionar/remover limpa a expressão personalizada
+para evitar referências trocadas. O limite permanece em 20 condições, com os mesmos
+modos Todas/Qualquer/Expressão e a mesma separação entre selecionar hosts e medir.
+
+O catálogo de grupos/templates compartilha o estilo das janelas, com cabeçalho,
+busca identificada, fechamento e rodapé. Consultas só ocorrem ao clicar Buscar;
+respostas de buscas canceladas não alteram o rascunho. Nomes, IDs exatos e opções
+de subgrupos preservam o significado anterior.
+
+Pacote cumulativo. Testado localmente em PT/EN e claro/escuro, incluindo teclado,
+janelas sobrepostas, validação e telas estreitas. Nenhuma alteração nos cálculos
+ou nas configurações do servidor. O acabamento dos relatórios continua no roadmap.
+
+## Novidades 1.20.0 — Formulários e ações consistentes
+
+As configurações globais de Disponibilidade ficam em uma única seção, com fuso e
+política de dados sempre visíveis. Os dois editores compartilham cores de campos,
+superfícies planas, bordas, abas e apresentação da ajuda nos temas claro/escuro.
+
+Adicionar card/departamento fica junto às listas; o rodapé contém Salvar e o estado
+do rascunho. Remover e adicionar linhas internas usam ações de texto no estilo do
+Zabbix. Campos obrigatórios ganham asterisco em navegadores com suporte a `:has()`;
+a validação e os atributos de acessibilidade continuam independentes desse realce.
+
+Pacote cumulativo: inclui a 1.19.0. Sem mudança nos cálculos, regras, formato salvo
+ou frequência de consultas. A tabela/editor de condições e o acabamento dos
+relatórios continuam como etapas posteriores do roadmap.
+
+## Novidades 1.19.0 — Padronização visual, primeiro lote
+
+As quatro telas agora usam o cabeçalho nativo para as ações de navegação.
+“Configurar páginas e cards” tem dimensões e estados de botão secundário;
+Configurar, Exportar JSON e Imprimir/PDF ficam juntos no cabeçalho de Disponibilidade.
+Os títulos internos repetidos foram removidos dos editores e a aba do navegador
+recebe o título da página.
+
+Botões e campos de linha única ficam mais compactos (24 px), com cores de campos
+compatíveis com os temas claro e escuro. O retorno de Qualidade acompanha a página
+salva selecionada; páginas novas ainda não salvas retornam a uma página existente.
+Os links de retorno não salvam o rascunho.
+
+Não há alteração nos cálculos, regras, dados salvos ou consultas ao Zabbix.
+Este é o lote A do roadmap visual: a revisão completa de tabelas de condições,
+janelas, ajuda e cores dos painéis ainda será feita em etapas posteriores.
 
 ## Novidades 1.18.0 — Configuração de disponibilidade mais compacta
 

@@ -6,12 +6,7 @@ class CObject {
     public function __construct($value) { $this->value = $value; }
     public function __toString() { return $this->value; }
 }
-class CWidget {
-    private $items = [];
-    public function setTitle($title) { return $this; }
-    public function addItem($item) { $this->items[] = $item; return $this; }
-    public function show() { echo '<main>' . implode('', $this->items) . '</main>'; }
-}
+require_once __DIR__ . '/widget-fixture.php';
 class CForm {
     private $id, $action;
     public function setId($id) { $this->id = $id; return $this; }

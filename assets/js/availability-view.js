@@ -430,10 +430,13 @@
             }
             const style = getComputedStyle(root);
             const muted = style.getPropertyValue('--gov-muted').trim();
+            const palette = {};
+            for (const [key, fallback] of Object.entries({good: '#1f774b', warning: '#89600b', critical: '#be3c3c', coverage: '#246fa6', 'native-slo': '#7555a6'}))
+                palette[key] = style.getPropertyValue('--gov-' + key).trim() || fallback;
             if (entry.kind === 'monthly') {
                 const nativeSlos = dept.technologies.map(tech => (tech.source || 'items') === 'sla'
                     && Number.isFinite(Number(tech.native_sla?.slo)) ? Number(tech.native_sla.slo) : null);
-                entry.chart.setOption({backgroundColor: 'transparent', animation: false, color: ['#60aa87', '#d99d40', '#9c86d8'],
+                entry.chart.setOption({backgroundColor: 'transparent', animation: false, color: [palette.good, palette.warning, palette['native-slo']],
                     textStyle: {fontFamily: style.fontFamily},
                     tooltip: {trigger: 'axis', renderMode: 'richText', backgroundColor: style.getPropertyValue('--gav-panel').trim(),
                         textStyle: {color: style.color}, valueFormatter: value => percent(Array.isArray(value) ? value[0] : value)},
@@ -446,13 +449,13 @@
                             name + (metric(dept.technologies[index]).score === null ? ' —' : '')}},
                     series: [{name: t('Disponibilidade', 'Availability'), type: 'bar', barMaxWidth: 23,
                         data: dept.technologies.map(tech => ({value: metric(tech).score,
-                            itemStyle: {color: metric(tech).score === null ? '#8c9baa'
-                                : (metric(tech).score >= tech.target ? '#60aa87' : '#df6969')}})),
+                            itemStyle: {color: metric(tech).score === null ? muted
+                                : (metric(tech).score >= tech.target ? palette.good : palette.critical)}})),
                         label: {show: true, position: 'right', color: style.color, formatter: info => percent(info.value)}},
                     {name: t('Meta do indicador', 'Indicator target'), type: 'scatter', symbol: 'rect', symbolSize: [3, 23],
-                        itemStyle: {color: '#d99d40'}, data: dept.technologies.map((tech, index) => [tech.target, index])},
+                        itemStyle: {color: palette.warning}, data: dept.technologies.map((tech, index) => [tech.target, index])},
                     {name: t('SLO nativo', 'Native SLO'), type: 'scatter', symbol: 'diamond', symbolSize: 9,
-                        itemStyle: {color: '#9c86d8'}, data: nativeSlos.flatMap((slo, index) => slo === null ? [] : [[slo, index]])}]
+                        itemStyle: {color: palette['native-slo']}, data: nativeSlos.flatMap((slo, index) => slo === null ? [] : [[slo, index]])}]
                 }, true);
                 entry.chart.resize();
                 return;
@@ -464,7 +467,7 @@
                 'Cada ponto reaplica o critério do indicador ao respectivo dia; cobertura usa eixo separado e lacunas não viram disponibilidade. A média simples dos dias pode diferir do indicador mensal.',
                 'Each point reapplies the indicator criterion to that day; coverage uses a separate axis and gaps never become availability. A simple mean of the days may differ from the monthly indicator.');
             entry.chart.setOption({backgroundColor: 'transparent', animation: false,
-                textStyle: {fontFamily: style.fontFamily}, color: ['#60aa87', '#d99d40', '#71b6df'],
+                textStyle: {fontFamily: style.fontFamily}, color: [palette.good, palette.warning, palette.coverage],
                 tooltip: {trigger: 'axis', renderMode: 'richText', backgroundColor: style.getPropertyValue('--gav-panel').trim(),
                     textStyle: {color: style.color}, formatter: params => {
                         const index = params?.[0]?.dataIndex;
@@ -586,14 +589,19 @@
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         });
         let printState = null;
+        let printSourceState = [];
         window.addEventListener('beforeprint', () => {
             if (printState || root.dataset.reportStale === '1') return;
             const printable = entries.filter(entry => entry.kind !== 'host');
             printState = printable.map(entry => ({entry, open: entry.details.open}));
+            printSourceState = Array.from(root.querySelectorAll('.gav-source-details'), details => ({details, open: details.open}));
+            printSourceState.forEach(state => { state.details.open = true; });
             printable.forEach(entry => { entry.details.open = true; draw(entry); });
         });
         window.addEventListener('afterprint', () => {
             for (const state of printState || []) { state.entry.details.open = state.open; draw(state.entry); }
+            printSourceState.forEach(state => { state.details.open = state.open; });
+            printSourceState = [];
             printState = null;
         });
         const printButton = document.getElementById('gav-print');

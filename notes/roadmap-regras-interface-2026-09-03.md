@@ -5,8 +5,10 @@
 Implementação principal concluída na versão 1.18.0, instalada pelo usuário e
 validada na configuração e no cálculo de julho. As seções abaixo preservam o
 histórico: pendências de etapas antigas não são automaticamente tarefas atuais.
-A referência visual específica de ações não foi conferida diretamente; não
-foi requisito bloqueante para a entrega funcional validada.
+A referência visual específica de ações ainda não havia sido conferida naquela
+entrega. Foi inspecionada na auditoria posterior, documentada no
+[novo roadmap de padronização visual](roadmap-padronizacao-visual-zabbix-2026-09-03.md).
+Esse novo plano aguarda pedido de implementação e não reabre as etapas funcionais.
 
 O usuário informou que precisa revisar regras, tags e grupos antes de definir
 a participação de homologação. Essa decisão continua com ele. Nenhuma mudança

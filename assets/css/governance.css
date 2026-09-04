@@ -3,9 +3,17 @@
     --gov-surface: rgba(128, 128, 128, 0.07);
     --gov-surface-strong: rgba(128, 128, 128, 0.12);
     --gov-border: rgba(128, 128, 128, 0.24);
-    --gov-muted: #768d99;
+    --gov-muted: #596a73;
     --gov-link: #0275d8;
     --gov-chart-track: rgba(128, 128, 128, 0.2);
+    --gov-control-bg: #fff;
+    --gov-control-text: #1f2c33;
+    --gov-control-border: #acbbc2;
+    --gov-good: #1f774b;
+    --gov-warning: #89600b;
+    --gov-critical: #be3c3c;
+    --gov-coverage: #246fa6;
+    --gov-native-slo: #7555a6;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -21,7 +29,33 @@
     --gov-muted: #a7a7a7;
     --gov-link: #4796c4;
     --gov-chart-track: rgba(255, 255, 255, 0.16);
+    --gov-control-bg: #383838;
+    --gov-control-text: #f2f2f2;
+    --gov-control-border: #4f4f4f;
+    --gov-good: #79ceaa;
+    --gov-warning: #e7c174;
+    --gov-critical: #f18f8f;
+    --gov-coverage: #71b6df;
+    --gov-native-slo: #bba2f4;
     color: #f2f2f2;
+}
+
+/* Administrative surfaces shared by both editors; report status colors stay separate. */
+.gov-container.gqp-editor, .gov-container#gav-config {
+    --gov-surface: #fff;
+    --gov-surface-strong: #f4f6f7;
+    --gov-border: #dfe4e7;
+    --gov-muted: #596a73;
+    --gov-link: #0275b8;
+    --gov-required: #c02020;
+}
+.gov-container.gqp-editor.gov-theme-dark, .gov-container#gav-config.gov-theme-dark {
+    --gov-surface: #2b2b2b;
+    --gov-surface-strong: #303030;
+    --gov-border: #4f4f4f;
+    --gov-muted: #b5b5b5;
+    --gov-link: #75b5db;
+    --gov-required: #f18f8f;
 }
 
 /* Compact overview */
@@ -36,9 +70,9 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.gov-summary-banner.gov-status-good { border-left: 5px solid #2e7d32; }
-.gov-summary-banner.gov-status-warning { border-left: 5px solid #f57c00; }
-.gov-summary-banner.gov-status-critical { border-left: 5px solid #d32f2f; }
+.gov-summary-banner.gov-status-good { border-left: 5px solid var(--gov-good); }
+.gov-summary-banner.gov-status-warning { border-left: 5px solid var(--gov-warning); }
+.gov-summary-banner.gov-status-critical { border-left: 5px solid var(--gov-critical); }
 
 .gov-summary-main {
     display: flex;
@@ -54,8 +88,7 @@
     color: var(--gov-muted);
     font-size: 0.75rem;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    letter-spacing: normal;
 }
 
 .gov-summary-score {
@@ -64,9 +97,9 @@
     line-height: 1.08;
 }
 
-.gov-status-good .gov-summary-score { color: #2e7d32; }
-.gov-status-warning .gov-summary-score { color: #f57c00; }
-.gov-status-critical .gov-summary-score { color: #d32f2f; }
+.gov-status-good .gov-summary-score { color: var(--gov-good); }
+.gov-status-warning .gov-summary-score { color: var(--gov-warning); }
+.gov-status-critical .gov-summary-score { color: var(--gov-critical); }
 
 .gov-summary-meta,
 .gov-overview-hint,
@@ -107,9 +140,9 @@
     background: #768d99;
 }
 
-.gov-overview-good::before { background: #2e7d32; }
-.gov-overview-warning::before { background: #f57c00; }
-.gov-overview-critical::before { background: #d32f2f; }
+.gov-overview-good::before { background: var(--gov-good); }
+.gov-overview-warning::before { background: var(--gov-warning); }
+.gov-overview-critical::before { background: var(--gov-critical); }
 .gov-overview-neutral::before { background: #768d99; }
 
 .gov-overview-label {
@@ -170,8 +203,7 @@
     overflow: hidden;
     background: var(--gov-surface);
     border: 1px solid var(--gov-border);
-    border-radius: 6px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    border-radius: 2px;
 }
 
 .gov-kpi-card::before {
@@ -183,18 +215,22 @@
     height: 3px;
 }
 
-.gov-card-status-good::before { background: #2e7d32; }
-.gov-card-status-warning::before { background: #f57c00; }
-.gov-card-status-critical::before { background: #d32f2f; }
+.gov-card-status-good::before { background: var(--gov-good); }
+.gov-card-status-warning::before { background: var(--gov-warning); }
+.gov-card-status-critical::before { background: var(--gov-critical); }
 
-.gov-card-header h3 {
+.gov-container .gov-card-header h3 {
     margin: 0 0 3px;
     overflow: hidden;
     color: inherit;
-    font-size: 0.92rem;
+    font-size: 13px;
+    letter-spacing: normal;
     font-weight: 600;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
 }
 
 .gov-card-desc {
@@ -240,7 +276,7 @@
 
 .gov-card-score-missing {
     margin-top: 2px;
-    color: #d32f2f;
+    color: var(--gov-critical);
 }
 
 .gov-card-exceptions {
@@ -283,7 +319,7 @@ details.gov-card-exceptions[open] summary {
 
 .gov-nc-success {
     display: inline-block;
-    color: #2e7d32;
+    color: var(--gov-good);
     font-weight: 600;
 }
 

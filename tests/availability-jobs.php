@@ -237,7 +237,7 @@ try {
             return $this->response;
         }
     }
-    class CControllerResponseData { public $data; public function __construct(array $data) { $this->data = $data; } }
+    class CControllerResponseData { public $title; public function getData() { return $this->data; } public function setTitle($title) { $this->title = $title; } public $data; public function __construct(array $data) { $this->data = $data; } }
     class CControllerResponseFatal {}
     class CWebUser {
         public static $data = ['userid' => '41', 'type' => 3, 'theme' => 'blue-theme'];

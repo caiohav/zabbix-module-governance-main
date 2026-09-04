@@ -10,12 +10,7 @@ class CObject {
     public function __construct($value) { $this->value = $value; }
     public function __toString() { return $this->value; }
 }
-class CWidget {
-    private $items = [];
-    public function setTitle($value) { return $this; }
-    public function addItem($value) { $this->items[] = $value; return $this; }
-    public function show() { echo implode('', $this->items); }
-}
+require_once __DIR__ . '/widget-fixture.php';
 class CForm {
     public function setId($value) { return $this; }
     public function setAction($value) { return $this; }

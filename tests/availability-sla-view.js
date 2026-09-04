@@ -129,11 +129,11 @@ const tests = [
         assert.equal(option.series[0].label.formatter({value: null}), '—');
         assert.equal(option.tooltip.valueFormatter(null), '—');
         assert.match(option.yAxis.axisLabel.formatter('PostgreSQL', 0), / —$/);
-        assert.equal(option.series[0].data[0].itemStyle.color, '#8c9baa');
+        assert.equal(option.series[0].data[0].itemStyle.color, absent.colors.muted);
         const zero = page(reports.zero).option('monthly');
         assert.equal(zero.series[0].data[0].value, 0); assert.equal(zero.series[0].data[2].value, 100);
         assert.equal(zero.series[0].label.formatter({value: 0}), '0%');
-        assert.equal(zero.series[0].data[0].itemStyle.color, '#df6969');
+        assert.equal(zero.series[0].data[0].itemStyle.color, '#be3c3c');
         assert.doesNotMatch(zero.yAxis.axisLabel.formatter('PostgreSQL', 0), / —$/);
         const unknown = page(reports.item_unknown).option('monthly');
         assert.equal(unknown.series[0].data[0].value, 100); assert.equal(unknown.series[0].data[3].value, null);

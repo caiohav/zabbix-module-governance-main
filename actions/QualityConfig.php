@@ -40,6 +40,7 @@ class QualityConfig extends CController {
 
         $config = $modules ? $modules[0]['config'] : [];
         $pages = GovernanceConfig::getQualityPages($config);
+        $savedPageIds = array_column($pages, 'id');
         $revision = GovernanceConfig::qualityRevision($config);
 
         // Return the draft and the revision the user actually reviewed. Granting
@@ -65,9 +66,10 @@ class QualityConfig extends CController {
         }
 
         $reviewedRevision = $this->getInput('quality_revision', $this->hasInput('quality_json') ? '' : $revision);
-        $this->setResponse(new CControllerResponseData([
+        $response = new CControllerResponseData([
             'page_title' => $isPt ? 'Páginas e cards de qualidade' : 'Quality pages and cards',
             'pages' => $pages,
+            'saved_page_ids' => $savedPageIds,
             'revision' => $reviewedRevision,
             'selected_page' => $selectedPage,
             'conflict' => !hash_equals($revision, $reviewedRevision),
@@ -75,7 +77,9 @@ class QualityConfig extends CController {
             'draft_json' => $this->hasInput('quality_json') ? $this->getInput('quality_json') : null,
             'is_pt' => $isPt,
             'is_dark' => self::isDarkTheme()
-        ]));
+        ]);
+        $response->setTitle($response->getData()['page_title']);
+        $this->setResponse($response);
     }
 
     private static function isDarkTheme(): bool {

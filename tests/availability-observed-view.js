@@ -36,7 +36,7 @@ const tests = [
             'the native SLO is shown separately and never replaces the module target');
         const missing = page(reports.mixed_unknown).option('monthly');
         assert.deepEqual(values(missing), [null, 100]);
-        assert.equal(missing.series[0].data[0].itemStyle.color, '#8c9baa');
+        assert.equal(missing.series[0].data[0].itemStyle.color, '#b2bdc4');
         assert.equal(missing.series[0].label.formatter({value: null}), '—');
         assert.match(missing.yAxis.axisLabel.formatter('Item service', 0), / —$/);
         assert.equal(presentation.network, 0);

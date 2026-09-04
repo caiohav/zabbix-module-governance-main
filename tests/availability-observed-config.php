@@ -44,12 +44,7 @@ class CForm {
     public function addItem($value) { $this->items[] = $value; return $this; }
     public function __toString() { return '<form>' . implode('', $this->items) . '</form>'; }
 }
-class CWidget {
-    private $items = [];
-    public function setTitle($value) { return $this; }
-    public function addItem($value) { $this->items[] = $value; return $this; }
-    public function show() { echo implode('', $this->items); }
-}
+require_once __DIR__ . '/widget-fixture.php';
 class ObservedConfigRenderer {
     public function addCssFile($value) {}
     public function includeJsFile($value) {}

@@ -20,6 +20,10 @@
         const panels = root.querySelector('#gov-config-panels');
         const payload = root.querySelector('#gov-quality-payload');
         const selectedField = root.querySelector('#gov-quality-page');
+        const backLink = document.getElementById('gov-back-dashboard');
+        let savedPageIds = [];
+        try { savedPageIds = JSON.parse(backLink?.dataset.savedPages || '[]'); } catch (_) { /* Keep safe fallback. */ }
+        if (!Array.isArray(savedPageIds)) savedPageIds = [];
         const addPageButton = root.querySelector('#gov-add-page');
         const addCardButton = root.querySelector('#gov-add-card');
         const saveButton = root.querySelector('#gov-save');
@@ -69,7 +73,7 @@
         let closeCatalog = () => {};
         const catalogControl = (control, typeOf) => {
             const wrapper = element('div', 'gqp-catalog-control');
-            const pick = button(t('Selecionar…', 'Select…'), 'btn-link gqp-catalog-open');
+            const pick = button(t('Selecionar…', 'Select…'), 'btn-grey gqp-catalog-open');
             wrapper.append(control, pick);
             pick.addEventListener('click', event => {
                 event.preventDefault();
@@ -77,23 +81,28 @@
                 if (control.disabled || !['group', 'template'].includes(kind)) return;
                 closeCatalog();
                 const initialValue = control.value;
-                const dialog = element('dialog', 'gqp-catalog-dialog');
-                const title = element('h3', '', kind === 'group' ? t('Selecionar grupo de hosts', 'Select host group') : t('Selecionar template', 'Select template'));
-                title.id = 'gqp-catalog-title'; dialog.setAttribute('aria-labelledby', title.id);
+                const {dialog, body: dialogBody, footer, x} = modal('gqp-catalog-dialog', kind === 'group' ? t('Selecionar grupo de hosts', 'Select host group') : t('Selecionar template', 'Select template'));
+                if (typeof dialog.showModal !== 'function') { showError(t('Atualize o navegador para abrir as janelas de edição.', 'Update your browser to open editor dialogs.')); return; }
                 const query = element('input'); query.type = 'text'; query.maxLength = 255;
+                query.id = 'gqp-catalog-query';
+                const queryLabel = element('label', 'gqp-catalog-label', t('Parte do nome', 'Part of name'));
+                queryLabel.setAttribute('for', query.id);
                 query.setAttribute('aria-label', t('Parte do nome (mínimo 2 caracteres)', 'Part of name (at least 2 characters)'));
                 query.placeholder = t('Parte do nome (mínimo 2 caracteres)', 'Part of name (at least 2 characters)');
                 const search = button(t('Buscar', 'Search'), 'btn-alt gqp-catalog-search');
                 const cancel = button(t('Fechar', 'Close'), 'btn-alt');
                 const results = element('div', 'gqp-catalog-results'); results.setAttribute('aria-live', 'polite');
                 const bar = element('div', 'gqp-catalog-bar'); bar.append(query, search);
-                dialog.append(title, bar, element('p', 'gqp-muted', t('Selecionar adiciona o nome à lista atual. Grupos respeitam a opção de subgrupos. Nomes com vírgula exigem digitação manual do ID (grupo exato).', 'Selecting adds the name to the current list. Groups respect the subgroup option. Names containing commas require manually entering the ID (exact group).')), results, cancel);
+                dialogBody.append(queryLabel, bar, element('p', 'gqp-modal-hint', t('Selecionar adiciona o nome à lista atual. Grupos respeitam a opção de subgrupos. Nomes com vírgula exigem digitação manual do ID (grupo exato).', 'Selecting adds the name to the current list. Groups respect the subgroup option. Names containing commas require manually entering the ID (exact group).')), results);
+                footer.append(cancel);
                 root.append(dialog);
                 let epoch = 0, request = null;
-                const close = () => { epoch++; if (request) request.abort(); dialog.close(); dialog.remove(); closeCatalog = () => {}; };
+                let closed = false;
+                const close = () => { if (closed) return; closed = true; epoch++; if (request) request.abort(); dialog.close(); dialog.remove(); closeCatalog = () => {}; if (pick.isConnected) pick.focus(); };
                 closeCatalog = close;
                 cancel.addEventListener('click', close);
-                dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
+                x.addEventListener('click', close);
+                dialog.addEventListener('cancel', event => { event.preventDefault(); event.stopPropagation(); close(); });
                 dialog.addEventListener('input', event => { event.stopPropagation(); epoch++; if (request) request.abort(); search.disabled = false; results.replaceChildren(); });
                 dialog.addEventListener('change', event => event.stopPropagation());
                 const run = async () => {
@@ -140,7 +149,7 @@
             });
             return wrapper;
         };
-        window.addEventListener('pagehide', () => closeCatalog());
+        window.addEventListener('pagehide', () => { closeCondition(); closeCatalog(); });
         const pageNodes = () => [...panels.children];
         const activePanel = () => pageNodes().find((panel) => panel.dataset.pageId === selected);
         const pageName = (panel) => getField(panel, 'page_name').value.trim()
@@ -168,13 +177,149 @@
             Object.entries(options).forEach(([id, text]) => { const option = element('option', '', text); option.value = id; control.append(option); });
             control.value = String(value); return control;
         };
+        const inventoryFields = {
+            os: 'OS', os_full: 'OS (full)', os_short: 'OS (short)', serialno_a: 'Serial A', serialno_b: 'Serial B',
+            location: t('Localização', 'Location'), type: t('Tipo', 'Type'), software: 'Software', hardware: 'Hardware',
+            name: t('Nome', 'Name'), contact: t('Contato', 'Contact')
+        };
+        const conditionTypes = {tag: 'Tag', group: t('Grupo de hosts', 'Host group'), template: 'Template', inventory: t('Inventário', 'Inventory')};
+        const conditionOperators = type => type === 'inventory' ? {exists: t('Preenchido', 'Populated'), not_exists: t('Vazio', 'Empty')}
+            : type === 'tag' ? {equals: t('É igual a', 'Equals'), not_equals: t('Não é igual a', 'Does not equal'), exists: t('Existe', 'Exists'), not_exists: t('Não existe', 'Does not exist')}
+                : {equals: t('Possui / pertence', 'Has / belongs to'), not_equals: t('Não possui / não pertence', 'Does not have / belong to')};
+        const conditionError = c => {
+            if (!Object.prototype.hasOwnProperty.call(conditionTypes, c.type)
+                    || !Object.prototype.hasOwnProperty.call(conditionOperators(c.type), c.operator))
+                return t('Selecione um tipo e um operador válidos.', 'Select a valid type and operator.');
+            if (['name', 'value'].some(k => typeof c[k] !== 'string' || [...c[k]].length > 255 || /[\u0000-\u001f\u007f]/.test(c[k])))
+                return t('Revise o texto: máximo de 255 caracteres, sem caracteres de controle.', 'Review the text: up to 255 characters, without control characters.');
+            if (![0, 1].includes(c.subgroups)) return t('Selecione uma opção de subgrupos.', 'Select a subgroup option.');
+            if ((c.type === 'tag' && !c.name.trim()) || (c.type === 'inventory' && !Object.prototype.hasOwnProperty.call(inventoryFields, c.name))
+                    || (['group', 'template'].includes(c.type) && !c.value.split(',').some(v => v.trim())))
+                return t('Preencha os campos da condição; vírgulas sem nomes não são uma lista válida.', 'Complete the condition fields; commas without names are not a valid list.');
+            return '';
+        };
+        const conditionCaption = c => {
+            const op = conditionOperators(c.type)[c.operator] || c.operator;
+            let text = conditionTypes[c.type] || c.type;
+            if (c.type === 'tag') text += ' “' + c.name + '” · ' + op
+                + (['equals', 'not_equals'].includes(c.operator) ? ' “' + (c.value.trim() || t('(valor vazio)', '(empty value)')) + '”' : '');
+            else if (c.type === 'inventory') text += ' · ' + (inventoryFields[c.name] || c.name) + ' · ' + op;
+            else {
+                const values = c.value.split(',').map(v => v.trim()).filter(Boolean);
+                text += ' · ' + op + ' · ' + values.join(t(' OU ', ' OR '));
+                if (c.type === 'group') text += c.subgroups
+                    ? t(' · nomes incluem subgrupos; IDs exatos', ' · names include subgroups; exact IDs')
+                    : t(' · grupos exatos', ' · exact groups');
+            }
+            return text;
+        };
+        let closeCondition = () => {};
+        let conditionOpen = false;
+        const modal = (className, heading) => {
+            const dialog = element('dialog', 'gqp-modal ' + className);
+            const header = element('div', 'gqp-modal-header'), title = element('h3', '', heading);
+            title.id = className + '-title'; dialog.setAttribute('aria-labelledby', title.id);
+            const x = button('×', 'btn-link gqp-modal-close');
+            x.setAttribute('aria-label', t('Fechar janela', 'Close dialog'));
+            header.append(title, x);
+            const body = element('div', 'gqp-modal-body'), footer = element('div', 'gqp-modal-footer');
+            dialog.append(header, body, footer);
+            dialog.addEventListener('keydown', event => {
+                if (event.key !== 'Tab') return;
+                const items = [...dialog.querySelectorAll('button,input,select,textarea,a[href],[tabindex]')]
+                    .filter(control => !control.disabled && control.tabIndex >= 0 && control.getClientRects().length);
+                if (!items.length) { event.preventDefault(); return; }
+                const first = items[0], last = items[items.length - 1];
+                if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+                else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+            });
+            return {dialog, body, footer, x};
+        };
+        const editCondition = (condition, label, opener, applyCondition) => {
+            closeCondition();
+            const ui = modal('gqp-condition-dialog', condition ? t('Editar condição ', 'Edit condition ') + label : t('Nova condição ', 'New condition ') + label);
+            const {dialog, body, footer, x} = ui;
+            if (typeof dialog.showModal !== 'function') { showError(t('Atualize o navegador para abrir as janelas de edição.', 'Update your browser to open editor dialogs.')); return; }
+            const original = condition || {type: 'tag', operator: 'equals', name: '', value: '', subgroups: 1};
+            const type = selectInput('condition_type', original.type, conditionTypes);
+            const operator = selectInput('condition_operator', '', {});
+            const name = input('condition_name', original.name, 255);
+            const inventory = selectInput('condition_inventory', original.type === 'inventory' ? original.name : 'os', inventoryFields);
+            const value = input('condition_value', original.value, 255);
+            const subgroups = selectInput('condition_subgroups', original.subgroups, {1: t('Incluir subgrupos (nomes)', 'Include subgroups (names)'), 0: t('Grupo exato', 'Exact group')});
+            const lookup = catalogControl(value, () => type.value);
+            const nameField = field(t('Nome da tag', 'Tag name'), name);
+            const inventoryField = field(t('Campo de inventário', 'Inventory field'), inventory);
+            const valueField = field(t('Valor / nomes ou IDs', 'Value / names or IDs'), lookup);
+            const subgroupField = field(t('Subgrupos', 'Subgroups'), subgroups);
+            const hint = element('p', 'gqp-modal-hint');
+            body.append(field(t('Tipo da condição', 'Condition type'), type), field(t('Operador', 'Operator'), operator),
+                nameField, inventoryField, valueField, subgroupField, hint);
+            const message = element('p', 'gqp-notice gqp-error'); message.hidden = true; message.setAttribute('role', 'alert'); body.append(message);
+            const apply = button(condition ? t('Aplicar', 'Apply') : t('Adicionar', 'Add'), 'gqp-condition-apply');
+            const cancel = button(t('Cancelar', 'Cancel'), 'btn-alt gqp-condition-cancel');
+            footer.append(apply, cancel);
+            const update = wanted => {
+                const ops = conditionOperators(type.value);
+                operator.replaceChildren();
+                Object.entries(ops).forEach(([id, text]) => { const option = element('option', '', text); option.value = id; operator.append(option); });
+                operator.value = Object.prototype.hasOwnProperty.call(ops, wanted) ? wanted : Object.keys(ops)[0];
+                nameField.hidden = name.disabled = type.value !== 'tag'; name.required = !name.disabled;
+                inventoryField.hidden = inventory.disabled = type.value !== 'inventory'; inventory.required = !inventory.disabled;
+                valueField.hidden = value.disabled = type.value === 'inventory' || ['exists', 'not_exists'].includes(operator.value);
+                value.required = !value.disabled && ['group', 'template'].includes(type.value);
+                lookup.querySelector('button').hidden = !['group', 'template'].includes(type.value);
+                subgroupField.hidden = subgroups.disabled = type.value !== 'group';
+                subgroups.required = !subgroups.disabled;
+                hint.textContent = type.value === 'tag'
+                    ? t('Comparação exata. Valor vazio é permitido. “Não é igual a” também inclui hosts sem a tag; combine com “Existe” para exigir sua presença.', 'Exact comparison. Empty value is allowed. “Does not equal” includes hosts without the tag; combine with “Exists” to require its presence.')
+                    : type.value === 'inventory' ? t('Avalia se o campo de inventário está preenchido.', 'Checks whether the inventory field is populated.')
+                    : t('Nomes ou IDs separados por vírgula: qualquer um deles (OU). Grupos por nome podem incluir subgrupos; IDs sempre selecionam o grupo exato. Templates são vínculos diretos.', 'Comma-separated names or IDs: any of them (OR). Group names may include subgroups; IDs always select the exact group. Templates are direct links.');
+                [type, operator, name, inventory, value, subgroups].forEach(c => c.setCustomValidity(''));
+            };
+            update(original.operator);
+            type.addEventListener('change', () => update());
+            operator.addEventListener('change', () => update(operator.value));
+            root.append(dialog); conditionOpen = true;
+            let closed = false;
+            const close = () => {
+                if (closed) return; closed = true;
+                closeCatalog(); dialog.close(); dialog.remove(); conditionOpen = false; closeCondition = () => {};
+                if (opener.isConnected) opener.focus();
+            };
+            closeCondition = close;
+            const commit = () => {
+                const controls = [type, operator, name, inventory, value, subgroups].filter(c => !c.disabled);
+                controls.forEach(updateValidity);
+                const invalid = controls.find(c => !c.checkValidity());
+                if (invalid) { invalid.reportValidity(); invalid.focus(); return; }
+                const next = {type: type.value, operator: operator.value,
+                    name: type.value === 'inventory' ? inventory.value : name.value,
+                    value: value.value, subgroups: Number(subgroups.value)};
+                const problem = conditionError(next);
+                if (problem) { message.textContent = problem; message.hidden = false; return; }
+                close(); applyCondition(next);
+            };
+            apply.addEventListener('click', commit);
+            cancel.addEventListener('click', close); x.addEventListener('click', close);
+            dialog.addEventListener('cancel', e => { e.preventDefault(); e.stopPropagation(); close(); });
+            dialog.addEventListener('input', e => { e.stopPropagation(); message.hidden = true; });
+            dialog.addEventListener('change', e => { e.stopPropagation(); message.hidden = true; });
+            dialog.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') { e.preventDefault(); e.stopPropagation(); commit(); }
+            });
+            dialog.showModal(); type.focus();
+        };
+        const validateConditions = card => {
+            const invalid = [...card.querySelector('.gqp-conditions').children].find(row => conditionError(row.conditionData));
+            if (!invalid) return true;
+            revealInvalid(invalid.querySelector('.gqp-edit-condition'));
+            invalid.querySelector('.gqp-edit-condition').click();
+            return false;
+        };
         const readSelection = card => ({version: 1, mode: getField(card, 'selection_mode').value,
             ...(getField(card, 'selection_mode').value === 'custom' ? {formula: getField(card, 'selection_formula').value} : {}),
-            conditions: [...card.querySelector('.gqp-conditions').children].map(row => ({
-                type: getField(row, 'condition_type').value, operator: getField(row, 'condition_operator').value,
-                name: getField(row, 'condition_type').value === 'inventory' ? getField(row, 'condition_inventory').value : getField(row, 'condition_name').value, value: getField(row, 'condition_value').value,
-                subgroups: Number(getField(row, 'condition_subgroups').value)
-            }))});
+            conditions: [...card.querySelector('.gqp-conditions').children].map(row => ({...row.conditionData}))});
         const makeSelection = data => {
             const section = element('section', 'gqp-selection');
             section.append(element('h3', '', t('1. Selecionar hosts', '1. Select hosts')));
@@ -194,12 +339,12 @@
             section.append(formulaField);
             const table = element('table', 'list-table gqp-condition-table');
             const head = element('thead'), header = element('tr');
-            [t('Rótulo', 'Label'), t('Tipo', 'Type'), t('Operador', 'Operator'), t('Condição', 'Condition'), t('Ações', 'Actions')].forEach(text => header.append(element('th', '', text)));
+            [t('Rótulo', 'Label'), t('Condição', 'Condition'), t('Ações', 'Actions')].forEach(text => header.append(element('th', '', text)));
             head.append(header); const rows = element('tbody', 'gqp-conditions'); table.append(head, rows);
             const add = button(t('Adicionar condição', 'Add condition'), 'btn-link gqp-add-condition');
             const expression = element('p', 'gqp-expression');
             const updateLabels = () => {
-                const labels = [...rows.children].map((row, index) => { const label = String.fromCharCode(65 + index); row.querySelector('td').textContent = label; return label; });
+                const labels = [...rows.children].map((row, index) => { const label = String.fromCharCode(65 + index); row.querySelector('td').textContent = label; row.querySelector('.gqp-edit-condition').setAttribute('aria-label', t('Editar condição ', 'Edit condition ') + label); row.querySelector('.gqp-remove-condition').setAttribute('aria-label', t('Remover condição ', 'Remove condition ') + label); return label; });
                 const mode = getField(section, 'selection_mode').value;
                 formulaField.hidden = formula.disabled = mode !== 'custom'; formula.required = mode === 'custom';
                 expression.hidden = mode === 'custom';
@@ -213,47 +358,31 @@
             formula.addEventListener('input', updateLabels);
             const makeRow = (condition = {}) => {
                 const row = element('tr');
-                const type = selectInput('condition_type', condition.type || 'tag', {tag: 'Tag', group: t('Grupo de hosts', 'Host group'), template: 'Template', inventory: t('Inventário', 'Inventory')});
-                const operator = selectInput('condition_operator', '', {});
-                const name = input('condition_name', condition.name || '', 255);
-                const inventory = selectInput('condition_inventory', condition.type === 'inventory' ? condition.name : 'os', {
-                    os: 'OS', os_full: 'OS (full)', os_short: 'OS (short)', serialno_a: 'Serial A', serialno_b: 'Serial B',
-                    location: t('Localização', 'Location'), type: t('Tipo', 'Type'), software: 'Software', hardware: 'Hardware', name: t('Nome', 'Name'), contact: t('Contato', 'Contact')
-                });
-                const value = input('condition_value', condition.value || '', 255);
-                const subgroups = selectInput('condition_subgroups', condition.subgroups ?? 1, {1: t('Incluir subgrupos (nomes)', 'Include subgroups (names)'), 0: t('Grupo exato', 'Exact group')});
+                row.conditionData = Object.assign({type: 'tag', operator: 'equals', name: '', value: '', subgroups: 1}, condition);
+                row.conditionData.subgroups = Number(row.conditionData.subgroups);
+                const labelCell = element('td'), description = element('td', 'gqp-condition-caption'), actions = element('td', 'gqp-condition-actions');
+                const edit = button(t('Editar', 'Edit'), 'btn-link gqp-edit-condition');
                 const remove = button(t('Remover', 'Remove'), 'btn-link gqp-remove-condition');
-                const lookup = catalogControl(value, () => type.value);
-                const values = element('div', 'gqp-condition-values'); values.append(name, inventory, lookup, subgroups);
-                for (const control of [null, type, operator, values, remove]) { const td = element('td'); if (control) td.append(control); row.append(td); }
-                const update = (wanted) => {
-                    const ops = type.value === 'inventory' ? {exists: t('Preenchido', 'Populated'), not_exists: t('Vazio', 'Empty')}
-                        : type.value === 'tag' ? {equals: t('É igual a', 'Equals'), not_equals: t('Não é igual a', 'Does not equal'), exists: t('Existe', 'Exists'), not_exists: t('Não existe', 'Does not exist')}
-                            : {equals: t('Possui / pertence', 'Has / belongs to'), not_equals: t('Não possui / não pertence', 'Does not have / belong to')};
-                    operator.replaceChildren(); Object.entries(ops).forEach(([id, text]) => { const option = element('option', '', text); option.value = id; operator.append(option); });
-                    operator.value = wanted in ops ? wanted : Object.keys(ops)[0];
-                    name.hidden = name.disabled = type.value !== 'tag'; name.required = !name.disabled;
-                    inventory.hidden = inventory.disabled = type.value !== 'inventory'; inventory.required = !inventory.disabled;
-                    inventory.setAttribute('aria-label', t('Campo de inventário', 'Inventory field'));
-                    name.placeholder = t('Nome da tag', 'Tag name');
-                    name.setAttribute('aria-label', t('Nome da tag ou campo de inventário', 'Tag name or inventory field'));
-                    value.hidden = value.disabled = type.value === 'inventory' || ['exists', 'not_exists'].includes(operator.value);
-                    value.required = ['group', 'template'].includes(type.value);
-                    lookup.hidden = value.hidden;
-                    lookup.querySelector('button').hidden = !['group', 'template'].includes(type.value);
-                    value.placeholder = type.value === 'tag' ? t('Valor exato (pode ser vazio)', 'Exact value (may be empty)') : t('Nome exato ou ID; vírgula = OU', 'Exact name or ID; comma = OR');
-                    value.setAttribute('aria-label', t('Valor da condição', 'Condition value'));
-                    subgroups.hidden = subgroups.disabled = type.value !== 'group';
-                    subgroups.setAttribute('aria-label', t('Subgrupos', 'Subgroups'));
-                    [name, inventory, value, subgroups].forEach(c => c.setCustomValidity(''));
-                };
-                update(condition.operator); type.addEventListener('change', () => update());
-                operator.addEventListener('change', () => update(operator.value));
-                remove.addEventListener('click', () => { row.remove(); formula.value = ''; updateLabels(); changed(); });
+                const render = () => { description.textContent = conditionCaption(row.conditionData); };
+                edit.addEventListener('click', () => editCondition(row.conditionData, labelCell.textContent, edit, next => {
+                    if (JSON.stringify(row.conditionData) === JSON.stringify(next)) return;
+                    row.conditionData = next; render(); changed();
+                }));
+                remove.addEventListener('click', () => {
+                    row.remove(); formula.value = ''; updateLabels(); changed(); add.focus();
+                });
+                actions.append(edit, remove); row.append(labelCell, description, actions); render();
                 return row;
             };
             selection.conditions.forEach(c => rows.append(makeRow(c))); updateLabels();
-            add.addEventListener('click', () => { if (rows.children.length < 20) { rows.append(makeRow()); formula.value = ''; updateLabels(); changed(); } });
+            add.addEventListener('click', () => {
+                if (rows.children.length >= 20) return;
+                editCondition(null, String.fromCharCode(65 + rows.children.length), add, next => {
+                    if (rows.children.length >= 20) return;
+                    rows.append(makeRow(next)); formula.value = ''; updateLabels(); changed();
+                    if (add.disabled) rows.children[rows.children.length - 1].querySelector('.gqp-edit-condition').focus();
+                });
+            });
             const help = element('details', 'gqp-rule-help');
             help.append(element('summary', '', t('Como as condições são aplicadas', 'How conditions are applied')),
                 element('p', '', t('Sem condições: todos os hosts monitorados. Templates e tags são os vínculos diretos do host. “Não é igual a” também inclui hosts sem a tag; combine com “Existe” para exigir a presença dela.', 'No conditions: all monitored hosts. Templates and tags refer to direct host links. “Does not equal” includes hosts without the tag; combine with “Exists” to require its presence.')));
@@ -372,7 +501,7 @@
             score.dataset.field = 'include_score';
             score.checked = !!Number(data.include_score);
             scoreLabel.append(score, element('span', '', t('Participa do índice desta página', 'Included in this page score')));
-            footer.append(scoreLabel, button(t('Remover card', 'Remove card'), 'btn-alt gqp-remove-card gqp-danger'));
+            footer.append(scoreLabel, button(t('Remover card', 'Remove card'), 'btn-link gqp-remove-card'));
             body.append(footer);
             card.append(body);
             updateConditionalFields(card);
@@ -391,7 +520,7 @@
                 data.id === 'main' ? t('Vazio: usa o nome padrão traduzido “Qualidade”.', 'Empty: uses the translated default name “Quality”.') : '', 'gqp-page-name'));
             const actions = element('div', 'gqp-page-actions');
             actions.append(element('span', 'gqp-page-count gqp-muted'),
-                button(t('Remover página', 'Remove page'), 'btn-alt gqp-remove-page gqp-danger'));
+                button(t('Remover página', 'Remove page'), 'btn-link gqp-remove-page'));
             heading.append(actions);
             panel.append(heading);
             const list = element('div', 'gqp-card-list');
@@ -464,6 +593,7 @@
         };
         const runPreview = async (card, trigger, output, cancel) => {
             if (previewActive) { output.textContent = t('Aguarde a prévia em andamento.', 'Wait for the current preview.'); return; }
+            if (conditionOpen || !validateConditions(card)) return;
             const controls = [...card.querySelectorAll('input,select,textarea')].filter(c => !c.disabled);
             controls.forEach(c => { if (c.type !== 'checkbox') updateValidity(c); });
             const invalid = controls.find(c => !c.checkValidity());
@@ -557,6 +687,10 @@
         const selectPage = (id, focusTab) => {
             if (!pageNodes().some((panel) => panel.dataset.pageId === id)) return;
             selected = id;
+            if (backLink) {
+                const destination = savedPageIds.includes(id) ? id : (savedPageIds[0] || '');
+                backLink.href = 'zabbix.php?action=governance.quality.view' + (destination ? '&page=' + encodeURIComponent(destination) : '');
+            }
             invalidatePreview();
             pageNodes().forEach((panel) => { panel.hidden = panel.dataset.pageId !== selected; });
             [...tabs.children].forEach((tab) => {
@@ -737,6 +871,8 @@
             });
             form.addEventListener('invalid', (event) => revealInvalid(event.target), true);
             form.addEventListener('submit', (event) => {
+                if (conditionOpen) { event.preventDefault(); return; }
+                if ([...panels.querySelectorAll('.gqp-card')].some(card => !validateConditions(card))) { event.preventDefault(); return; }
                 if (conflict) {
                     event.preventDefault();
                     showError(t('Recarregue as regras salvas para resolver o conflito de versões.', 'Reload saved rules to resolve the version conflict.'));

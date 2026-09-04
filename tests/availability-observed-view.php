@@ -19,7 +19,7 @@ function observedViewExtract(string $html, string $pattern): string {
 function observedViewScore(string $html): string { return observedViewExtract($html, '~<div class="gav-score">(.*?)</div>~s'); }
 function observedViewMetrics(string $html): string { return observedViewExtract($html, '~<div class="gav-metrics">(.*?)</div>\s*</div>~s'); }
 function observedViewTable(string $html): string {
-    return observedViewExtract($html, '~<div class="gav-table-scroll"><table class="gav-table"><thead>.*?</thead><tbody>(.*?)</tbody></table>~s');
+    return observedViewExtract($html, '~<div class="gav-table-scroll"><table class="list-table gav-table gav-technology-table"><thead>.*?</thead><tbody>(.*?)</tbody></table>~s');
 }
 
 set_error_handler(static function($severity, $message, $file, $line) {

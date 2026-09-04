@@ -61,15 +61,18 @@
 
         const drawCharts = () => {
             if (leaving || !window.echarts) return;
-            const colors = {good: '#2e7d32', warning: '#f57c00', critical: '#d32f2f'};
-            const track = getComputedStyle(root).getPropertyValue('--gov-chart-track').trim() || 'rgba(128,128,128,.2)';
+            const style = getComputedStyle(root);
+            const colors = {good: style.getPropertyValue('--gov-good').trim() || '#1f774b',
+                warning: style.getPropertyValue('--gov-warning').trim() || '#89600b',
+                critical: style.getPropertyValue('--gov-critical').trim() || '#be3c3c'};
+            const track = style.getPropertyValue('--gov-chart-track').trim() || 'rgba(128,128,128,.2)';
             chartScores.forEach(({value: score, conformity}, container) => {
                 if (chartInstances.has(container)) return;
                 try {
                     container.textContent = '';
                     const chart = window.echarts.init(container);
                     chartInstances.set(container, chart);
-                    chart.setOption({backgroundColor: 'transparent', series: [{type: 'gauge', startAngle: 90, endAngle: -270,
+                    chart.setOption({backgroundColor: 'transparent', series: [{type: 'gauge', min: 0, max: 100, startAngle: 90, endAngle: -270,
                         pointer: {show: false}, progress: {show: true, roundCap: true, itemStyle: {color: colors[status(conformity)]}},
                         axisLine: {lineStyle: {width: 7, color: [[1, track]]}}, splitLine: {show: false},
                         axisTick: {show: false}, axisLabel: {show: false}, data: [{value: score}],

@@ -29,12 +29,14 @@ class QualityView extends CController {
         }
         $selected = $pages[0] ?? ['id' => '', 'name' => '', 'cards' => []];
         foreach ($pages as $page) { if ($page['id'] === $this->getInput('page', '')) { $selected = $page; break; } }
-        $this->setResponse(new CControllerResponseData([
+        $response = new CControllerResponseData([
             'is_pt' => $isPt, 'is_dark' => strpos(strtolower(getUserTheme(CWebUser::$data)), 'dark') !== false,
             'page_title' => $isPt ? 'Qualidade do monitoramento' : 'Monitoring quality',
             'pages' => $pages, 'selected_page' => $selected['id'], 'page_name' => $selected['name'],
             'cards' => $selected['cards'], 'cards_count' => count($selected['cards']),
             'groupids' => $this->getInput('groupids', []), 'revision' => $revision, 'error' => $error
-        ]));
+        ]);
+        $response->setTitle($response->getData()['page_title']);
+        $this->setResponse($response);
     }
 }

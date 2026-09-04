@@ -78,11 +78,13 @@ class AvailabilityView extends CController {
             }
             $month = $date->format('Y-m');
         }
-        $this->setResponse(new CControllerResponseData([
+        $response = new CControllerResponseData([
             'page_title' => $isPt ? 'Disponibilidade por departamento' : 'Department availability',
             'is_pt' => $isPt, 'is_dark' => strpos(strtolower(getUserTheme(CWebUser::$data)), 'dark') !== false,
             'config' => $config, 'report' => $report, 'job' => $job, 'error' => $error, 'month' => $month, 'department' => $department
-        ]));
+        ]);
+        $response->setTitle($response->getData()['page_title']);
+        $this->setResponse($response);
     }
 
     protected function jobStore(): AvailabilityJobStore { return new AvailabilityJobStore(); }

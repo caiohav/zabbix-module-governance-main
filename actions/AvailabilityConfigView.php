@@ -26,11 +26,13 @@ class AvailabilityConfigView extends CController {
             $submitted = json_decode($this->getInput('availability_json'), true);
             if (is_array($submitted) && isset($submitted['departments'], $submitted['timezone'])) { $config = $submitted; }
         }
-        $this->setResponse(new CControllerResponseData([
+        $response = new CControllerResponseData([
             'page_title' => $isPt ? 'Regras de disponibilidade' : 'Availability rules',
             'is_pt' => $isPt, 'is_dark' => strpos(strtolower(getUserTheme(CWebUser::$data)), 'dark') !== false,
             'config' => $config, 'revision' => $this->getInput('config_revision', hash('sha256', json_encode($stored))),
             'conflict' => $this->hasInput('config_revision') && !hash_equals(hash('sha256', json_encode($stored)), $this->getInput('config_revision'))
-        ]));
+        ]);
+        $response->setTitle($response->getData()['page_title']);
+        $this->setResponse($response);
     }
 }

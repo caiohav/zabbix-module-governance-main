@@ -230,7 +230,7 @@ try {
             return json_decode($this->response->data['main_block'], true);
         }
     }
-    class CControllerResponseData { public $data; public function __construct(array $data) { $this->data = $data; } }
+    class CControllerResponseData { public $title; public function getData() { return $this->data; } public function setTitle($title) { $this->title = $title; } public $data; public function __construct(array $data) { $this->data = $data; } }
     class CWebUser { public static $data = ['userid' => '41', 'type' => 3]; }
     class API {
         public static $config, $fixture, $moduleReads = 0;
@@ -316,4 +316,3 @@ finally {
     rmdir($testRoot);
 }
 echo "PASS: $assertions quality job assertions ($skipped symlink checks unavailable)\n";
-
