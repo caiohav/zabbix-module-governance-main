@@ -10,7 +10,14 @@ use CWebUser;
 use Modules\Governance\AvailabilityConfig;
 
 class AvailabilityConfigView extends CController {
-    protected function init(): void { $this->disableSIDvalidation(); }
+    protected function init(): void {
+        if (method_exists($this, 'disableCsrfValidation')) {
+            $this->disableCsrfValidation();
+        }
+        else {
+            $this->disableSIDvalidation();
+        }
+    }
     protected function checkPermissions(): bool { return $this->getUserType() == USER_TYPE_SUPER_ADMIN; }
     protected function checkInput(): bool {
         $valid = $this->validateInput(['availability_json' => 'string', 'config_revision' => 'string']);

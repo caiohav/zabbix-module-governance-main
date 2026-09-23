@@ -37,7 +37,7 @@ namespace {
         public static $components;
         public static function Component() { return self::$components; }
     }
-    require __DIR__ . '/../Module.php';
+    require __DIR__ . '/../platforms/zabbix-6.0/Module.php';
     $checks = 0;
     $check = static function($condition, $message) use (&$checks) {
         $checks++;

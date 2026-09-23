@@ -12,7 +12,12 @@ use Modules\Governance\GovernanceConfig;
 class QualityConfig extends CController {
 
     protected function init(): void {
-        $this->disableSIDvalidation();
+        if (method_exists($this, 'disableCsrfValidation')) {
+            $this->disableCsrfValidation();
+        }
+        else {
+            $this->disableSIDvalidation();
+        }
     }
 
     protected function checkInput(): bool {

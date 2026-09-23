@@ -3,14 +3,21 @@
 /** @var CView $this */
 /** @var array $data */
 $moduleWebPath = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$this->addCssFile($moduleWebPath . 'css/governance.css?v=1.22.0');
-$this->addCssFile($moduleWebPath . 'css/quality-pages.css?v=1.22.0');
-$this->addCssFile($moduleWebPath . 'css/native-layout.css?v=1.22.0');
+$this->addCssFile($moduleWebPath . 'css/governance.css?v=1.24.0');
+$this->addCssFile($moduleWebPath . 'css/quality-pages.css?v=1.24.0');
+$this->addCssFile($moduleWebPath . 'css/native-layout.css?v=1.24.0');
 $this->includeJsFile('governance.quality.config.js.php');
 
 $pt = $data['is_pt'];
 $t = static function($ptText, $enText) use ($pt) { return $pt ? $ptText : $enText; };
 $e = static function($value) { return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); };
+$actionForm = static function(string $id, string $action) {
+    $form = (new CForm())->setId($id)->setAction('zabbix.php?action=' . $action);
+    if (class_exists('CCsrfTokenHelper')) {
+        $form->addVar(CCsrfTokenHelper::CSRF_TOKEN_NAME, CCsrfTokenHelper::get($action));
+    }
+    return $form;
+};
 $selectedPage = (string) ($data['selected_page'] ?? 'main');
 $savedPageIds = $data['saved_page_ids'] ?? array_column($data['pages'], 'id');
 $returnPage = in_array($selectedPage, $savedPageIds, true) ? $selectedPage : ($savedPageIds[0] ?? '');
@@ -23,7 +30,8 @@ ob_start();
     <a id="gov-back-dashboard" class="btn-alt gov-action-link" data-saved-pages="<?= $e(json_encode($savedPageIds)) ?>" href="<?= $e($dashboardUrl) ?>"><?= $t('Voltar ao painel', 'Back to dashboard') ?></a>
 </nav>
 <?php
-$pageControls = new CObject(ob_get_clean());
+$controlsContent = new CObject(ob_get_clean());
+$pageControls = class_exists('CHtmlPage') ? new CTag('div', true, $controlsContent) : $controlsContent;
 ob_start();
 ?>
 <div class="gov-container gqp gqp-editor <?= !empty($data['is_dark']) ? 'gov-theme-dark' : '' ?>" id="gov-config" data-lang="<?= $pt ? 'pt' : 'en' ?>" data-conflict="<?= !empty($data['conflict']) ? '1' : '0' ?>">
@@ -74,7 +82,8 @@ ob_start();
     <script type="application/json" id="gov-quality-data"><?= json_encode($data['pages'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 </div>
 <?php
-$form = (new CForm())->setId('gov-config-form')
-    ->setAction('zabbix.php?action=governance.quality.config.update')
+$form = $actionForm('gov-config-form', 'governance.quality.config.update')
     ->addItem(new CObject(ob_get_clean()));
-(new CWidget())->setTitle($data['page_title'])->setControls($pageControls)->addItem($form)->show();
+$runTokenForm = $actionForm('gov-quality-run-token', 'governance.quality.run')->setAttribute('hidden', 'hidden');
+$page = class_exists('CHtmlPage') ? new CHtmlPage() : new CWidget();
+$page->setTitle($data['page_title'])->setControls($pageControls)->addItem($runTokenForm)->addItem($form)->show();

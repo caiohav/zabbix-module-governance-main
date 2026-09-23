@@ -1,12 +1,19 @@
 <?php
 $base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$this->addCssFile($base . 'css/governance.css?v=1.22.0');
-$this->addCssFile($base . 'css/availability.css?v=1.22.0');
-$this->addCssFile($base . 'css/native-layout.css?v=1.22.0');
+$this->addCssFile($base . 'css/governance.css?v=1.24.0');
+$this->addCssFile($base . 'css/availability.css?v=1.24.0');
+$this->addCssFile($base . 'css/native-layout.css?v=1.24.0');
 $this->includeJsFile('governance.availability.view.js.php');
 $pt = $data['is_pt'];
 $t = static function($a, $b) use ($pt) { return $pt ? $a : $b; };
 $e = static function($value) { return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8'); };
+$actionForm = static function(string $id, string $action) {
+    $form = (new CForm())->setId($id)->setAction('zabbix.php?action=' . $action);
+    if (class_exists('CCsrfTokenHelper')) {
+        $form->addVar(CCsrfTokenHelper::CSRF_TOKEN_NAME, CCsrfTokenHelper::get($action));
+    }
+    return $form;
+};
 $percent = static function($value) use ($pt) {
     if ($value === null) { return '—'; }
     if ($value < 100 && round($value, 6) >= 100) { return '<100%'; }
@@ -53,12 +60,13 @@ ob_start();
     </div>
 </nav>
 <?php
-$pageControls = new CObject(ob_get_clean());
+$controlsContent = new CObject(ob_get_clean());
+$pageControls = class_exists('CHtmlPage') ? new CTag('div', true, $controlsContent) : $controlsContent;
 ob_start();
 ?>
 <div class="gov-container gav <?= !empty($data['is_dark']) ? 'gov-theme-dark' : '' ?>" id="gav-dashboard" data-lang="<?= $pt ? 'pt' : 'en' ?>" data-timezone="<?= $e($data['config']['timezone']) ?>">
-    <?php // A separate native POST form supplies Zabbix 6's SID; never nest it in the GET filters.
-    echo (new CForm())->setId('gav-job-token')->setAction('zabbix.php?action=governance.availability.run')->setAttribute('hidden', 'hidden'); ?>
+    <?php // A separate POST form supplies the Zabbix 6 SID or the Zabbix 7 action-specific CSRF token.
+    echo $actionForm('gav-job-token', 'governance.availability.run')->setAttribute('hidden', 'hidden'); ?>
     <form method="get" action="zabbix.php" class="gav-filters gav-no-print" id="gav-filters">
         <input type="hidden" name="action" value="governance.availability.view">
         <label class="gav-field"><span><?= $t('Competência', 'Month') ?></span><input type="month" name="month" required value="<?= $e($data['month']) ?>"></label>
@@ -297,4 +305,6 @@ ob_start();
     </div>
     <?php endif ?>
 </div>
-<?php (new CWidget())->setTitle($data['page_title'])->setControls($pageControls)->addItem(new CObject(ob_get_clean()))->show();
+<?php
+$page = class_exists('CHtmlPage') ? new CHtmlPage() : new CWidget();
+$page->setTitle($data['page_title'])->setControls($pageControls)->addItem(new CObject(ob_get_clean()))->show();

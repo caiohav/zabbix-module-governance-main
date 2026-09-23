@@ -13,7 +13,7 @@ use Modules\Governance\AvailabilityConfig;
 use Modules\Governance\GovernanceConfig;
 
 class AvailabilitySave extends CController {
-    // Keep the native Zabbix 6 SID validation enabled for this mutation.
+    // Keep the native write-request token validation enabled for this mutation.
     protected function checkPermissions(): bool { return $this->getUserType() == USER_TYPE_SUPER_ADMIN; }
     protected function checkInput(): bool {
         $valid = $this->validateInput(['availability_json' => 'required|string', 'config_revision' => 'required|string']);

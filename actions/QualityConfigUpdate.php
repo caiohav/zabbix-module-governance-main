@@ -13,7 +13,7 @@ use Modules\Governance\GovernanceConfig;
 
 class QualityConfigUpdate extends CController {
 
-    // Mutations keep the native Zabbix SID validation enabled.
+    // Mutations keep the native write-request token validation enabled.
     protected function checkInput(): bool {
         $valid = $this->validateInput([
             'cards' => 'array',

@@ -10,7 +10,14 @@ use Modules\Governance\GovernanceConfig;
 
 /** The document request loads configuration only. Metrics run after the page is usable. */
 class QualityView extends CController {
-    protected function init(): void { $this->disableSIDvalidation(); }
+    protected function init(): void {
+        if (method_exists($this, 'disableCsrfValidation')) {
+            $this->disableCsrfValidation();
+        }
+        else {
+            $this->disableSIDvalidation();
+        }
+    }
     protected function checkPermissions(): bool { return $this->getUserType() == USER_TYPE_SUPER_ADMIN; }
     protected function checkInput(): bool {
         return $this->validateInput(['groupids' => 'array_db hstgrp.groupid', 'page' => 'string']);

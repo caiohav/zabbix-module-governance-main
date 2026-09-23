@@ -1,12 +1,19 @@
 <?php
 $base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$this->addCssFile($base . 'css/governance.css?v=1.22.0');
-$this->addCssFile($base . 'css/quality-pages.css?v=1.22.0');
-$this->addCssFile($base . 'css/native-layout.css?v=1.22.0');
+$this->addCssFile($base . 'css/governance.css?v=1.24.0');
+$this->addCssFile($base . 'css/quality-pages.css?v=1.24.0');
+$this->addCssFile($base . 'css/native-layout.css?v=1.24.0');
 $this->includeJsFile('governance.quality.view.js.php');
 $pt = $data['is_pt'];
 $t = static function($a, $b) use ($pt) { return $pt ? $a : $b; };
 $e = static function($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
+$actionForm = static function(string $id, string $action) {
+    $form = (new CForm())->setId($id)->setAction('zabbix.php?action=' . $action);
+    if (class_exists('CCsrfTokenHelper')) {
+        $form->addVar(CCsrfTokenHelper::CSRF_TOKEN_NAME, CCsrfTokenHelper::get($action));
+    }
+    return $form;
+};
 $url = static function(string $action, string $page, array $groups = []): string {
     $args = ['action' => $action, 'page' => $page];
     if ($groups) { $args['groupids'] = $groups; }
@@ -25,7 +32,8 @@ ob_start();
     <a class="btn-alt gov-action-link gqp-config-link" href="<?= $e($url('governance.quality.config', $data['selected_page'])) ?>"><?= $t('Configurar páginas e cards', 'Configure pages and cards') ?></a>
 </nav>
 <?php
-$pageControls = new CObject(ob_get_clean());
+$controlsContent = new CObject(ob_get_clean());
+$pageControls = class_exists('CHtmlPage') ? new CTag('div', true, $controlsContent) : $controlsContent;
 ob_start();
 ?>
 <div class="gov-container gqp <?= $data['is_dark'] ? 'gov-theme-dark' : '' ?>" id="gqp-dashboard" data-lang="<?= $pt ? 'pt' : 'en' ?>" data-echarts="<?= $e($base) ?>js/echarts.min.js?v=1.8.0">
@@ -36,7 +44,7 @@ ob_start();
             <?php endforeach ?>
         </nav>
     </div>
-    <?php echo (new CForm())->setId('gqp-token')->setAction('zabbix.php?action=governance.quality.run')->setAttribute('hidden', 'hidden'); ?>
+    <?php echo $actionForm('gqp-token', 'governance.quality.run')->setAttribute('hidden', 'hidden'); ?>
     <section class="gqp-load-panel" aria-label="<?= $t('Carregamento da qualidade', 'Quality loading') ?>">
         <div class="gqp-load-actions"><p id="gqp-message" role="status" aria-live="polite" aria-atomic="true"><?= $e($data['error'] ?? $t('Carregando indicadores… Você pode continuar navegando.', 'Loading indicators… You can continue navigating.')) ?></p>
             <button type="button" id="gqp-retry" hidden><?= $t('Tentar novamente', 'Retry') ?></button>
@@ -66,4 +74,5 @@ ob_start();
     <script type="application/json" id="gqp-input"><?= json_encode(['page' => $data['selected_page'], 'revision' => $data['revision'], 'groupids' => array_values($data['groupids']), 'error' => $data['error']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 </div>
 <?php
-(new CWidget())->setTitle($data['page_title'])->setControls($pageControls)->addItem(new CObject(ob_get_clean()))->show();
+$page = class_exists('CHtmlPage') ? new CHtmlPage() : new CWidget();
+$page->setTitle($data['page_title'])->setControls($pageControls)->addItem(new CObject(ob_get_clean()))->show();

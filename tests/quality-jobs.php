@@ -289,7 +289,7 @@ try {
     CWebUser::$data['userid'] = '42';
     $foreign = $request(['operation' => 'status', 'job' => $complete['job']]);
     jobCheck($foreign['status'] === 'failed' && !isset($foreign['result']), 'another superadmin cannot see result');
-    $manifest = json_decode(file_get_contents(__DIR__ . '/../manifest.json'), true);
+    $manifest = json_decode(file_get_contents(__DIR__ . '/../platforms/zabbix-6.0/manifest.json'), true);
     jobCheck($manifest['actions']['governance.quality.run']['layout'] === 'layout.json', 'native JSON response layout registered');
     jobCheck(strpos(file_get_contents(__DIR__ . '/../actions/QualityRun.php'), 'disableSIDvalidation') === false, 'SID never disabled');
 }

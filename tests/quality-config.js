@@ -14,7 +14,8 @@ class Element {
     matches(selector) {
         if (selector.startsWith('#')) return this.id === selector.slice(1);
         if (selector.startsWith('.')) return this.className.split(' ').includes(selector.slice(1));
-        if (selector === '[name="sid"]') return this.name === 'sid';
+        const name = selector.match(/^\[name="([^"]+)"\]$/);
+        if (name) return this.name === name[1];
         const data = selector.match(/^\[data-([a-z-]+)(?:="([^"]*)")?\]$/);
         if (data) { const key = data[1].replace(/-([a-z])/g, (_, c) => c.toUpperCase()); return key in this.dataset && (data[2] === undefined || this.dataset[key] === data[2]); }
         return this.tag === selector;
@@ -49,7 +50,8 @@ const source = fs.readFileSync(require('node:path').join(__dirname, '../assets/j
 for (const lang of ['pt', 'en']) {
     const form = new Element('form'); form.id = 'gov-config-form';
     const root = new Element('div'); root.id = 'gov-config'; root.dataset.lang = lang; form.append(root);
-    const sid = new Element('input'); sid.name = 'sid'; sid.value = 'synthetic-token'; form.append(sid);
+    const runTokenForm = new Element('form'); runTokenForm.id = 'gov-quality-run-token';
+    const csrf = new Element('input'); csrf.name = '_csrf_token'; csrf.value = 'synthetic-token'; runTokenForm.append(csrf);
     const ids = ['pages', 'panels', 'status', 'error', 'empty'];
     for (const id of ids) { const node = new Element('div'); node.id = 'gov-config-' + id; root.append(node); }
     for (const id of ['gov-quality-payload', 'gov-quality-page', 'gov-draft-copy', 'gov-draft-backup', 'gov-quality-data']) {
@@ -70,7 +72,7 @@ for (const lang of ['pt', 'en']) {
         if (delayed) await new Promise(resolve => { resolveDelayed = resolve; });
         return {ok:true, json:async()=>response};
     };
-    vm.runInNewContext(source, {document: {readyState: 'complete', getElementById: id => id === form.id ? form : id === root.id ? root : find(id), createElement: tag => new Element(tag)},
+    vm.runInNewContext(source, {document: {readyState: 'complete', getElementById: id => id === form.id ? form : id === root.id ? root : id === runTokenForm.id ? runTokenForm : find(id), createElement: tag => new Element(tag)},
         window: {confirm: () => true, addEventListener() {}, fetch, crypto:require('node:crypto').webcrypto}, URLSearchParams, Uint8Array, AbortController, setTimeout, clearTimeout, console});
     assert.equal(find('gov-save').disabled, false, 'Editor initializes');
     assert.equal(back.href, 'zabbix.php?action=governance.quality.view&page=main', 'Back opens selected saved page');
@@ -150,7 +152,7 @@ for (const lang of ['pt', 'en']) {
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(calls.length, 1, 'Preview runs only on click');
     assert.equal(calls[0].body.operation, 'preview_start');
-    assert.equal(calls[0].body.sid, 'synthetic-token', 'Native CSRF token sent');
+    assert.equal(calls[0].body._csrf_token, 'synthetic-token', 'Zabbix 7 action CSRF token sent');
     assert.equal(JSON.parse(calls[0].body.card_json).selection.conditions.length, 2, 'Unsaved conditions sent');
     assert.ok(preview.querySelector('.gqp-preview-output').textContent.includes('<unsafe host>'), 'Host name rendered as text');
     set('title', 'Edited');

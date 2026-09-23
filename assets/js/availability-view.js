@@ -18,10 +18,16 @@
         let job = null, startInput = null, clientSnapshot = null;
         let active = false, pending = false, leaving = false, nextTimer = null, phase = 'idle', notice = '', busyRetries = 0;
         const endpoint = new URL(tokenForm.action, window.location.href);
+        const requestToken = () => {
+            const sid = tokenForm.querySelector('input[name="sid"]');
+            if (sid?.value) return {name: 'sid', value: sid.value};
+            const csrf = tokenForm.querySelector('input[name="_csrf_token"]');
+            return csrf?.value ? {name: '_csrf_token', value: csrf.value} : null;
+        };
         const supported = typeof window.fetch === 'function' && typeof window.AbortController === 'function'
             && window.crypto && typeof window.crypto.getRandomValues === 'function'
             && endpoint.origin === window.location.origin && endpoint.searchParams.get('action') === 'governance.availability.run'
-            && tokenForm.querySelector('input[name="sid"]');
+            && requestToken();
         const setText = (id, value) => {
             const node = document.getElementById(id);
             if (node && node.textContent !== value) node.textContent = value;
@@ -52,6 +58,7 @@
             const url = new URL(window.location.href);
             url.searchParams.set('action', 'governance.availability.view');
             url.searchParams.delete('sid');
+            url.searchParams.delete('_csrf_token');
             if (job && validId(job.job)) url.searchParams.set('job', job.job);
             else url.searchParams.delete('job');
             if (snapshot && /^\d{4}-\d{2}$/.test(snapshot.month)) url.searchParams.set('month', snapshot.month);
@@ -187,9 +194,9 @@
         };
         const post = async operation => {
             const body = new URLSearchParams();
-            const sid = tokenForm.querySelector('input[name="sid"]');
-            if (!sid || !sid.value) throw requestError(t('A sessão não forneceu a validação necessária. Recarregue a página após entrar no Zabbix.', 'The session did not provide the required validation. Reload this page after signing in to Zabbix.'));
-            body.set('sid', sid.value);
+            const token = requestToken();
+            if (!token) throw requestError(t('A sessão não forneceu a validação necessária. Recarregue a página após entrar no Zabbix.', 'The session did not provide the required validation. Reload this page after signing in to Zabbix.'));
+            body.set(token.name, token.value);
             body.set('operation', operation);
             if (operation === 'start') {
                 body.set('month', startInput.month);

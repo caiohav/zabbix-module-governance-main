@@ -1,12 +1,19 @@
 <?php
 $base = 'modules/' . rawurlencode(basename(dirname(__DIR__))) . '/assets/';
-$this->addCssFile($base . 'css/governance.css?v=1.22.0');
-$this->addCssFile($base . 'css/availability.css?v=1.22.0');
-$this->addCssFile($base . 'css/native-layout.css?v=1.22.0');
+$this->addCssFile($base . 'css/governance.css?v=1.24.0');
+$this->addCssFile($base . 'css/availability.css?v=1.24.0');
+$this->addCssFile($base . 'css/native-layout.css?v=1.24.0');
 $this->includeJsFile('governance.availability.config.js.php');
 $pt = $data['is_pt'];
 $t = static function($ptText, $enText) use ($pt) { return $pt ? $ptText : $enText; };
 $e = static function($value) { return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8'); };
+$actionForm = static function(string $id, string $action) {
+    $form = (new CForm())->setId($id)->setAction('zabbix.php?action=' . $action);
+    if (class_exists('CCsrfTokenHelper')) {
+        $form->addVar(CCsrfTokenHelper::CSRF_TOKEN_NAME, CCsrfTokenHelper::get($action));
+    }
+    return $form;
+};
 $dataPolicy = array_key_exists('data_policy', $data['config']) ? $data['config']['data_policy'] : 'strict';
 ob_start();
 ?>
@@ -14,7 +21,8 @@ ob_start();
     <a class="btn-alt gov-action-link" href="zabbix.php?action=governance.availability.view"><?= $t('Voltar ao painel', 'Back to dashboard') ?></a>
 </nav>
 <?php
-$pageControls = new CObject(ob_get_clean());
+$controlsContent = new CObject(ob_get_clean());
+$pageControls = class_exists('CHtmlPage') ? new CTag('div', true, $controlsContent) : $controlsContent;
 ob_start();
 ?>
 <div class="gov-container gav <?= !empty($data['is_dark']) ? 'gov-theme-dark' : '' ?>" id="gav-config" data-lang="<?= $pt ? 'pt' : 'en' ?>">
@@ -80,7 +88,7 @@ ob_start();
     <script type="application/json" id="gav-config-data"><?= json_encode($data['config'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 </div>
 <?php
-$form = (new CForm())->setId('gav-config-form')
-    ->setAction('zabbix.php?action=governance.availability.save')
+$form = $actionForm('gav-config-form', 'governance.availability.save')
     ->addItem(new CObject(ob_get_clean()));
-(new CWidget())->setTitle($data['page_title'])->setControls($pageControls)->addItem($form)->show();
+$page = class_exists('CHtmlPage') ? new CHtmlPage() : new CWidget();
+$page->setTitle($data['page_title'])->setControls($pageControls)->addItem($form)->show();

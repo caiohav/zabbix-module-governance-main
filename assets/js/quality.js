@@ -9,6 +9,12 @@
         const message = text => { el('message').textContent = text; };
         const number = value => Number(value).toLocaleString(pt ? 'pt-BR' : 'en-GB', {maximumFractionDigits: 1});
         const status = score => score === null ? 'neutral' : score >= 90 ? 'good' : score >= 70 ? 'warning' : 'critical';
+        const requestToken = () => {
+            const sid = el('token').querySelector('[name="sid"]');
+            if (sid?.value) return {name: 'sid', value: sid.value};
+            const csrf = el('token').querySelector('[name="_csrf_token"]');
+            return csrf?.value ? {name: '_csrf_token', value: csrf.value} : null;
+        };
         const translateError = text => {
             if (typeof text !== 'string') return t('Resposta inválida do servidor.', 'Invalid server response.');
             const parts = text.split(' / ');
@@ -51,7 +57,7 @@
             if (config.error) throw new Error(config.error);
             if (!window.fetch || !window.AbortController || !window.crypto?.getRandomValues
                     || endpoint.origin !== window.location.origin || endpoint.searchParams.get('action') !== 'governance.quality.run'
-                    || !el('token').querySelector('[name="sid"]')?.value) {
+                    || !requestToken()) {
                 throw new Error(t('Sessão ou navegador incompatível. Entre novamente no Zabbix e recarregue a página.', 'Session or browser unsupported. Sign in to Zabbix again and reload the page.'));
             }
         }
@@ -210,7 +216,10 @@
                 + (data.finished_at ? ' → ' + formatTime(data.finished_at) : '') + ' · ' + number(progress.calls || 0) + ' ' + t('chamadas à API', 'API calls') : '';
         };
         const post = async operation => {
-            const body = new URLSearchParams({sid: el('token').querySelector('[name="sid"]').value, operation});
+            const token = requestToken();
+            if (!token) throw new Error(t('A sessão não forneceu a validação necessária.', 'The session did not provide the required validation.'));
+            const body = new URLSearchParams({operation});
+            body.set(token.name, token.value);
             if (operation === 'start') {
                 body.set('page', config.page); body.set('revision', config.revision); body.set('request_id', requestId);
                 config.groupids.forEach(id => body.append('groupids[]', String(id)));

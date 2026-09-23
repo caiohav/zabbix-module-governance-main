@@ -1,19 +1,32 @@
-# Governance & Quality Audit — Zabbix 6.0 LTS
+# Governance & Quality Audit — Zabbix 6.0 e 7.0 LTS
 
 Módulo de governança e auditoria de qualidade de dados para o frontend do
-Zabbix 6.0 LTS.
+Zabbix 6.0 ou 7.0 LTS.
 
 ## Organização do projeto
 
-- Arquivos PHP da raiz, `actions/`, `views/` e `assets/`: código do módulo e licença do ECharts.
+- Arquivos PHP da raiz, `actions/`, `views/` e `assets/`: código comum às duas versões e licença do ECharts.
+- `platforms/zabbix-6.0/`: manifesto 1.0 e classe-base do módulo para Zabbix 6.0.
+- `platforms/zabbix-7.0/`: manifesto 2.0 e classe-base do módulo para Zabbix 7.0.
+- `scripts/build-packages.ps1`: monta os dois pacotes sem duplicar o motor de cálculo.
 - `tests/`: testes automatizados e ambientes locais com dados simulados; não instalar no servidor.
 - `notes/`: roadmap e validações atuais; `notes/archive/` preserva diagnósticos antigos, não tarefas pendentes.
-- `dist/`: pacotes ZIP gerados, ignorados pelo Git. O pacote local atual é `dist/zabbix-module-governance-1.23.0.zip`.
+- `dist/`: pacotes ZIP gerados, ignorados pelo Git. Os nomes indicam claramente a versão do Zabbix.
 
 Para instalação, use o conteúdo do ZIP, não a pasta inteira do repositório.
 Os pacotes antigos foram retirados da pasta de trabalho de forma recuperável;
 o local do arquivo está registrado em `notes/README.md`. Nenhuma versão do
-módulo ou regra de cálculo foi alterada nessa organização.
+módulo ou regra de cálculo é duplicada entre as versões.
+
+## Novidades 1.24.0 — Pacotes para Zabbix 6.0 e 7.0
+
+O projeto agora gera distribuições separadas para Zabbix 6.0 e 7.0. O código
+comum seleciona `CWidget`/SID no 6.0 e `CHtmlPage`/CSRF no 7.0; a classe-base e
+o manifesto permanecem específicos de cada plataforma. Os cálculos, regras e
+formato das configurações são os mesmos nas duas distribuições.
+
+Para reconstruir os pacotes no Windows, execute
+`powershell -ExecutionPolicy Bypass -File scripts/build-packages.ps1`.
 
 ## Novidades 1.23.0 — Cobertura sobreposta e meta por barra
 
@@ -837,12 +850,13 @@ os dados fictícios do teste; salvar valida o JSON sem modificar qualquer módul
 
 ## Pré-requisitos
 
-- Zabbix Frontend 6.0 LTS.
+- Zabbix Frontend 6.0 LTS ou 7.0 LTS, usando o ZIP correspondente.
 - PHP suportado pela versão instalada do Zabbix.
 
 ## Instalação
 
-1. Copie a pasta inteira para o diretório `modules` do frontend. Dependendo do
+1. Escolha o ZIP cujo nome contém `zabbix-6.0` ou `zabbix-7.0` e extraia a pasta
+   `Governance` no diretório `modules` do frontend. Dependendo do
    pacote, ele costuma ser `/usr/share/zabbix/ui/modules/` ou
    `/usr/share/zabbix/modules/`.
 2. Confira se o arquivo ficou diretamente em
@@ -889,18 +903,17 @@ sem criar tabelas adicionais.
 
 ## Compatibilidade
 
-O manifesto usa a versão `1.0`, exigida pelo Zabbix 6.0. O formato `2.0` é de
-gerações posteriores do frontend e faz o módulo ser ignorado pelo scanner do
-6.0.
+O pacote 6.0 usa manifesto `1.0`, `Core\CModule`, `CWidget` e SID. O pacote 7.0
+usa manifesto `2.0`, `Zabbix\Core\CModule`, `CHtmlPage` e tokens CSRF vinculados
+à ação. Não troque apenas o `manifest.json`: use sempre a distribuição completa
+da versão instalada.
 
-A view utiliza `CWidget`, classe disponível no frontend 6.0. `CHtmlPage` não
-existe nessa versão e causa erro HTTP 500 ao abrir a ação.
+As páginas GET desabilitam somente a validação de requisições de escrita pelo
+método oferecido pela versão. Todas as operações POST continuam autenticadas,
+exigem Super Admin e enviam o token nativo correspondente.
 
-As páginas GET utilizam `disableSIDvalidation()`, método do Zabbix 6.0.
-As operações POST de cálculo mantêm a validação SID nativa e exigem Super Admin.
-O método `disableCsrfValidation()` pertence a versões posteriores.
 O endpoint de cálculo usa `layout.json`, necessário para emitir `main_block`
-como JSON no frontend 6.0; `layout: null` não serve para essa resposta.
+como JSON nos dois frontends; `layout: null` não serve para essa resposta.
 
 O Apache ECharts é distribuído junto com o módulo sob a licença Apache 2.0. A
 cópia da licença está em `assets/js/ECHARTS-LICENSE.txt`.

@@ -15,7 +15,7 @@ const result = () => ({overall_score: 50, total_hosts: 2,
     metrics: {high_problems: {status: 'pending', value: null}, unsupported_items: {status: 'pending', value: null}}});
 const payload = (sequence = 0, extra = {}) => ({job: id, sequence, status: 'running', page: 'main', revision,
     started_at: 1787920000, finished_at: null, progress: {stage: 'scope', hosts_total: null, hosts_done: 0, calls: 0}, result: null, ...extra});
-function page({replies = [], language = 'pt', configError = null, sid = true} = {}) {
+function page({replies = [], language = 'pt', configError = null, sid = true, tokenName = 'sid'} = {}) {
     const nodes = {}, calls = [], timers = new Map(), events = {}, scripts = [];
     let timerId = 0;
     class Element {
@@ -41,7 +41,10 @@ function page({replies = [], language = 'pt', configError = null, sid = true} = 
     nodes.dashboard.dataset = {lang: language, echarts: '/echarts.js'};
     nodes.input.textContent = JSON.stringify({page: 'main', revision, groupids: ['10'], error: configError});
     nodes.token.action = 'http://local.test/zabbix.php?action=governance.quality.run';
-    nodes.token.selectors = {'[name="sid"]': sid ? {value: 'test-sid'} : null};
+    nodes.token.selectors = {
+        '[name="sid"]': sid && tokenName === 'sid' ? {value: 'test-sid'} : null,
+        '[name="_csrf_token"]': sid && tokenName === '_csrf_token' ? {value: 'test-csrf'} : null
+    };
     const card = new Element('card'); card.dataset.cardId = 'tag'; card.selectors = {};
     ['h3', '.gov-card-chart', '.gov-card-score-sub', '.gov-card-score-missing', '.gov-card-exceptions'].forEach(selector => { card.selectors[selector] = new Element(selector); });
     card.selectors.h3.textContent = 'Tag';
@@ -114,6 +117,10 @@ function page({replies = [], language = 'pt', configError = null, sid = true} = 
     check(p.card.selectors['.gov-card-chart'].textContent === '50%', 'numeric fallback without ECharts');
     p.replies.push(payload()); p.nodes.refresh.fire('click'); await flush();
     check(p.nodes.score.textContent === '—' && p.calls.at(-1).body.request_id !== p.calls[0].body.request_id, 'refresh hides old score and creates new calculation');
+
+    const z7 = page({tokenName: '_csrf_token', replies: [payload()]}); await z7.tick(0);
+    check(z7.calls[0].body._csrf_token === 'test-csrf' && z7.calls[0].body.sid === undefined,
+        'Zabbix 7 action CSRF token keeps its native field name');
 
     const failMetric = result(); failMetric.metrics.high_problems = {status: 'failed', value: null}; failMetric.metrics.unsupported_items = {status: 'complete', value: 2};
     const f = page({replies: [payload(1, {status: 'complete', result: failMetric})]}); await f.tick(0);

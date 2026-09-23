@@ -6,6 +6,13 @@
         const form = document.getElementById('gov-config-form');
         if (!root || !form || root.dataset.configInitialized) return;
         root.dataset.configInitialized = 'true';
+        const runTokenForm = document.getElementById('gov-quality-run-token') || form;
+        const requestToken = () => {
+            const sid = runTokenForm.querySelector('[name="sid"]');
+            if (sid?.value) return {name: 'sid', value: sid.value};
+            const csrf = runTokenForm.querySelector('[name="_csrf_token"]');
+            return csrf?.value ? {name: '_csrf_token', value: csrf.value} : null;
+        };
 
         const pt = root.dataset.lang === 'pt';
         const t = (portuguese, english) => pt ? portuguese : english;
@@ -114,9 +121,10 @@
                     const timer = setTimeout(() => controller.abort(), 25000);
                     search.disabled = true; results.textContent = t('Buscando…', 'Searching…');
                     try {
-                        const sid = form.querySelector('[name="sid"]');
-                        if (!sid || !sid.value) throw new Error('sid');
-                        const body = new URLSearchParams({operation: 'lookup', lookup_type: kind, query: term, sid: sid.value});
+                        const token = requestToken();
+                        if (!token) throw new Error('token');
+                        const body = new URLSearchParams({operation: 'lookup', lookup_type: kind, query: term});
+                        body.set(token.name, token.value);
                         const response = await fetch('zabbix.php?action=governance.quality.run', {method: 'POST', credentials: 'same-origin', body, signal: controller.signal});
                         if (!response.ok) throw new Error('http');
                         const data = await response.json();
@@ -610,8 +618,8 @@
                 // IDs are unique only within each page.
                 const pageDraft = JSON.parse(payload.value).find(p => p.id === card.closest('.gqp-page-panel').dataset.pageId);
                 const rule = pageDraft.cards.find(c => c.id === card.dataset.cardId);
-                const sid = form.querySelector('[name="sid"]')?.value;
-                if (!sid || !window.fetch || !window.crypto?.getRandomValues) throw new Error(localError);
+                const token = requestToken();
+                if (!token || !window.fetch || !window.crypto?.getRandomValues) throw new Error(localError);
                 const request = [...window.crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
                 post = async data => {
                     const controller = new AbortController();
@@ -619,7 +627,7 @@
                     try {
                         const response = await window.fetch('zabbix.php?action=governance.quality.run', {method: 'POST', credentials: 'same-origin', redirect: 'error', cache: 'no-store',
                             headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', Accept: 'application/json'},
-                            body: new URLSearchParams({sid, ...data}).toString(), signal: controller.signal});
+                            body: (() => { const body = new URLSearchParams(data); body.set(token.name, token.value); return body.toString(); })(), signal: controller.signal});
                         if (!response.ok) throw new Error(localError);
                         return await response.json();
                     } finally { clearTimeout(timer); }

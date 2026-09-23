@@ -21,7 +21,7 @@ const deferred = () => {
     return {promise, resolve};
 };
 
-function page({saved = null, report = false, configured = true, language = 'pt', replies = [], sid = 'native-test-sid'} = {}) {
+function page({saved = null, report = false, configured = true, language = 'pt', replies = [], sid = 'native-test-sid', tokenName = 'sid'} = {}) {
     const nodes = {}, calls = [], timers = new Map(), navigations = [], downloads = [], events = {};
     let timerId = 0, prints = 0;
     class Element {
@@ -54,10 +54,10 @@ function page({saved = null, report = false, configured = true, language = 'pt',
     if (configured) department.options.push({value: '0', textContent: 'Banco de Dados'});
     department.add = option => department.options.push(option);
     const token = sid === null ? null : new Element('sid');
-    if (token) token.value = sid;
+    if (token) { token.value = sid; token.name = tokenName; }
     nodes['gav-filters'].querySelector = selector => selector.includes('month') ? month : department;
     nodes['gav-filters'].reportValidity = () => true;
-    nodes['gav-job-token'].querySelector = () => token;
+    nodes['gav-job-token'].querySelector = selector => token && selector.includes('name="' + tokenName + '"') ? token : null;
     nodes['gav-job-token'].action = 'http://local.test/zabbix.php?action=governance.availability.run';
     nodes['gav-job-data'].textContent = JSON.stringify(saved);
     const location = {href: 'http://local.test/zabbix.php?action=governance.availability.view', origin: 'http://local.test',
@@ -137,6 +137,12 @@ const tests = [
         assert.equal(new URL(p.location.href).searchParams.get('job'), jobId);
         assert.equal(p.countTimers(100), 1);
         p.submit(); assert.equal(p.calls.length, 1);
+    }],
+    ['Zabbix 7 action CSRF token is sent with its native field name', async () => {
+        const p = page({sid: 'zabbix7-token', tokenName: '_csrf_token', replies: [projection()]});
+        p.submit(); await flush();
+        assert.equal(p.calls[0].body._csrf_token, 'zabbix7-token');
+        assert.equal(p.calls[0].body.sid, undefined);
     }],
     ['pause lets an in-flight checkpoint finish and resumes with status', async () => {
         const stage = deferred();

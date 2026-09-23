@@ -23,8 +23,9 @@ essa configuração nem excluir hosts automaticamente.
   Total retirado do projeto: 5.465.494 bytes (aproximadamente 5,2 MiB).
 - O pacote da limpeza, `../dist/zabbix-module-governance-1.18.0.zip`, foi movido,
   não reconstruído, e permanece preservado. Após o novo pedido de implementação,
-  o runtime passou à 1.23.0; seu pacote é `../dist/zabbix-module-governance-1.23.0.zip`.
-  As versões 1.19.0 a 1.22.0 também foram preservadas. Os pacotes novos são cumulativos.
+  o runtime passou à 1.24.0, agora com pacotes separados para Zabbix 6.0 e 7.0
+  em `../dist/`. As versões 1.19.0 a 1.23.0 também foram preservadas. Os pacotes
+  novos são cumulativos.
 - Os 12 ZIPs foram conferidos por SHA-256 antes e depois da movimentação.
 - Para recuperar uma versão antiga, basta copiá-la da pasta de arquivo acima.
   Os ZIPs anteriormente versionados também permanecem no histórico do Git;

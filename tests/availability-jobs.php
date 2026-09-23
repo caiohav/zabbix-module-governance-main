@@ -361,7 +361,7 @@ try {
     $foreignView->store = $controllerStore;
     $foreignData = $foreignView->run()->data;
     jobCheck($foreignData['report'] === null && $foreignData['job'] === null && $foreignData['error'] !== null, 'foreign report URL is refused');
-    $manifest = json_decode(file_get_contents(__DIR__ . '/../manifest.json'), true);
+    $manifest = json_decode(file_get_contents(__DIR__ . '/../platforms/zabbix-6.0/manifest.json'), true);
     jobCheck(($manifest['actions']['governance.availability.run']['layout'] ?? '') === 'layout.json', 'run uses native JSON layout rather than an empty null layout');
     jobCheck(strpos(file_get_contents(__DIR__ . '/../actions/AvailabilityRun.php'), 'disableSIDvalidation') === false, 'mutating controller does not disable native SID validation');
     jobCheck(strpos(file_get_contents(__DIR__ . '/../actions/AvailabilityView.php'), '->build(') === false, 'GET controller has no synchronous report build path');
