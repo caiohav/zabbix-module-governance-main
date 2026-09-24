@@ -127,6 +127,11 @@ final class AvailabilityJobStore {
         });
     }
 
+    public static function superseded(array $state): array {
+        return self::terminalState($state, 'failed',
+            'Saved rules changed; start a new calculation / Regras salvas alteradas; inicie um novo cálculo.');
+    }
+
     /** Only this allowlist can leave the server. Timelines, samples and rules stay private. */
     public static function projection(array $job): array {
         $state = $job['state'];

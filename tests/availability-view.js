@@ -61,7 +61,7 @@ function page({saved = null, report = false, configured = true, language = 'pt',
     nodes['gav-job-token'].action = 'http://local.test/zabbix.php?action=governance.availability.run';
     nodes['gav-job-data'].textContent = JSON.stringify(saved);
     const location = {href: 'http://local.test/zabbix.php?action=governance.availability.view', origin: 'http://local.test',
-        assign: url => navigations.push(url)};
+        assign: url => navigations.push(url), reload: () => navigations.push('reload')};
     const fetch = (url, options) => {
         const request = {url, body: Object.fromEntries(new URLSearchParams(options.body)), options};
         calls.push(request);
@@ -98,7 +98,7 @@ function page({saved = null, report = false, configured = true, language = 'pt',
     };
     return {nodes, calls, timers, navigations, downloads, month, department, location, replies, schedule,
         get prints() { return prints; },
-        fireWindow: name => { for (const fn of events[name] || []) fn(); },
+        fireWindow: (name, event = {}) => { for (const fn of events[name] || []) fn(event); },
         countTimers: delay => Array.from(timers.values()).filter(timer => timer.ms === delay).length,
         submit: () => nodes['gav-filters'].fire('submit'), resume: () => nodes['gav-job-resume'].fire('click'),
         pause: () => nodes['gav-job-pause'].fire('click')};
@@ -260,6 +260,12 @@ const tests = [
         p.fireWindow('pageshow'); assert.equal(p.calls.length, 1);
         assert.equal(p.nodes['gav-job-resume'].hidden, false);
         p.resume(); await flush(); assert.equal(p.calls[1].body.operation, 'status');
+    }],
+    ['returning to a cached report reloads current saved rules', async () => {
+        const p = page({report: true});
+        p.fireWindow('pageshow', {persisted: true});
+        assert.deepEqual(p.navigations, ['reload']);
+        assert.equal(p.calls.length, 0);
     }],
     ['completed report loads without network and English labels remain available', async () => {
         const p = page({saved: projection(1, {status: 'complete', result_url: 'zabbix.php?action=governance.availability.view&job=' + jobId}), report: true});

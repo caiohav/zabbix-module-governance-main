@@ -18,6 +18,27 @@ Os pacotes antigos foram retirados da pasta de trabalho de forma recuperável;
 o local do arquivo está registrado em `notes/README.md`. Nenhuma versão do
 módulo ou regra de cálculo é duplicada entre as versões.
 
+## Correção 1.25.1 — Regras excluídas e cálculos antigos
+
+Excluir e salvar uma verificação remove-a dos próximos cálculos. Ao abrir um
+endereço `job=...` criado antes da mudança, o painel agora compara as regras
+salvas com o retrato usado naquele cálculo: um relatório antigo é ocultado e a
+tela pede nova apuração. Cálculos em andamento deixam de avançar se as regras
+forem alteradas. Voltar pelo histórico do navegador recarrega o painel para
+evitar exibir uma página antiga guardada em cache.
+
+## Novidades 1.25.0 — Um serviço com itens em hosts diferentes
+
+Em cada verificação por item é possível indicar um host dos grupos configurados
+por nome técnico, nome visível ou ID. Quando todas as verificações indicam um
+host, os itens selecionados formam um único serviço: todos em UP confirmam
+disponibilidade, qualquer DOWN confirma queda, e a ausência de evidência sem
+queda mantém o estado desconhecido. O relatório identifica o host de cada fonte.
+Deixar todos os campos de host vazios preserva o cálculo anterior, que aplica
+todas as verificações a cada host do grupo. Uma seleção parcial é recusada.
+O checkpoint interno passa ao formato 4; cálculos que estavam em andamento
+antes desta atualização devem ser iniciados novamente.
+
 ## Novidades 1.24.0 — Pacotes para Zabbix 6.0 e 7.0
 
 O projeto agora gera distribuições separadas para Zabbix 6.0 e 7.0. O código
@@ -633,9 +654,13 @@ itens**, é possível configurar:
 
 - Grupos por nome (incluindo subgrupos) ou ID (apenas o grupo exato).
 - Consolidação **qualquer servidor fora** ou **média dos servidores**.
-- Uma ou mais chaves exatas de itens numéricos, presentes em cada host.
-  Por exemplo, uma verificação de `icmpping` e outra do serviço. As chaves
-  devem corresponder aos itens realmente cadastrados no seu Zabbix.
+- Uma ou mais chaves exatas de itens numéricos. Sem host indicado nas
+  verificações, cada chave deve existir em cada host do grupo. Opcionalmente,
+  indique o nome técnico, nome visível ou ID do host **em todas** as
+  verificações: os itens escolhidos, mesmo em hosts diferentes, formam um
+  único serviço. Cada host indicado precisa pertencer aos grupos configurados;
+  a opção de consolidação dos hosts não se aplica a esse serviço combinado.
+  Por exemplo, `icmpping` em um servidor e `web.test.fail[...]` em outro.
 - Condição de disponibilidade: igual, diferente, maior/menor, maior/menor ou
   igual, ou intervalo inclusivo. A indisponibilidade pode ser qualquer outro
   valor válido ou uma condição explícita.
@@ -675,8 +700,9 @@ histórica do item no mês consultado. Se essas regras mudaram, revise a validad
 manual de forma consciente; a exportação registra a política usada. O módulo
 não reconstrói o histórico de configurações nem infere heartbeat pelos dados.
 
-Todas as verificações de um host são obrigatórias. Uma falha confirmada deixa
-o host indisponível, mesmo se outra verificação estiver sem dados. No modo
+Todas as verificações de um host ou serviço combinado são obrigatórias. Uma
+falha confirmada deixa o resultado indisponível, mesmo se outra verificação
+estiver sem dados. No modo
 **qualquer servidor fora**, o sistema une os intervalos: quedas simultâneas de
 host e serviço, ou de vários servidores, não duplicam a duração. No modo
 **média**, cada host tem peso igual. O peso da tecnologia é aplicado somente
@@ -728,6 +754,9 @@ já enviada pode terminar no servidor. Em caso de conexão interrompida, use
 **Continuar cálculo**; o endereço que passa a conter `job` permite reabrir o
 mesmo cálculo. Ele não continua em segundo plano sem uma aba conduzindo as
 etapas. Outras abas abertas no mesmo cálculo podem continuar a avançá-lo.
+Se as regras salvas mudarem, esse cálculo deixa de ser atual: novas etapas
+são interrompidas e um relatório concluído com as regras antigas não é exibido
+como resultado vigente. Inicie outra apuração para o mês desejado.
 
 Uma **falha de processamento** não é exibida como disponibilidade de 0% nem
 como um mês inteiro sem histórico: não existe indicador final nesse caso.

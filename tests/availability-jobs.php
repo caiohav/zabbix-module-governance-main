@@ -328,10 +328,11 @@ try {
     $activeView = new JobViewHarness(['job' => $started['job'], 'month' => '2020-01', 'department' => '-1']);
     $activeView->store = $controllerStore;
     $activeData = $activeView->run()->data;
-    jobCheck($activeData['report'] === null && $activeData['job']['status'] === 'running', 'GET reopening an active job exposes only progress');
+    jobCheck($activeData['report'] === null && $activeData['job'] === null && $activeData['rules_changed'],
+        'GET hides an old running job after saved rules change');
     jobCheck($activeData['month'] === '2026-05' && $activeData['department'] === 0, 'job view ignores changed URL month/filter');
-    jobCheck($activeData['config']['departments'][0]['name'] === 'Frozen department', 'active job view retains full frozen configuration');
-    jobCheck(count(API::$calls) === $callsBeforeRetry, 'GET active job never advances the calculation or reads current rules');
+    jobCheck($activeData['config']['departments'][0]['name'] === 'Changed rules', 'stale job view uses current saved rules');
+    jobCheck(count(API::$calls) === $callsBeforeRetry + 1, 'GET checks current rules without reading history');
     $status = jobRequest($controllerStore, ['operation' => 'status', 'job' => $started['job']]);
     jobCheck($status === $started, 'status returns the latest checkpoint without advancing');
     $activeEnvelope = $controllerStore->read($started['job'], '41');
@@ -341,6 +342,7 @@ try {
         jobCheck($busy['status'] === 'busy' && $busy['retryable'] === true, 'controller returns a retryable busy projection');
     }
     finally { jobUnlock($held); }
+    API::$config['availability']['departments'][0]['name'] = 'Frozen department';
     $finished = $started;
     for ($i = 0; $i < 100 && $finished['status'] === 'running'; $i++) {
         $finished = jobRequest($controllerStore, ['operation' => 'step', 'job' => $finished['job'], 'sequence' => $finished['sequence']]);
@@ -353,7 +355,25 @@ try {
     $completedData = $completedView->run()->data;
     jobCheck($completedData['report']['month'] === '2026-05' && $completedData['report']['departments'][0]['name'] === 'Frozen department', 'completed view uses frozen report fields');
     jobCheck(abs($completedData['report']['departments'][0]['summary']['score'] - 100) < 0.000001, 'completed controller pipeline retains correct availability');
-    jobCheck(count(API::$calls) === $callsBeforeView, 'completed GET never reruns historical queries');
+    jobCheck(count(API::$calls) === $callsBeforeView + 1 && API::$calls[$callsBeforeView][0] === 'Module',
+        'completed GET checks rule freshness without rerunning history');
+    API::$config['availability']['departments'][0]['name'] = 'Changed rules';
+    $staleView = new JobViewHarness(['job' => $finished['job']]);
+    $staleView->store = $controllerStore;
+    $staleData = $staleView->run()->data;
+    jobCheck($staleData['rules_changed'] && $staleData['report'] === null && $staleData['job'] === null,
+        'completed report with deleted or changed rules is hidden until recalculation');
+    API::$config['availability']['departments'][0]['name'] = 'Frozen department';
+    $supersededRequest = array_replace($startRequest, ['request_id' => jobNonce('superseded')]);
+    $superseded = jobRequest($controllerStore, $supersededRequest);
+    API::$config['availability']['departments'][0]['name'] = 'Changed rules';
+    $callsBeforeSupersede = count(API::$calls);
+    $superseded = jobRequest($controllerStore, ['operation' => 'step', 'job' => $superseded['job'],
+        'sequence' => $superseded['sequence']]);
+    jobCheck($superseded['status'] === 'failed' && strpos($superseded['error'], 'Saved rules changed') !== false,
+        'a running calculation stops when its rules change');
+    jobCheck(array_column(array_slice(API::$calls, $callsBeforeSupersede), 0) === ['Module'],
+        'superseded step reads no old group, item or history data');
     CWebUser::$data['userid'] = '42';
     $foreign = jobRequest($controllerStore, ['operation' => 'status', 'job' => $finished['job']]);
     jobCheck($foreign['status'] === 'failed' && !isset($foreign['result_url'], $foreign['snapshot']), 'another superadmin cannot access job progress or report');

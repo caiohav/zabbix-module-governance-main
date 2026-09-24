@@ -342,8 +342,11 @@
                 render();
             }
         });
-        window.addEventListener('pageshow', () => {
+        window.addEventListener('pageshow', event => {
             leaving = false;
+            // Returning from the configuration editor may restore an old report from
+            // the browser cache without asking the server whether rules changed.
+            if (event && event.persisted) window.location.reload();
         });
         try {
             const node = document.getElementById('gav-job-data');
@@ -569,16 +572,17 @@
         exportButton.disabled = root.dataset.reportStale === '1';
         exportButton.addEventListener('click', () => {
             if (root.dataset.reportStale === '1') return;
-            const payload = {format: 'governance-availability-v3', module_version: '1.13.3',
+            const payload = {format: 'governance-availability-v3', module_version: '1.25.1',
                 assumptions: {aggregation: 'weighted mean only for matching periods, schedules and exclusions',
                     data_policy: observedPolicy ? 'observed' : 'strict',
                     items: {schedule: '24x7', membership: 'current', maintenance_excluded: false,
                         unknown_policy: observedPolicy
-                            ? 'ignore unknown intervals and hosts, never presume them up; checks inside each host remain required'
+                            ? 'ignore unknown intervals and hosts, never presume them up; checks per host or combined service remain required'
                             : 'no final score when unknown time exists',
                         reported_score: observedPolicy ? 'observation.score' : 'summary.score',
                         observed_aggregation: 'mean of host percentages for mean mode; union of known outages for any_down; weighted technology percentages for departments; exclude null indicators from score, not coverage',
-                        observed_coverage: 'known-state time averaged over ALL scoped hosts, then ALL configured technology weights',
+                        observed_coverage: 'known-state time averaged over ALL scoped hosts or combined services, then ALL configured technology weights',
+                        check_scope: 'without check host selectors, each check applies to every host; with a host on every check, selected items form one combined service',
                         strict_summary_preserved: true, resolution_seconds: 1,
                         daily_indicator: 'each civil day reapplies the same host and technology hierarchy; a simple mean of daily points need not equal the monthly indicator',
                         host_daily_format: '[score, coverage] per civil day, positionally aligned with the parent technology daily calendar',

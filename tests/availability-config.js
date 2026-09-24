@@ -158,6 +158,29 @@ function page(config, language = 'pt') {
 }
 
 const tests = [
+    ['removing one check excludes it from the saved payload', () => {
+        const dual = {...item, checks: [check, {...check, key: 'web.test.fail[Webpage availability]'}]};
+        const p = page(configuration(dual)), tech = p.techs()[0];
+        tech.querySelector('.gav-check [data-action="remove-check"]').fire('click');
+        assert.equal(p.submit().defaultPrevented, false);
+        assert.deepEqual(p.data().departments[0].technologies[0].checks.map(rule => rule.key),
+            ['web.test.fail[Webpage availability]']);
+    }],
+    ['checks can select different hosts without changing legacy rules', () => {
+        const dual = {...item, checks: [check, {...check, key: 'web.test.fail[Webpage availability]'}]};
+        const p = page(configuration(dual), 'en'), tech = p.techs()[0];
+        const checks = tech.querySelectorAll('.gav-check');
+        assert.equal(p.submit().defaultPrevented, false, 'blank hosts retain checks-per-host mode');
+        assert.equal('host' in p.data().departments[0].technologies[0].checks[0], false);
+        p.change(field(checks[0], 'host'), 'host-001');
+        assert.equal(p.submit().defaultPrevented, true, 'mixed selection must be completed');
+        p.change(field(checks[1], 'host'), '2');
+        assert.equal(p.submit().defaultPrevented, false);
+        assert.equal(tech.querySelector('.gav-host-aggregation').hidden, true);
+        assert.deepEqual(p.data().departments[0].technologies[0].checks.map(rule => rule.host), ['host-001', '2']);
+        const reopened = page(p.data(), 'en');
+        assert.deepEqual(reopened.data().departments[0].technologies[0].checks.map(rule => rule.host), ['host-001', '2']);
+    }],
     ['compact checks preserve rules, reveal invalid fields and keep help collapsed', () => {
         for (const language of ['pt', 'en']) {
             const p = page(configuration(item), language), tech = p.techs()[0], checkNode = tech.querySelector('.gav-check');

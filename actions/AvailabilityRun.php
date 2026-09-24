@@ -65,6 +65,12 @@ class AvailabilityRun extends CController {
             }
             elseif ($operation === 'step') {
                 $job = $store->step($id, $owner, $sequence, static function(array $state): array {
+                    $modules = API::Module()->get(['output' => ['config'], 'filter' => ['id' => 'zabbix_module_governance']]);
+                    if (!is_array($modules) || !$modules) { throw new \RuntimeException('Module unavailable.'); }
+                    $current = AvailabilityConfig::validate($modules[0]['config']['availability'] ?? AvailabilityConfig::defaults());
+                    if (!isset($state['source_config']) || json_encode($current) !== json_encode($state['source_config'])) {
+                        return AvailabilityJobStore::superseded($state);
+                    }
                     return (new AvailabilityCalculation())->advance($state);
                 });
             }

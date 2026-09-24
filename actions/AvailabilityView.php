@@ -38,28 +38,30 @@ class AvailabilityView extends CController {
         $report = null;
         $job = null;
         $error = null;
+        $rulesChanged = false;
         $month = '';
         $department = (int) $this->getInput('department', -1);
         try {
+            $modules = API::Module()->get(['output' => ['config'], 'filter' => ['id' => 'zabbix_module_governance']]);
+            if (!is_array($modules) || !$modules) { throw new \RuntimeException('Module unavailable.'); }
+            $config = AvailabilityConfig::validate($modules[0]['config']['availability'] ?? $config);
             if ($this->hasInput('job')) {
                 $stored = $this->jobStore()->read($this->getInput('job'), (string) (CWebUser::$data['userid'] ?? ''));
                 $state = $stored['state'];
-                $job = AvailabilityJobStore::projection($stored);
-                // A reopened report uses its frozen full configuration, not today's database rules.
-                if (!empty($state['source_config'])) { $config = $state['source_config']; }
                 $month = $state['report']['month'] ?? '';
                 $department = (int) ($state['department_filter'] ?? -1);
-                if ($state['status'] === 'complete') { $report = AvailabilityCalculation::result($state); }
-                elseif ($state['status'] === 'failed') { $error = $job['error']; }
-            }
-            else {
-                $modules = API::Module()->get(['output' => ['config'], 'filter' => ['id' => 'zabbix_module_governance']]);
-                $config = AvailabilityConfig::validate($modules[0]['config']['availability'] ?? $config);
-                $month = $this->getInput('month', '');
-                if ($department !== -1 && !isset($config['departments'][$department])) {
-                    $error = 'Invalid department / Departamento inválido.';
-                    $department = -1;
+                $rulesChanged = !isset($state['source_config'])
+                    || json_encode($config) !== json_encode($state['source_config']);
+                if (!$rulesChanged) {
+                    $job = AvailabilityJobStore::projection($stored);
+                    if ($state['status'] === 'complete') { $report = AvailabilityCalculation::result($state); }
+                    elseif ($state['status'] === 'failed') { $error = $job['error']; }
                 }
+            }
+            else { $month = $this->getInput('month', ''); }
+            if ($department !== -1 && !isset($config['departments'][$department])) {
+                if (!$rulesChanged) { $error = 'Invalid department / Departamento inválido.'; }
+                $department = -1;
             }
         }
         catch (AvailabilityJobException $e) {
@@ -88,7 +90,8 @@ class AvailabilityView extends CController {
         $response = new CControllerResponseData([
             'page_title' => $isPt ? 'Disponibilidade por departamento' : 'Department availability',
             'is_pt' => $isPt, 'is_dark' => strpos(strtolower(getUserTheme(CWebUser::$data)), 'dark') !== false,
-            'config' => $config, 'report' => $report, 'job' => $job, 'error' => $error, 'month' => $month, 'department' => $department
+            'config' => $config, 'report' => $report, 'job' => $job, 'error' => $error,
+            'rules_changed' => $rulesChanged, 'month' => $month, 'department' => $department
         ]);
         $response->setTitle($response->getData()['page_title']);
         $this->setResponse($response);

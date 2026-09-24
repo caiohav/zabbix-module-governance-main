@@ -76,10 +76,23 @@ final class AvailabilityConfig {
                         throw new InvalidArgumentException('Invalid check / Verificação inválida.');
                     }
                     $age = array_key_exists('max_age', $check) ? $check['max_age'] : $legacyAge;
-                    $tech['checks'][] = ['key' => self::text($check['key'] ?? '', 2048),
+                    $host = $check['host'] ?? '';
+                    if (!is_string($host) || mb_strlen($host, 'UTF-8') > 255) {
+                        throw new InvalidArgumentException('Invalid check host / Host da verificação inválido.');
+                    }
+                    $rule = ['key' => self::text($check['key'] ?? '', 2048),
                         'max_age' => $age === null ? null : self::seconds($age),
                         'up' => self::condition($check['up'] ?? null),
                         'down' => isset($check['down']) ? self::condition($check['down']) : null];
+                    if (trim($host) !== '') { $rule['host'] = trim($host); }
+                    $tech['checks'][] = $rule;
+                }
+                $selectedHosts = array_filter($tech['checks'], static function(array $check): bool {
+                    return isset($check['host']);
+                });
+                if ($selectedHosts && count($selectedHosts) !== count($tech['checks'])) {
+                    throw new InvalidArgumentException('Select a host for every check, or leave all blank / '
+                        . 'Selecione um host para cada verificação ou deixe todos em branco.');
                 }
                 $node['technologies'][] = $tech;
             }

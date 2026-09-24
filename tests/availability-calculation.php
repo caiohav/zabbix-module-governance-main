@@ -103,7 +103,8 @@ function fixture(int $hostCount = 2): void {
     API::$groups = [['groupid' => '1', 'name' => 'Equipes'], ['groupid' => '2', 'name' => 'Equipes/Banco'],
         ['groupid' => '3', 'name' => 'Equipes externas']];
     for ($i = 1; $i <= $hostCount; $i++) {
-        API::$hosts[] = ['hostid' => (string) $i, 'name' => sprintf('Host %03d', $i), 'status' => 0, 'groups' => ['2']];
+        API::$hosts[] = ['hostid' => (string) $i, 'host' => sprintf('host-%03d', $i),
+            'name' => sprintf('Host %03d', $i), 'status' => 0, 'groups' => ['2']];
         foreach (['ping', 'service'] as $key) {
             API::$items[] = ['itemid' => $i . '-' . $key, 'hostid' => (string) $i, 'key_' => $key,
                 'value_type' => '3', 'status' => '0', 'delay' => '1m', 'type' => '3', 'preprocessing' => []];
@@ -164,6 +165,40 @@ verify($report['processing']['hosts_total'] === 2 && $report['processing']['api_
 verify(Calculation::result(checkpoint($state)) == $report, 'final result survives serialization');
 verify((new Calculation())->advance($state) === $state, 'completed job cannot change');
 verify($original['phase'] === 'groups' && $original['progress']['hosts_done'] === 0, 'advance does not mutate caller checkpoint');
+
+// A check may read its item from a different host while both form one logical service.
+fixture(); $config = configuration('any_down', 3600);
+$config['departments'][0]['technologies'][0]['checks'][0]['host'] = 'host-001';
+$config['departments'][0]['technologies'][0]['checks'][1]['host'] = '2';
+$config['departments'][0]['technologies'][0]['checks'][1]['up']['a'] = 0;
+API::$items = array_values(array_filter(API::$items, static function(array $item): bool {
+    return in_array($item['itemid'], ['1-ping', '2-service'], true);
+}));
+API::$history['1-ping'] = [sample($from, 1)];
+API::$history['2-service'] = [sample($from, 0), sample($from + 1800, 1), sample($from + 2400, 0)];
+$state = finishCalculation(Calculation::create($config, '2026-05', -1, $from + 3600));
+$report = Calculation::result($state);
+$technology = $report['departments'][0]['technologies'][0];
+verify($technology['check_scope'] === 'selected_hosts' && $technology['hosts_total'] === 1,
+    'selected sources form one logical service, not two independently averaged hosts');
+verify($technology['summary']['down'] == 600 && $technology['summary']['unknown'] == 0
+    && abs($technology['summary']['score'] - 83.3333333333) < 1e-6,
+    'cross-host check overlap produces the expected service indicator');
+verify(array_column($technology['hosts'][0]['sources'], 'hostid') === ['1', '2']
+    && array_column($technology['hosts'][0]['sources'], 'itemid') === ['1-ping', '2-service'],
+    'each source records the resolved host and exact item');
+verify($state['progress']['hosts_done'] === 1 && $state['progress']['checks_done'] === 2,
+    'cross-host progress counts one service and two checks');
+$invalid = $config;
+unset($invalid['departments'][0]['technologies'][0]['checks'][1]['host']);
+rejects(static function() use ($invalid, $from) { Calculation::create($invalid, '2026-05', -1, $from + 3600); },
+    'partial host selection is rejected instead of changing calculation semantics');
+$invalid = $config;
+$invalid['departments'][0]['technologies'][0]['checks'][1]['host'] = 'outside-scope';
+$report = Calculation::result(finishCalculation(Calculation::create($invalid, '2026-05', -1, $from + 3600)));
+verify($report['departments'][0]['technologies'][0]['hosts_total'] === 0
+    && $report['departments'][0]['summary']['score'] === null,
+    'unresolved selected host cannot silently produce a partial score');
 
 // Any-down versus the mean of host availability: do not average time twice.
 $config['departments'][0]['technologies'][0]['mode'] = 'mean';

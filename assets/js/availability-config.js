@@ -56,10 +56,11 @@
                 <div class="gav-check-content">
                 <div class="gav-check-source">
                     ${field(t('Chave exata do item', 'Exact item key'), input('key', check.key, 'required maxlength="2048" placeholder="icmpping" spellcheck="false"'))}
+                    ${field(t('Host deste item (opcional)', 'Host for this item (optional)'), input('host', check.host ?? '', 'maxlength="255" placeholder="DSSBSB-SRVV16 ou ID" spellcheck="false"'), '', t('Nome técnico, nome visível ou ID de um host dos grupos selecionados. Preencha em todas as verificações para combiná-las como um serviço.', 'Technical name, visible name or ID of a host in the selected groups. Fill this in for every check to combine them as one service.'))}
                     ${field(t('Janela da evidência', 'Evidence window'), `<select data-field="age_mode">${options({auto: t('Automática (mínimo de 1 hora)', 'Automatic (one-hour minimum)'), hour: t('Uma hora exata', 'Exactly one hour'), manual: t('Manual (segundos)', 'Manual (seconds)')}, age === null ? 'auto' : (Number(age) === 3600 ? 'hour' : 'manual'))}</select>`)}
                     ${field(t('Segundos', 'Seconds'), input('max_age', age ?? 180, 'min="1" max="86400" step="1"', 'number'), 'gav-manual-age')}
                 </div>
-                ${help(t('Sobre a chave e a janela de evidência', 'About item keys and evidence windows'), `<p>${t('Copie a chave do host, mantendo as macros. Uma chave por verificação. Uma nova amostra substitui o estado imediatamente.', 'Copy the key from the host, keeping macros. One key per check. A new sample replaces the state immediately.')}</p><p class="gav-validity-hint"></p>`)}
+                ${help(t('Sobre a chave e a janela de evidência', 'About item keys and evidence windows'), `<p>${t('Copie a chave do host, mantendo as macros. Uma chave por verificação. Uma nova amostra substitui o estado imediatamente. Itens de cenário web podem exigir janela manual, pois a cadência nem sempre está no item.', 'Copy the key from the host, keeping macros. One key per check. A new sample replaces the state immediately. Web-scenario items may need a manual window because their cadence is not always available on the item.')}</p><p class="gav-validity-hint"></p>`)}
                 <div class="gav-check-grid"><div><strong>${t('Disponível quando', 'Available when')}</strong>${rule('up', check.up)}</div>
                     <div>${field(t('Indisponível quando', 'Unavailable when'), `<select data-field="down_mode">${options({complement: t('Qualquer outro valor válido', 'Any other valid value'), explicit: t('Condição específica', 'Explicit condition')}, check.down ? 'explicit' : 'complement')}</select>`)}
                         <div class="gav-down-rule">${rule('down', check.down ?? {op: 'eq', a: 0})}</div></div></div>
@@ -77,9 +78,9 @@
             ${help(t('Sobre pesos e fontes de cálculo', 'About weights and calculation sources'), `<p>${t('A porcentagem no cabeçalho representa o peso configurado desta tecnologia dividido pela soma dos pesos do departamento, não sua disponibilidade. A fonte escolhida não é substituída pela outra se faltar histórico ou SLA.', 'The header percentage is this technology’s configured weight divided by the department’s total weight, not its availability. The selected source is not replaced by the other when history or SLA data is missing.')}</p>`)}
             <div class="gav-items-source" data-source-panel="items"><div class="gav-config-grid">
                 ${field(t('Grupos de hosts', 'Host groups'), input('groups', tech.groups, 'required maxlength="1000" placeholder="Equipes/Banco de Dados"'), 'gav-span-6', t('Nomes ou IDs separados por vírgula. Nomes incluem subgrupos.', 'Comma-separated names or IDs. Names include subgroups.'))}
-                ${field(t('Consolidação dos hosts', 'Host aggregation'), `<select data-field="mode">${options({any_down: t('Indisponível se qualquer host cair', 'Unavailable if any host goes down'), mean: t('Média dos hosts (pesos iguais)', 'Mean of hosts (equal weights)')}, tech.mode ?? 'any_down')}</select>`, 'gav-span-6')}
+                ${field(t('Consolidação dos hosts', 'Host aggregation'), `<select data-field="mode">${options({any_down: t('Indisponível se qualquer host cair', 'Unavailable if any host goes down'), mean: t('Média dos hosts (pesos iguais)', 'Mean of hosts (equal weights)')}, tech.mode ?? 'any_down')}</select>`, 'gav-span-6 gav-host-aggregation')}
             </div>
-            <div class="gav-checks-title"><h4>${t('Verificações por host', 'Checks per host')}</h4>${help(t('Como as verificações são combinadas', 'How checks are combined'), `<p>${t('Todos são obrigatórios. Uma falha confirmada prevalece sobre outro item sem dados; quedas sobrepostas contam uma vez.', 'All are required. A confirmed failure takes precedence over another item with no data; overlapping outages count once.')}</p>`)}</div>
+            <div class="gav-checks-title"><h4>${t('Verificações', 'Checks')}</h4>${help(t('Como as verificações são combinadas', 'How checks are combined'), `<p>${t('Sem host definido, todas as verificações são aplicadas a cada host dos grupos. Com um host em cada verificação, os itens desses hosts formam um único serviço; a consolidação dos hosts não se aplica. Todas as verificações são obrigatórias para confirmar UP, e uma queda confirmada prevalece sobre dados ausentes.', 'Without a selected host, all checks apply to each host in the groups. With a host on every check, those items form one service; host aggregation does not apply. All checks are required to confirm UP, and a confirmed outage takes precedence over missing data.')}</p>`)}</div>
             <div class="gav-checks">${(Array.isArray(tech.checks) && tech.checks.length ? tech.checks : [{key: '', up: {op: 'eq', a: 1}, down: null, max_age: null}]).map(check => checkHtml(check, tech.max_age ?? null)).join('')}</div>
             <div class="gav-toolbar gav-node-actions"><button type="button" data-action="add-check" class="btn-link">${t('Adicionar verificação', 'Add check')}</button></div></div>
             <div class="gav-sla-source" data-source-panel="sla" hidden>
@@ -126,12 +127,18 @@
                     control.setCustomValidity(source === 'sla' && control.value !== '' && !validNativeId(control.value)
                         ? t('Informe um ID inteiro positivo, sem zeros iniciais, até 9223372036854775807.', 'Enter a positive integer ID without leading zeros, up to 9223372036854775807.') : '');
                 });
+                const checks = [...tech.querySelectorAll('.gav-check')];
+                const selected = checks.filter(check => get(check, 'host').trim() !== '').length;
+                tech.querySelector('.gav-host-aggregation').hidden = source === 'items' && selected === checks.length && selected > 0;
+                checks.forEach(check => check.querySelector('[data-field="host"]').setCustomValidity(
+                    source === 'items' && selected > 0 && selected < checks.length && !get(check, 'host').trim()
+                        ? t('Informe o host em todas as verificações ou deixe todos em branco.', 'Select a host for every check or leave all blank.') : ''));
             });
             root.querySelectorAll('.gav-check').forEach(check => {
                 const itemsActive = get(check.closest('.gav-technology'), 'source') === 'items';
                 const ageMode = get(check, 'age_mode');
                 const siblings = [...check.parentElement.children];
-                check.querySelector('.gav-check-caption').textContent = `${siblings.indexOf(check) + 1}. ${get(check, 'key') || t('Nova verificação', 'New check')}`;
+                check.querySelector('.gav-check-caption').textContent = `${siblings.indexOf(check) + 1}. ${get(check, 'key') || t('Nova verificação', 'New check')}${get(check, 'host').trim() ? ' · ' + get(check, 'host').trim() : ''}`;
                 check.querySelector('.gav-check-meta').textContent = ageMode === 'auto' ? t('Janela automática', 'Automatic window')
                     : ageMode === 'hour' ? t('Janela: 1 hora', 'Window: 1 hour') : `${t('Janela', 'Window')}: ${get(check, 'max_age')} s`;
                 const manual = ageMode === 'manual';
@@ -186,6 +193,7 @@
                     if (value.source === 'sla') return {...value, slaid: get(tech, 'slaid'), serviceid: get(tech, 'serviceid')};
                     return {...value, groups: get(tech, 'groups').trim(), mode: get(tech, 'mode'),
                         checks: [...tech.querySelectorAll('.gav-check')].map(check => ({key: get(check, 'key').trim(),
+                            ...(get(check, 'host').trim() ? {host: get(check, 'host').trim()} : {}),
                             max_age: get(check, 'age_mode') === 'auto' ? null
                                 : (get(check, 'age_mode') === 'hour' ? 3600 : Number(get(check, 'max_age'))),
                             up: readRule(check.querySelector('[data-side="up"]')),

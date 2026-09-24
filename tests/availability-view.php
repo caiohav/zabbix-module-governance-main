@@ -71,6 +71,13 @@ try {
     $html = $renderer->render($data);
     renderCheck(strpos($html, 'Return to period selection') !== false, 'expired job offers a direct restart path');
     renderCheck(strpos($html, 'Your first indicator') === false, 'expired job does not imply rules were lost');
+    $data['rules_changed'] = true;
+    $data['error'] = null;
+    $html = $renderer->render($data);
+    renderCheck(strpos($html, 'id="gav-rules-changed"') !== false
+        && strpos($html, 'Configure a department before calculating again.') !== false,
+        'stale report explains why it is hidden when no rules remain');
+    renderCheck(strpos($html, 'id="gav-report"') === false, 'stale report is not rendered');
 }
 finally {
     restore_error_handler();

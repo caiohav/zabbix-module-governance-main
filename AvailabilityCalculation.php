@@ -14,9 +14,9 @@ use RuntimeException;
  */
 final class AvailabilityCalculation {
     // Version of the resumable server-side state, not the exported report JSON.
-    // v3 adds the conservative hourly-trend fallback. Older checkpoints must
-    // restart instead of mixing detailed and reduced source semantics.
-    const FORMAT = 3;
+    // v4 freezes per-check host assignments in the discovered scope. Older
+    // checkpoints must restart rather than mix host-selection semantics.
+    const FORMAT = 4;
     const MAX_HOSTS = 200;
     const PAGE_ROWS = 5000;
     const MAX_ROWS = 20000000;
@@ -178,29 +178,63 @@ final class AvailabilityCalculation {
             }
         }
         $task['result']['groups'] = array_values($ids);
-        $hosts = $this->query($state, 'Host', ['output' => ['hostid', 'name', 'status'],
+        $hosts = $this->query($state, 'Host', ['output' => ['hostid', 'host', 'name', 'status'],
             'groupids' => array_keys($ids), 'sortfield' => 'name', 'limit' => self::MAX_HOSTS + 1]);
         if (count($hosts) > self::MAX_HOSTS) {
             throw new RuntimeException('Scope exceeds 200 hosts per technology; no partial indicator is published / Escopo excede 200 hosts por tecnologia; nenhum indicador parcial é publicado.');
         }
         $unique = [];
         foreach ($hosts as $host) { $unique[$host['hostid']] = $host; }
-        $task['scope_hosts'] = array_values($unique);
-        $task['result']['hosts_total'] = count($unique);
-        $state['progress']['hosts_total'] += count($unique);
-        $state['progress']['checks_total'] += count($unique) * count($task['config']['checks']);
         if (!$unique) {
             $task['result']['warnings'][] = 'No hosts in the selected groups / Nenhum host nos grupos selecionados.';
             $this->nextScope($state);
+            return;
         }
-        else { $state['phase'] = 'scope_items'; }
+        if (isset($task['config']['checks'][0]['host'])) {
+            $task['result']['check_scope'] = 'selected_hosts';
+            $selected = [];
+            foreach ($task['config']['checks'] as $check) {
+                $selector = $check['host'];
+                $matches = [];
+                foreach ($unique as $host) {
+                    if (ctype_digit($selector) && (string) $host['hostid'] === $selector) {
+                        $matches = [$host];
+                        break;
+                    }
+                    if (mb_strtolower($host['host'] ?? '', 'UTF-8') === mb_strtolower($selector, 'UTF-8')
+                            || mb_strtolower($host['name'], 'UTF-8') === mb_strtolower($selector, 'UTF-8')) {
+                        $matches[$host['hostid']] = $host;
+                    }
+                }
+                if (count($matches) !== 1) {
+                    $task['result']['warnings'][] = (count($matches) ? 'Ambiguous host / Host ambíguo: '
+                        : 'Host not found in selected groups / Host não encontrado nos grupos selecionados: ') . $selector;
+                    $this->nextScope($state);
+                    return;
+                }
+                $selected[] = array_values($matches)[0];
+            }
+            $task['scope_hosts'] = [['hostid' => null, 'name' => $task['config']['name'],
+                'status' => 0, 'check_hosts' => $selected]];
+        }
+        else { $task['scope_hosts'] = array_values($unique); }
+        $task['result']['hosts_total'] = count($task['scope_hosts']);
+        $state['progress']['hosts_total'] += $task['result']['hosts_total'];
+        $state['progress']['checks_total'] += $task['result']['hosts_total'] * count($task['config']['checks']);
+        $state['phase'] = 'scope_items';
     }
 
     private function scopeItems(array &$state): void {
         $task = &$state['tasks'][$state['scope_index']];
+        $hostids = [];
+        foreach ($task['scope_hosts'] as $host) {
+            foreach ($host['check_hosts'] ?? [$host] as $sourceHost) {
+                $hostids[$sourceHost['hostid']] = $sourceHost['hostid'];
+            }
+        }
         $items = $this->query($state, 'Item', [
             'output' => ['itemid', 'hostid', 'key_', 'value_type', 'status', 'delay', 'type'],
-            'selectPreprocessing' => ['type', 'params'], 'hostids' => array_column($task['scope_hosts'], 'hostid'),
+            'selectPreprocessing' => ['type', 'params'], 'hostids' => array_values($hostids),
             'filter' => ['key_' => array_values(array_unique(array_column($task['config']['checks'], 'key')))],
             'webitems' => true]);
         $index = [];
@@ -209,9 +243,11 @@ final class AvailabilityCalculation {
             $host['checks'] = [];
             $host['warnings'] = (int) $host['status'] !== 0
                 ? ['Host currently disabled; historical data included / Host atualmente desabilitado; histórico incluído.'] : [];
-            foreach ($task['config']['checks'] as $check) {
-                $item = $index[$host['hostid']][$check['key']] ?? null;
-                $source = ['key' => $check['key'], 'itemid' => $item ? (string) $item['itemid'] : null,
+            foreach ($task['config']['checks'] as $checkIndex => $check) {
+                $sourceHost = $host['check_hosts'][$checkIndex] ?? $host;
+                $item = $index[$sourceHost['hostid']][$check['key']] ?? null;
+                $source = ['key' => $check['key'], 'hostid' => (string) $sourceHost['hostid'],
+                    'host_name' => $sourceHost['name'], 'itemid' => $item ? (string) $item['itemid'] : null,
                     'sample_count' => 0, 'max_gap_seconds' => null, 'first_clock' => null, 'last_clock' => null,
                     'seed_clock' => null, 'history_queried' => false,
                     'up_sample_count' => 0, 'down_sample_count' => 0, 'unknown_sample_count' => 0,
@@ -233,6 +269,9 @@ final class AvailabilityCalculation {
                     }
                 }
                 foreach ($source['warnings'] as $warning) { $host['warnings'][] = $check['key'] . ': ' . $warning; }
+                if ((int) $sourceHost['status'] !== 0 && $sourceHost['hostid'] !== $host['hostid']) {
+                    $host['warnings'][] = $sourceHost['name'] . ': Host currently disabled / Host atualmente desabilitado.';
+                }
                 $host['checks'][] = ['source' => $source, 'value_type' => $item ? (int) $item['value_type'] : null,
                     'rule' => $check];
             }
@@ -467,7 +506,7 @@ final class AvailabilityCalculation {
         $host = $task['scope_hosts'][$state['host_index']];
         $series = $this->combine($state['current_host']['series'], 'any_down', $state['report']);
         $task['host_series'][] = $series;
-        $result = ['hostid' => (string) $host['hostid'], 'name' => $host['name'],
+        $result = ['hostid' => $host['hostid'] === null ? null : (string) $host['hostid'], 'name' => $host['name'],
             'sources' => $state['current_host']['sources'], 'warnings' => $host['warnings'],
             'summary' => AvailabilityEngine::summary($series, $state['report']['from'], $state['report']['to'])];
         // Thirty-one compact summaries are enough for a faithful host chart. Never
@@ -605,7 +644,7 @@ final class AvailabilityCalculation {
         $state['report']['rows'] = $state['progress']['rows'];
         $method = empty($state['report']['has_sla']) ? 'checkpointed-items'
             : (empty($state['report']['has_items']) ? 'checkpointed-sla' : 'checkpointed-items-and-sla');
-        $state['report']['processing'] = ['method' => $method, 'version' => '1.13.3',
+        $state['report']['processing'] = ['method' => $method, 'version' => '1.25.1',
             'data_policy' => $state['report']['data_policy'] ?? 'strict',
             'started_at' => $state['started_at'], 'completed_at' => time(),
             'elapsed_seconds' => max(0, time() - $state['started_at']), 'scope_frozen_at' => $state['scope_frozen_at'],
