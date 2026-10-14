@@ -575,10 +575,8 @@ final class AvailabilityCalculation {
             $observation['aggregation'] = $task['config']['mode'] === 'any_down'
                 ? 'any_down_observed' : 'mean_host_indicators';
             $task['result']['observation'] = $observation;
-            $task['observed_series'] = $observedSeries;
         }
         $state['report']['departments'][$task['department']]['technologies'][] = $task['result'];
-        $task['series'] = $series;
         unset($task['scope_hosts'], $task['host_series'], $task['result']);
         $state['task_index']++;
         $state['host_index'] = 0;
@@ -596,29 +594,33 @@ final class AvailabilityCalculation {
             $this->finishMixedDepartment($state);
             return;
         }
-        $series = []; $weights = [];
-        foreach ($state['tasks'] as $task) {
-            if ($task['department'] === $state['department_index']) {
-                $series[] = $task['series'];
-                $weights[] = $task['config']['weight'];
-            }
-        }
-        $combined = $this->combine($series, 'mean', $state['report'], $weights);
-        $node['summary'] = AvailabilityEngine::summary($combined, $state['report']['from'], $state['report']['to']);
-        $node['daily'] = $this->scoredDaily($combined, $state['report'], false);
+        // A weighted mean is linear over time. The technology totals (and each
+        // day's totals) give the same department durations without constructing
+        // another event map from every item interval in the month.
+        $weights = array_column($node['technologies'], 'weight');
+        $basis = $state['report']['to'] - $state['report']['from'];
+        $node['summary'] = AvailabilityEngine::weightedSummaries(
+            array_column($node['technologies'], 'summary'), $weights, $basis);
+        $node['daily'] = $this->weightedDaily($node['technologies'], $weights, $state['report'], false);
         $node['daily_available'] = true;
         $node['aggregation_compatible'] = true;
         if (self::observed($state)) {
             $indicators = array_column($node['technologies'], 'observation');
             $node['observation'] = AvailabilityEngine::weightedIndicators($indicators, $weights);
-            $observedSeries = [];
-            foreach ($state['tasks'] as $task) {
-                if ($task['department'] === $state['department_index']) { $observedSeries[] = $task['observed_series']; }
-            }
             // Durations are equivalent time across the full configured scope. They are
             // descriptive, not the denominator of the weighted observed percentages.
-            $observedCombined = $this->combine($observedSeries, 'mean', $state['report'], $weights);
-            $this->observationTimeline($node['observation'], $observedCombined, $state['report'], false);
+            $node['observation']['summary'] = AvailabilityEngine::weightedSummaries(
+                array_column($indicators, 'summary'), $weights, $basis);
+            $node['observation']['temporal_coverage'] = $node['observation']['summary']['coverage'];
+            $node['observation']['daily'] = $this->weightedDaily(
+                $node['technologies'], $weights, $state['report'], true);
+            $evidenceFrom = []; $evidenceTo = [];
+            foreach ($indicators as $indicator) {
+                if ($indicator['evidence_from'] !== null) { $evidenceFrom[] = $indicator['evidence_from']; }
+                if ($indicator['evidence_to'] !== null) { $evidenceTo[] = $indicator['evidence_to']; }
+            }
+            $node['observation']['evidence_from'] = $evidenceFrom ? min($evidenceFrom) : null;
+            $node['observation']['evidence_to'] = $evidenceTo ? max($evidenceTo) : null;
             $technologyDaily = [];
             foreach ($node['technologies'] as $technology) { $technologyDaily[] = $technology['observation']['daily']; }
             $node['observation']['daily'] = $this->aggregateObservedDaily(
@@ -633,6 +635,34 @@ final class AvailabilityCalculation {
         if ($state['department_index'] >= count($state['report']['departments'])) { $state['phase'] = 'finish'; }
     }
 
+    /** Aggregate at most one summary per technology per day, preserving the calendar basis. */
+    private function weightedDaily(array $technologies, array $weights, array $period, bool $observed): array {
+        $days = [];
+        $day = (new DateTimeImmutable('@' . $period['from']))->setTimezone(new DateTimeZone($period['timezone']));
+        while ($day->getTimestamp() < $period['to']) {
+            $end = min($period['to'], $day->modify('+1 day')->getTimestamp());
+            $label = $day->format('Y-m-d');
+            $summaries = [];
+            $index = count($days);
+            foreach ($technologies as $technology) {
+                $entry = $observed ? ($technology['observation']['daily'][$index] ?? null)
+                    : ($technology['daily'][$index] ?? null);
+                if (!is_array($entry) || ($entry['day'] ?? null) !== $label || !isset($entry['summary'])) {
+                    throw new RuntimeException('Technology daily totals do not match the report calendar / Totais diários da tecnologia não correspondem ao calendário do relatório.');
+                }
+                $summaries[] = $entry['summary'];
+            }
+            $summary = AvailabilityEngine::weightedSummaries($summaries, $weights, $end - $day->getTimestamp());
+            $indicator = AvailabilityEngine::weightedIndicators([[
+                'score' => $observed ? $summary['observed'] : $summary['score'],
+                'coverage' => $summary['coverage']
+            ]]);
+            $days[] = ['day' => $label, 'summary' => $summary] + $indicator;
+            $day = $day->modify('+1 day');
+        }
+        return $days;
+    }
+
     private function finish(array &$state): void {
         if ($state['progress']['hosts_done'] !== $state['progress']['hosts_total']
                 || $state['progress']['checks_done'] !== $state['progress']['checks_total']
@@ -644,7 +674,7 @@ final class AvailabilityCalculation {
         $state['report']['rows'] = $state['progress']['rows'];
         $method = empty($state['report']['has_sla']) ? 'checkpointed-items'
             : (empty($state['report']['has_items']) ? 'checkpointed-sla' : 'checkpointed-items-and-sla');
-        $state['report']['processing'] = ['method' => $method, 'version' => '1.25.1',
+        $state['report']['processing'] = ['method' => $method, 'version' => '1.25.2',
             'data_policy' => $state['report']['data_policy'] ?? 'strict',
             'started_at' => $state['started_at'], 'completed_at' => time(),
             'elapsed_seconds' => max(0, time() - $state['started_at']), 'scope_frozen_at' => $state['scope_frozen_at'],

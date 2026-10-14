@@ -18,6 +18,16 @@ Os pacotes antigos foram retirados da pasta de trabalho de forma recuperável;
 o local do arquivo está registrado em `notes/README.md`. Nenhuma versão do
 módulo ou regra de cálculo é duplicada entre as versões.
 
+## Correção 1.25.2 — Memória na agregação departamental
+
+Os totais mensais e diários de departamentos que usam itens agora são
+agregados a partir dos resumos das tecnologias, com os mesmos pesos e
+períodos do relatório. O cálculo deixa de reconstruir uma linha do tempo
+gigante na etapa final e descarta as linhas do tempo intermediárias assim
+que cada tecnologia termina. Cobertura, intervalos desconhecidos e política
+de dados observados continuam preservados. Cálculos antigos que falharam
+precisam ser iniciados novamente após a atualização.
+
 ## Correção 1.25.1 — Regras excluídas e cálculos antigos
 
 Excluir e salvar uma verificação remove-a dos próximos cálculos. Ao abrir um
