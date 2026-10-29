@@ -2,7 +2,7 @@
   "manifest_version": 2.0,
   "id": "zabbix_module_governance",
   "name": "Governance & Quality Audit",
-  "version": "1.25.2",
+  "version": "1.26.0",
   "namespace": "Governance",
   "author": "Governance Module Team",
   "url": "https://github.com/seu-usuario/zabbix-module-governance",

@@ -14,8 +14,7 @@ class Module extends CModule {
      * Inicializa o módulo e injeta o menu de Governança na interface do Zabbix.
      */
     public function init(): void {
-        // Validação de acesso: executa apenas para Super Admins autenticados
-        if (CWebUser::getType() !== USER_TYPE_SUPER_ADMIN) {
+        if (!GovernanceAccess::canView()) {
             return;
         }
 
@@ -27,14 +26,18 @@ class Module extends CModule {
         $qualityTitle = $isPt ? 'Qualidade' : 'Quality';
         $configTitle = $isPt ? 'Configurar qualidade' : 'Configure quality';
 
-        $submenu = new CMenu([
-            (new CMenuItem($qualityTitle))->setAction('governance.quality.view'),
-            (new CMenuItem($isPt ? 'Disponibilidade' : 'Availability'))
-                ->setAction('governance.availability.view'),
-            (new CMenuItem($configTitle))->setAction('governance.quality.config'),
-            (new CMenuItem($isPt ? 'Configurar disponibilidade' : 'Configure availability'))
-                ->setAction('governance.availability.config')
-        ]);
+        $items = [];
+        if (GovernanceAccess::canConfigure()) {
+            $items[] = (new CMenuItem($qualityTitle))->setAction('governance.quality.view');
+        }
+        $items[] = (new CMenuItem($isPt ? 'Disponibilidade' : 'Availability'))
+            ->setAction('governance.availability.view');
+        if (GovernanceAccess::canConfigure()) {
+            $items[] = (new CMenuItem($configTitle))->setAction('governance.quality.config');
+            $items[] = (new CMenuItem($isPt ? 'Configurar disponibilidade' : 'Configure availability'))
+                ->setAction('governance.availability.config');
+        }
+        $submenu = new CMenu($items);
 
         APP::Component()->get('menu.main')->add(
             (new CMenuItem($mainMenuTitle))

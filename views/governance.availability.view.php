@@ -53,7 +53,7 @@ $date = static function($clock, ?string $zone = null) use ($timezone, $pt) {
 ob_start();
 ?>
 <nav class="gov-page-actions <?= !empty($data['is_dark']) ? 'gov-theme-dark' : '' ?>" aria-label="<?= $t('Ações da página', 'Page actions') ?>">
-    <a class="btn-alt gov-action-link" href="zabbix.php?action=governance.availability.config"><?= $t('Configurar', 'Configure') ?></a>
+    <?php if (!empty($data['can_configure'])): ?><a class="btn-alt gov-action-link" href="zabbix.php?action=governance.availability.config"><?= $t('Configurar', 'Configure') ?></a><?php endif ?>
     <div class="gov-report-actions" id="gav-filter-actions">
         <?php if ($report): ?><button type="button" id="gav-export" class="btn-alt" disabled><?= $t('Exportar JSON', 'Export JSON') ?></button>
         <button type="button" id="gav-print" class="btn-alt" disabled><?= $t('Imprimir / PDF', 'Print / PDF') ?></button><?php endif ?>
@@ -110,9 +110,11 @@ ob_start();
     </section>
     <script type="application/json" id="gav-job-data"><?= json_encode($job, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
     <?php if (!$data['config']['departments'] && !$job && !$data['error']): ?>
-    <div class="gav-empty"><h3><?= $t('Seu primeiro indicador começa pelas regras', 'Your first indicator starts with its rules') ?></h3>
-        <p><?= $t('Cadastre um departamento, suas tecnologias e a fonte de cada indicador: itens ou SLA nativo mensal.', 'Add a department, its technologies and the source of each indicator: items or native monthly SLA.') ?></p>
-        <a href="zabbix.php?action=governance.availability.config"><?= $t('Criar indicadores de disponibilidade', 'Create availability indicators') ?></a></div>
+    <div class="gav-empty"><h3><?= $t('Nenhum indicador configurado', 'No indicators configured') ?></h3>
+        <p><?= !empty($data['can_configure'])
+            ? $t('Cadastre um departamento, suas tecnologias e a fonte de cada indicador: itens ou SLA nativo mensal.', 'Add a department, its technologies and the source of each indicator: items or native monthly SLA.')
+            : $t('Peça a um administrador para configurar os indicadores de disponibilidade.', 'Ask an administrator to configure availability indicators.') ?></p>
+        <?php if (!empty($data['can_configure'])): ?><a href="zabbix.php?action=governance.availability.config"><?= $t('Criar indicadores de disponibilidade', 'Create availability indicators') ?></a><?php endif ?></div>
     <?php endif ?>
     <?php if ($report): ?>
     <div class="gav-report" id="gav-report">

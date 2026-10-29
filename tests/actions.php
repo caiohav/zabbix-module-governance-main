@@ -3,6 +3,7 @@ if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 require __DIR__ . '/../AvailabilityConfig.php';
 require __DIR__ . '/../GovernanceConfig.php';
 define('USER_TYPE_SUPER_ADMIN', 3);
+define('USER_TYPE_ZABBIX_USER', 1);
 class CController {
     public $input = [], $response, $type = 3;
     protected function getUserType() { return $this->type; }
@@ -19,7 +20,20 @@ class CControllerResponseFatal {}
 class CControllerResponseData { public $title; public function getData() { return $this->data; } public function setTitle($title) { $this->title = $title; } public $data; public function __construct($data) { $this->data = $data; } }
 class CControllerResponseRedirect { public $data; public function __construct($url) {} public function setFormData($d) { $this->data = $d; } }
 class CUrl { public function __construct($url) {} public function setArgument($a, $b) { return $this; } }
-class CWebUser { public static $data = ['theme' => 'blue-theme']; public static function getLang() { return 'pt_BR'; } }
+class CWebUser {
+    public static $data = ['userid' => '1', 'type' => 3, 'username' => 'Admin', 'theme' => 'blue-theme'];
+    public static function getLang() { return 'pt_BR'; }
+    public static function getType() { return self::$data['type']; }
+    public static function isLoggedIn() { return !empty(self::$data['userid']); }
+    public static function isGuest() { return self::$data['username'] === 'guest'; }
+}
+class APP {
+    public static function ModuleManager() {
+        return new class {
+            public function getModules(): array { return ['zabbix_module_governance' => API::$module]; }
+        };
+    }
+}
 function getUserTheme($data) { return $data['theme'] ?? 'blue-theme'; }
 class CMessageHelper {
     public static $error = '', $success = '';
@@ -30,9 +44,12 @@ class CMessageHelper {
 class API { public static $module; public static function Module() { return self::$module; } }
 class TestModule {
     public $config, $writes = 0, $fail = false;
+    public function getConfig(): array { return $this->config; }
     public function get($options) { return [['moduleid' => '1', 'config' => $this->config]]; }
     public function update($values) { if ($this->fail) { return false; } $this->writes++; $this->config = $values[0]['config']; return ['moduleids' => ['1']]; }
 }
+require __DIR__ . '/../GovernanceAccess.php';
+require __DIR__ . '/../GovernanceModuleConfig.php';
 require __DIR__ . '/../actions/AvailabilitySave.php';
 require __DIR__ . '/../actions/AvailabilityConfigView.php';
 require __DIR__ . '/../actions/QualityConfigUpdate.php';

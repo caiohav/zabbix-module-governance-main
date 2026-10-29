@@ -141,6 +141,7 @@ catch (InvalidArgumentException $e) {
 
 // Controller fixtures exercise request/response behavior without a live Zabbix.
 define('USER_TYPE_SUPER_ADMIN', 3);
+define('USER_TYPE_ZABBIX_USER', 1);
 define('HOST_STATUS_MONITORED', 0);
 define('HOST_STATUS_NOT_MONITORED', 1);
 define('HOST_MAINTENANCE_STATUS_OFF', 0);
@@ -178,8 +179,21 @@ class CUrl {
     public function setArgument($name, $value) { $this->args[$name] = $value; return $this; }
 }
 class CWebUser {
-    public static $data = ['theme' => 'default'], $lang = 'pt_BR';
+    public static $data = ['userid' => '1', 'type' => 3, 'username' => 'Admin', 'theme' => 'default'], $lang = 'pt_BR';
     public static function getLang() { return self::$lang; }
+    public static function getType() { return self::$data['type']; }
+    public static function isLoggedIn() { return !empty(self::$data['userid']); }
+    public static function isGuest() { return self::$data['username'] === 'guest'; }
+}
+class APP {
+    public static function ModuleManager() {
+        return new class {
+            public function getModules(): array {
+                return API::$module !== null && API::$module->exists
+                    ? ['zabbix_module_governance' => API::$module] : [];
+            }
+        };
+    }
 }
 function getUserTheme($data) { return $data['theme'] === 'default' ? 'dark-theme' : $data['theme']; }
 class CMessageHelper {
@@ -197,6 +211,7 @@ class API {
 }
 class QualityTestModule {
     public $config = [], $writes = 0, $reads = 0, $fail = false, $exists = true;
+    public function getConfig(): array { return $this->config; }
     public function get($options) { $this->reads++; return $this->exists ? [['moduleid' => '1', 'config' => $this->config]] : []; }
     public function update($values) {
         if ($this->fail) { return false; }
@@ -213,6 +228,8 @@ class QualityTestCount {
     public $calls = [], $count = 2;
     public function get($options) { $this->calls[] = $options; return $this->count; }
 }
+require __DIR__ . '/../GovernanceAccess.php';
+require __DIR__ . '/../GovernanceModuleConfig.php';
 require __DIR__ . '/../actions/QualityConfig.php';
 require __DIR__ . '/../actions/QualityConfigUpdate.php';
 require __DIR__ . '/../actions/QualityView.php';
@@ -224,6 +241,7 @@ class QualitySaveHarness extends Modules\Governance\Actions\QualityConfigUpdate 
 }
 class QualityViewHarness extends Modules\Governance\Actions\QualityView {
     public function run() { $this->init(); if ($this->checkInput() && $this->checkPermissions()) { $this->doAction(); } }
+    public function allowed(): bool { return $this->checkPermissions(); }
 }
 API::$module = new QualityTestModule();
 API::$module->config = $legacy;
@@ -276,7 +294,11 @@ qualityAssert(API::$module->config['availability'] === ['timezone' => 'Europe/Li
 qualityAssert(API::$module->config['other'] === 42 && !array_key_exists('cards', API::$module->config), 'quality save preserves unrelated settings without duplicating legacy storage');
 qualityAssert($save->response->url->args['page'] === 'groups', 'save redirects to the selected page');
 
-$view = new QualityViewHarness(); $view->input = ['page' => 'groups', 'groupids' => ['10']]; $view->run();
+$view = new QualityViewHarness();
+CWebUser::$data['type'] = 1;
+qualityAssert(!$view->allowed(), 'ordinary user cannot open quality directly');
+CWebUser::$data['type'] = 3;
+$view->input = ['page' => 'groups', 'groupids' => ['10']]; $view->run();
 $viewData = $view->response->data;
 qualityAssert($viewData['selected_page'] === 'groups' && $viewData['page_name'] === 'Equipes', 'dashboard selects the requested page');
 qualityAssert(array_column($viewData['cards'], 'id') === ['groups'] && $viewData['cards_count'] === 1, 'shell contains only selected page cards');

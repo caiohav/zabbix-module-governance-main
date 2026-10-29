@@ -2,11 +2,12 @@
 
 namespace Modules\Governance\Actions;
 
-use API;
 use CController;
 use CControllerResponseData;
 use CWebUser;
 use Modules\Governance\GovernanceConfig;
+use Modules\Governance\GovernanceAccess;
+use Modules\Governance\GovernanceModuleConfig;
 
 /** The document request loads configuration only. Metrics run after the page is usable. */
 class QualityView extends CController {
@@ -18,7 +19,7 @@ class QualityView extends CController {
             $this->disableSIDvalidation();
         }
     }
-    protected function checkPermissions(): bool { return $this->getUserType() == USER_TYPE_SUPER_ADMIN; }
+    protected function checkPermissions(): bool { return GovernanceAccess::canConfigure(); }
     protected function checkInput(): bool {
         return $this->validateInput(['groupids' => 'array_db hstgrp.groupid', 'page' => 'string']);
     }
@@ -26,10 +27,9 @@ class QualityView extends CController {
         $isPt = strpos(strtolower(CWebUser::getLang()), 'pt') === 0;
         $error = null; $pages = []; $revision = '';
         try {
-            $modules = API::Module()->get(['output' => ['config'], 'filter' => ['id' => 'zabbix_module_governance']]);
-            if (!is_array($modules) || !$modules) { throw new \RuntimeException('Module unavailable.'); }
-            $pages = GovernanceConfig::getQualityPages($modules[0]['config']);
-            $revision = GovernanceConfig::qualityRevision($modules[0]['config']);
+            $config = GovernanceModuleConfig::read();
+            $pages = GovernanceConfig::getQualityPages($config);
+            $revision = GovernanceConfig::qualityRevision($config);
         }
         catch (\Throwable $e) {
             $error = $isPt ? 'Não foi possível carregar as regras. Recarregue a página.' : 'Cannot load the rules. Reload the page.';
@@ -40,6 +40,7 @@ class QualityView extends CController {
             'is_pt' => $isPt, 'is_dark' => strpos(strtolower(getUserTheme(CWebUser::$data)), 'dark') !== false,
             'page_title' => $isPt ? 'Qualidade do monitoramento' : 'Monitoring quality',
             'pages' => $pages, 'selected_page' => $selected['id'], 'page_name' => $selected['name'],
+            'can_configure' => GovernanceAccess::canConfigure(),
             'cards' => $selected['cards'], 'cards_count' => count($selected['cards']),
             'groupids' => $this->getInput('groupids', []), 'revision' => $revision, 'error' => $error
         ]);

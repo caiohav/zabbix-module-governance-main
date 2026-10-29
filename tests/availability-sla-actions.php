@@ -37,6 +37,8 @@ API::$module->config['availability']['departments'] = [$config['departments'][0]
 $view->input = []; $view->run();
 assertAction($view->response->data['month'] === $currentMonth, 'Pure legacy configuration keeps current-month default');
 assertAction(API::$module->writes === 0, 'Loading source-aware defaults never writes configuration');
-$view->type = 1; $view->response = null; $view->run();
-assertAction($view->response === null, 'Source-aware view remains restricted to Super Admin');
+$view->type = 1; CWebUser::$data['type'] = 1; $view->response = null; $view->run();
+assertAction($view->response !== null && $view->response->data['can_configure'] === false,
+    'Ordinary user can view availability without configuration rights');
+CWebUser::$data['type'] = 3;
 echo 'PASS: ' . $count . " source-aware view action assertions.\n";

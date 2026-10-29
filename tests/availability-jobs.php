@@ -6,6 +6,8 @@ require __DIR__ . '/../AvailabilityEngine.php';
 require __DIR__ . '/../AvailabilityFreshness.php';
 require __DIR__ . '/../AvailabilityCalculation.php';
 require __DIR__ . '/../AvailabilityJobStore.php';
+require __DIR__ . '/../GovernanceAccess.php';
+require __DIR__ . '/../GovernanceModuleConfig.php';
 
 use Modules\Governance\AvailabilityCalculation as Calculation;
 use Modules\Governance\AvailabilityConfig as Config;
@@ -208,6 +210,7 @@ try {
 
     // Model the native SID gate and controller order, then exercise the real module actions.
     define('USER_TYPE_SUPER_ADMIN', 3);
+    define('USER_TYPE_ZABBIX_USER', 1);
     class CController {
         protected $input;
         protected $sidRequired = true;
@@ -240,8 +243,25 @@ try {
     class CControllerResponseData { public $title; public function getData() { return $this->data; } public function setTitle($title) { $this->title = $title; } public $data; public function __construct(array $data) { $this->data = $data; } }
     class CControllerResponseFatal {}
     class CWebUser {
-        public static $data = ['userid' => '41', 'type' => 3, 'theme' => 'blue-theme'];
+        public static $data = ['userid' => '41', 'type' => 3, 'username' => 'Admin', 'theme' => 'blue-theme'];
         public static function getLang() { return 'pt_BR'; }
+        public static function getType() { return self::$data['type']; }
+        public static function isLoggedIn() { return !empty(self::$data['userid']); }
+        public static function isGuest() { return self::$data['username'] === 'guest'; }
+    }
+    class APP {
+        public static function ModuleManager() {
+            return new class {
+                public function getModules(): array {
+                    return ['zabbix_module_governance' => new class {
+                        public function getConfig(): array {
+                            API::$calls[] = ['ModuleConfig', []];
+                            return API::$config;
+                        }
+                    }];
+                }
+            };
+        }
     }
     function getUserTheme($data) { return $data['theme']; }
     class API {
@@ -259,7 +279,7 @@ try {
         public function get(array $options) {
             API::$calls[] = [$this->kind, $options];
             switch ($this->kind) {
-                case 'Module': return [['moduleid' => '1', 'config' => API::$config]];
+                case 'Module': throw new RuntimeException('Viewer must not call the privileged module API.');
                 case 'HostGroup': return [['groupid' => '1', 'name' => 'Services']];
                 case 'Host': return [['hostid' => '10', 'name' => 'Frozen host', 'status' => 0]];
                 case 'Item': return [['itemid' => '100', 'hostid' => '10', 'key_' => 'ping', 'value_type' => 3,
@@ -282,6 +302,7 @@ try {
     class JobRunHarness extends Modules\Governance\Actions\AvailabilityRun {
         public $store;
         protected function jobStore(): Store { return $this->store; }
+        public function allowed(): bool { return $this->checkPermissions(); }
     }
     class JobViewHarness extends Modules\Governance\Actions\AvailabilityView {
         public $store;
@@ -306,7 +327,7 @@ try {
     $initialView->store = $controllerStore;
     $initialData = $initialView->run()->data;
     jobCheck($initialData['report'] === null && $initialData['job'] === null, 'GET initial view does not calculate');
-    jobCheck(array_column(API::$calls, 0) === ['Module'], 'GET initial view only loads saved rules, never history');
+    jobCheck(array_column(API::$calls, 0) === ['ModuleConfig'], 'GET reads loaded module rules, never privileged module API or history');
     $startRequest = ['operation' => 'start', 'month' => '2026-05', 'department' => '0', 'request_id' => jobNonce('controller')];
     $_SERVER['REQUEST_METHOD'] = 'GET';
     $rejectedGet = jobRequest($controllerStore, $startRequest);
@@ -315,12 +336,19 @@ try {
     jobReject(static function() use ($controllerStore, $startRequest) { jobRequest($controllerStore, $startRequest, false); }, 'missing native SID is rejected');
     jobReject(static function() use ($controllerStore, $startRequest) { jobRequest($controllerStore, $startRequest + ['sid' => 'wrong']); }, 'wrong native SID is rejected');
     CWebUser::$data['type'] = 1;
-    jobReject(static function() use ($controllerStore, $startRequest) { jobRequest($controllerStore, $startRequest); }, 'non-superadmins cannot start jobs');
-    CWebUser::$data['type'] = 3;
+    jobCheck((new JobRunHarness($startRequest))->allowed(), 'ordinary user may calculate with own API permissions');
+    CWebUser::$data['username'] = 'guest';
+    jobCheck(!(new JobRunHarness($startRequest))->allowed(), 'guest cannot calculate');
+    CWebUser::$data['username'] = 'Admin';
     $started = jobRequest($controllerStore, $startRequest + ['state' => ['status' => 'complete'], 'config' => ['timezone' => 'UTC']]);
     jobCheck($started['status'] === 'running' && $started['sequence'] === 0, 'POST starts a real resumable calculation');
     jobCheck($started['snapshot']['department_name'] === 'Frozen department' && $started['snapshot']['timezone'] === 'America/Cuiaba', 'client-supplied state/config cannot replace server rules');
     jobCheck(!isset($started['state'], $started['report'], $started['result_url']), 'start response is a projection, never an unfinished report');
+    CWebUser::$data['type'] = 3;
+    $changedRole = jobRequest($controllerStore, ['operation' => 'status', 'job' => $started['job']]);
+    jobCheck($changedRole['status'] === 'failed' && !isset($changedRole['snapshot'], $changedRole['result_url']),
+        'a role change cannot expose an earlier job');
+    CWebUser::$data['type'] = 1;
     $callsBeforeRetry = count(API::$calls);
     API::$config['availability']['departments'][0]['name'] = 'Changed rules';
     jobCheck(jobRequest($controllerStore, array_replace($startRequest, ['month' => '2026-04'])) === $started, 'retry start retains original month and rules');
@@ -353,9 +381,10 @@ try {
     $completedView = new JobViewHarness(['job' => $finished['job'], 'month' => '2020-01']);
     $completedView->store = $controllerStore;
     $completedData = $completedView->run()->data;
+    jobCheck($completedData['can_configure'] === false, 'viewer can open completed report without editor access');
     jobCheck($completedData['report']['month'] === '2026-05' && $completedData['report']['departments'][0]['name'] === 'Frozen department', 'completed view uses frozen report fields');
     jobCheck(abs($completedData['report']['departments'][0]['summary']['score'] - 100) < 0.000001, 'completed controller pipeline retains correct availability');
-    jobCheck(count(API::$calls) === $callsBeforeView + 1 && API::$calls[$callsBeforeView][0] === 'Module',
+    jobCheck(count(API::$calls) === $callsBeforeView + 1 && API::$calls[$callsBeforeView][0] === 'ModuleConfig',
         'completed GET checks rule freshness without rerunning history');
     API::$config['availability']['departments'][0]['name'] = 'Changed rules';
     $staleView = new JobViewHarness(['job' => $finished['job']]);
@@ -372,11 +401,11 @@ try {
         'sequence' => $superseded['sequence']]);
     jobCheck($superseded['status'] === 'failed' && strpos($superseded['error'], 'Saved rules changed') !== false,
         'a running calculation stops when its rules change');
-    jobCheck(array_column(array_slice(API::$calls, $callsBeforeSupersede), 0) === ['Module'],
+    jobCheck(array_column(array_slice(API::$calls, $callsBeforeSupersede), 0) === ['ModuleConfig'],
         'superseded step reads no old group, item or history data');
     CWebUser::$data['userid'] = '42';
     $foreign = jobRequest($controllerStore, ['operation' => 'status', 'job' => $finished['job']]);
-    jobCheck($foreign['status'] === 'failed' && !isset($foreign['result_url'], $foreign['snapshot']), 'another superadmin cannot access job progress or report');
+    jobCheck($foreign['status'] === 'failed' && !isset($foreign['result_url'], $foreign['snapshot']), 'another viewer cannot access job progress or report');
     $foreignView = new JobViewHarness(['job' => $finished['job']]);
     $foreignView->store = $controllerStore;
     $foreignData = $foreignView->run()->data;

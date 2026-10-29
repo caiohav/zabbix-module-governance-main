@@ -59,12 +59,12 @@ final class AvailabilityJobStore {
         }
     }
 
-    public function create(string $owner, string $requestId, callable $initializer): array {
+    public function create(string $owner, string $requestId, callable $initializer, ?array $accessContext = null): array {
         self::validateOwner($owner);
         self::validateId($requestId);
         $id = hash('sha256', $owner . ':' . $requestId);
         // Creation and quota accounting are one operation, including concurrent tabs.
-        return $this->locked('.create.lock', LOCK_EX, function() use ($owner, $id, $initializer): array {
+        return $this->locked('.create.lock', LOCK_EX, function() use ($owner, $id, $initializer, $accessContext): array {
             $existing = $this->locked($this->lockName($id), LOCK_SH, function() use ($owner, $id) {
                 $path = $this->path($id, $owner);
                 return file_exists($path) || is_link($path) ? $this->load($id, $owner) : null;
@@ -81,14 +81,14 @@ final class AvailabilityJobStore {
                     'Temporary calculation capacity reached. Resume a pending calculation or wait for expiration / Limite de cálculos temporários atingido. Retome um cálculo pendente ou aguarde a expiração.', self::CAPACITY
                 );
             }
-            return $this->locked($this->lockName($id), LOCK_EX, function() use ($owner, $id, $initializer): array {
+            return $this->locked($this->lockName($id), LOCK_EX, function() use ($owner, $id, $initializer, $accessContext): array {
                 try {
                     $state = $initializer();
                     $this->validateState($state);
                 }
                 catch (Throwable $e) {
                     // Persist failed starts too: replaying a lost response must not rerun discovery.
-                    $state = self::terminalState([], 'failed',
+                    $state = self::terminalState(['access_context' => $accessContext], 'failed',
                         'Cannot start calculation. Check the month, department and saved rules / Não foi possível iniciar o cálculo. Confira o mês, departamento e as regras salvas.');
                 }
                 $now = $this->now();
@@ -199,6 +199,7 @@ final class AvailabilityJobStore {
             'month', 'timezone', 'from', 'to', 'generated_at', 'partial', 'data_policy'
         ]));
         $terminal = ['status' => $status, 'source_config' => $state['source_config'] ?? [],
+            'access_context' => $state['access_context'] ?? null,
             'department_filter' => $state['department_filter'] ?? -1, 'report' => $report,
             'progress' => $state['progress'] ?? []];
         $terminal['progress']['stage'] = $status;

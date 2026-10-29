@@ -2,7 +2,6 @@
 
 namespace Modules\Governance\Actions;
 
-use API;
 use CController;
 use CControllerResponseData;
 use CWebUser;
@@ -10,10 +9,13 @@ use Modules\Governance\AvailabilityCalculation;
 use Modules\Governance\AvailabilityConfig;
 use Modules\Governance\AvailabilityJobException;
 use Modules\Governance\AvailabilityJobStore;
+use Modules\Governance\GovernanceAccess;
+use Modules\Governance\GovernanceAccessException;
+use Modules\Governance\GovernanceModuleConfig;
 
 /** One bounded checkpoint per authenticated POST; native Zabbix 6 SID validation stays enabled. */
 class AvailabilityRun extends CController {
-    protected function checkPermissions(): bool { return $this->getUserType() == USER_TYPE_SUPER_ADMIN; }
+    protected function checkPermissions(): bool { return GovernanceAccess::canView(); }
 
     protected function checkInput(): bool {
         $valid = ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST'
@@ -57,17 +59,18 @@ class AvailabilityRun extends CController {
                 $department = (int) $this->getInput('department', -1);
                 $job = $store->create($owner, $requestId, static function() use ($month, $department): array {
                     // Rules are loaded once from the server. Neither checkpoints nor rules come from the client.
-                    $modules = API::Module()->get(['output' => ['config'], 'filter' => ['id' => 'zabbix_module_governance']]);
-                    if (!is_array($modules) || !$modules) { throw new \RuntimeException('Module unavailable.'); }
-                    $config = AvailabilityConfig::validate($modules[0]['config']['availability'] ?? AvailabilityConfig::defaults());
-                    return AvailabilityCalculation::create($config, $month, $department);
-                });
+                    $stored = GovernanceModuleConfig::read();
+                    $config = AvailabilityConfig::validate($stored['availability'] ?? AvailabilityConfig::defaults());
+                    $state = AvailabilityCalculation::create($config, $month, $department);
+                    $state['access_context'] = GovernanceAccess::jobContext();
+                    return $state;
+                }, GovernanceAccess::jobContext());
             }
             elseif ($operation === 'step') {
+                GovernanceAccess::assertJobAccess($store->read($id, $owner)['state']);
                 $job = $store->step($id, $owner, $sequence, static function(array $state): array {
-                    $modules = API::Module()->get(['output' => ['config'], 'filter' => ['id' => 'zabbix_module_governance']]);
-                    if (!is_array($modules) || !$modules) { throw new \RuntimeException('Module unavailable.'); }
-                    $current = AvailabilityConfig::validate($modules[0]['config']['availability'] ?? AvailabilityConfig::defaults());
+                    $stored = GovernanceModuleConfig::read();
+                    $current = AvailabilityConfig::validate($stored['availability'] ?? AvailabilityConfig::defaults());
                     if (!isset($state['source_config']) || json_encode($current) !== json_encode($state['source_config'])) {
                         return AvailabilityJobStore::superseded($state);
                     }
@@ -75,10 +78,16 @@ class AvailabilityRun extends CController {
                 });
             }
             elseif ($operation === 'cancel') {
+                GovernanceAccess::assertJobAccess($store->read($id, $owner)['state']);
                 $job = $store->cancel($id, $owner, $sequence);
             }
             else { $job = $store->read($id, $owner); }
+            GovernanceAccess::assertJobAccess($job['state']);
             $this->respond(AvailabilityJobStore::projection($job));
+        }
+        catch (GovernanceAccessException $e) {
+            $this->respond(['job' => $id, 'sequence' => $sequence, 'status' => 'failed',
+                'retryable' => false, 'error' => $e->getMessage()]);
         }
         catch (AvailabilityJobException $e) {
             $busy = $e->getCode() === AvailabilityJobStore::BUSY;

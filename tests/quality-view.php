@@ -20,6 +20,9 @@ foreach ([[true, true], [false, false]] as $settings) {
     viewCheck(strpos($html, 'Indicadores por página') === false && strpos($html, 'Indicators by page') === false,
         'redundant quality heading description is omitted');
     viewCheck(strpos($html, 'governance.quality.config') !== false, 'configuration link remains available beside the tabs');
+    $viewer = $data; $viewer['can_configure'] = false;
+    viewCheck(strpos($renderer->render($viewer), 'governance.quality.config') === false,
+        'read-only viewer never receives a configuration link');
     $data['cards'][0]['title'] = '<img src=x onerror=alert(1)>';
     $data['page_name'] = '</script><script>alert(1)</script>';
     $html = $renderer->render($data);

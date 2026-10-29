@@ -2,7 +2,6 @@
 
 namespace Modules\Governance\Actions;
 
-use API;
 use CController;
 use CControllerResponseData;
 use CControllerResponseFatal;
@@ -13,6 +12,9 @@ use Modules\Governance\AvailabilityConfig;
 use Modules\Governance\AvailabilityCalculation;
 use Modules\Governance\AvailabilityJobException;
 use Modules\Governance\AvailabilityJobStore;
+use Modules\Governance\GovernanceAccess;
+use Modules\Governance\GovernanceAccessException;
+use Modules\Governance\GovernanceModuleConfig;
 
 class AvailabilityView extends CController {
     protected function init(): void {
@@ -23,7 +25,7 @@ class AvailabilityView extends CController {
             $this->disableSIDvalidation();
         }
     }
-    protected function checkPermissions(): bool { return $this->getUserType() == USER_TYPE_SUPER_ADMIN; }
+    protected function checkPermissions(): bool { return GovernanceAccess::canView(); }
     protected function checkInput(): bool {
         $valid = $this->validateInput(['month' => 'string', 'department' => 'int32', 'job' => 'string']);
         if ($valid && $this->hasInput('job')) {
@@ -42,12 +44,12 @@ class AvailabilityView extends CController {
         $month = '';
         $department = (int) $this->getInput('department', -1);
         try {
-            $modules = API::Module()->get(['output' => ['config'], 'filter' => ['id' => 'zabbix_module_governance']]);
-            if (!is_array($modules) || !$modules) { throw new \RuntimeException('Module unavailable.'); }
-            $config = AvailabilityConfig::validate($modules[0]['config']['availability'] ?? $config);
+            $stored = GovernanceModuleConfig::read();
+            $config = AvailabilityConfig::validate($stored['availability'] ?? $config);
             if ($this->hasInput('job')) {
                 $stored = $this->jobStore()->read($this->getInput('job'), (string) (CWebUser::$data['userid'] ?? ''));
                 $state = $stored['state'];
+                GovernanceAccess::assertJobAccess($state);
                 $month = $state['report']['month'] ?? '';
                 $department = (int) ($state['department_filter'] ?? -1);
                 $rulesChanged = !isset($state['source_config'])
@@ -63,6 +65,9 @@ class AvailabilityView extends CController {
                 if (!$rulesChanged) { $error = 'Invalid department / Departamento inválido.'; }
                 $department = -1;
             }
+        }
+        catch (GovernanceAccessException $e) {
+            $error = $e->getMessage();
         }
         catch (AvailabilityJobException $e) {
             $error = $e->getMessage();
@@ -91,6 +96,7 @@ class AvailabilityView extends CController {
             'page_title' => $isPt ? 'Disponibilidade por departamento' : 'Department availability',
             'is_pt' => $isPt, 'is_dark' => strpos(strtolower(getUserTheme(CWebUser::$data)), 'dark') !== false,
             'config' => $config, 'report' => $report, 'job' => $job, 'error' => $error,
+            'can_configure' => GovernanceAccess::canConfigure(),
             'rules_changed' => $rulesChanged, 'month' => $month, 'department' => $department
         ]);
         $response->setTitle($response->getData()['page_title']);

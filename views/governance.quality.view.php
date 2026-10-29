@@ -29,7 +29,7 @@ $metrics = [
 ob_start();
 ?>
 <nav class="gov-page-actions <?= !empty($data['is_dark']) ? 'gov-theme-dark' : '' ?>" aria-label="<?= $t('Ações da página', 'Page actions') ?>">
-    <a class="btn-alt gov-action-link gqp-config-link" href="<?= $e($url('governance.quality.config', $data['selected_page'])) ?>"><?= $t('Configurar páginas e cards', 'Configure pages and cards') ?></a>
+    <?php if (!empty($data['can_configure'])): ?><a class="btn-alt gov-action-link gqp-config-link" href="<?= $e($url('governance.quality.config', $data['selected_page'])) ?>"><?= $t('Configurar páginas e cards', 'Configure pages and cards') ?></a><?php endif ?>
 </nav>
 <?php
 $controlsContent = new CObject(ob_get_clean());
@@ -70,7 +70,9 @@ ob_start();
             <div class="gov-card-body"><div class="gov-card-chart gqp-chart-placeholder" role="img" aria-label="<?= $t('Aguardando resultado', 'Waiting for result') ?>">—</div><div class="gov-card-score-box"><div class="gov-card-score-sub"><?= $t('Carregando…', 'Loading…') ?></div><div class="gov-card-score-missing"></div></div></div><div class="gov-card-exceptions"></div></article>
         <?php endforeach ?>
     </div>
-    <p class="gov-no-data" id="gqp-empty" <?= $data['cards_count'] ? 'hidden' : '' ?>><?= $t('Esta página ainda não possui cards. Abra a configuração para adicionar indicadores.', 'This page has no cards yet. Open configuration to add indicators.') ?></p>
+    <p class="gov-no-data" id="gqp-empty" <?= $data['cards_count'] ? 'hidden' : '' ?>><?= !empty($data['can_configure'])
+        ? $t('Esta página ainda não possui cards. Abra a configuração para adicionar indicadores.', 'This page has no cards yet. Open configuration to add indicators.')
+        : $t('Esta página ainda não possui cards. Peça a um administrador para adicionar indicadores.', 'This page has no cards yet. Ask an administrator to add indicators.') ?></p>
     <script type="application/json" id="gqp-input"><?= json_encode(['page' => $data['selected_page'], 'revision' => $data['revision'], 'groupids' => array_values($data['groupids']), 'error' => $data['error']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 </div>
 <?php

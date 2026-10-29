@@ -1,6 +1,8 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 require __DIR__ . '/quality-fixture.php';
+require __DIR__ . '/../GovernanceAccess.php';
+require __DIR__ . '/../GovernanceModuleConfig.php';
 use Modules\Governance\QualityCalculation as Calculation;
 use Modules\Governance\GovernanceConfig as Config;
 use Modules\Governance\QualityJobException as JobException;
@@ -202,6 +204,7 @@ try {
 
 
     define('USER_TYPE_SUPER_ADMIN', 3);
+    define('USER_TYPE_ZABBIX_USER', 1);
     class CController {
         protected $input, $sidRequired = true;
         public $response;
@@ -231,7 +234,23 @@ try {
         }
     }
     class CControllerResponseData { public $title; public function getData() { return $this->data; } public function setTitle($title) { $this->title = $title; } public $data; public function __construct(array $data) { $this->data = $data; } }
-    class CWebUser { public static $data = ['userid' => '41', 'type' => 3]; }
+    class CWebUser {
+        public static $data = ['userid' => '41', 'type' => 3, 'username' => 'Admin'];
+        public static function getType() { return self::$data['type']; }
+        public static function isLoggedIn() { return !empty(self::$data['userid']); }
+        public static function isGuest() { return self::$data['username'] === 'guest'; }
+    }
+    class APP {
+        public static function ModuleManager() {
+            return new class {
+                public function getModules(): array {
+                    return ['zabbix_module_governance' => new class {
+                        public function getConfig(): array { API::$moduleReads++; return API::$config; }
+                    }];
+                }
+            };
+        }
+    }
     class API {
         public static $config, $fixture, $moduleReads = 0;
         public static function __callStatic($service, $args) {
@@ -239,7 +258,7 @@ try {
                 private $service;
                 public function __construct($service) { $this->service = $service; }
                 public function get($options) {
-                    if ($this->service === 'Module') { API::$moduleReads++; return [['config' => API::$config]]; }
+                    if ($this->service === 'Module') { throw new RuntimeException('Viewer must not call the privileged module API.'); }
                     return API::$fixture->get($this->service, $options);
                 }
             };
@@ -249,6 +268,7 @@ try {
     class QualityRunHarness extends Modules\Governance\Actions\QualityRun {
         public $store;
         protected function jobStore(): Store { return $this->store; }
+        public function allowed(): bool { return $this->checkPermissions(); }
     }
     $controllerDirectory = $newDirectory('controller');
     $controllerStore = new Store($controllerDirectory);
@@ -264,7 +284,10 @@ try {
     jobCheck($request($start, 'GET')['status'] === 'failed', 'GET cannot initiate work');
     jobReject(static function() use ($request, $start) { $request($start, 'POST', false); }, 'native SID is required');
     CWebUser::$data['type'] = 1;
-    jobReject(static function() use ($request, $start) { $request($start); }, 'non-admin rejected on endpoint');
+    jobCheck(!(new QualityRunHarness($start))->allowed(), 'ordinary user cannot run quality page');
+    CWebUser::$data['username'] = 'guest';
+    jobCheck(!(new QualityRunHarness($start))->allowed(), 'guest cannot run quality page');
+    CWebUser::$data['username'] = 'Admin';
     CWebUser::$data['type'] = 3;
     foreach ([[], ['operation' => 'bogus'], ['operation' => 'step', 'job' => str_repeat('a', 64)],
         ['operation' => 'step', 'job' => str_repeat('a', 64), 'sequence' => -1],
@@ -288,7 +311,7 @@ try {
     jobCheck($complete['result']['overall_score'] === 50.2 && $complete['status'] === 'complete', 'actual controller/API pipeline completes');
     CWebUser::$data['userid'] = '42';
     $foreign = $request(['operation' => 'status', 'job' => $complete['job']]);
-    jobCheck($foreign['status'] === 'failed' && !isset($foreign['result']), 'another superadmin cannot see result');
+    jobCheck($foreign['status'] === 'failed' && !isset($foreign['result']), 'another viewer cannot see result');
     $manifest = json_decode(file_get_contents(__DIR__ . '/../platforms/zabbix-6.0/manifest.json'), true);
     jobCheck($manifest['actions']['governance.quality.run']['layout'] === 'layout.json', 'native JSON response layout registered');
     jobCheck(strpos(file_get_contents(__DIR__ . '/../actions/QualityRun.php'), 'disableSIDvalidation') === false, 'SID never disabled');

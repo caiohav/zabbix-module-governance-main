@@ -8,6 +8,7 @@ namespace {
     if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 
     define('USER_TYPE_SUPER_ADMIN', 3);
+    define('USER_TYPE_ZABBIX_USER', 1);
 
     class CController {
         private $csrfDisabled = false;
@@ -19,6 +20,8 @@ namespace {
     class CWebUser {
         public static function getLang() { return 'pt_BR'; }
         public static function getType() { return USER_TYPE_SUPER_ADMIN; }
+        public static function isLoggedIn() { return true; }
+        public static function isGuest() { return false; }
     }
     class CMenu {
         public $items;
@@ -59,6 +62,7 @@ namespace {
     $check($manifest6['id'] === $manifest7['id'], 'Both packages must preserve the module identity.');
     $check($manifest6['actions'] === $manifest7['actions'], 'Both packages must expose the same actions.');
 
+    require $root . '/GovernanceAccess.php';
     require $root . '/platforms/zabbix-7.0/Module.php';
     APP::$components = new CompatibilityComponents();
     $module = new \Modules\Governance\Module();

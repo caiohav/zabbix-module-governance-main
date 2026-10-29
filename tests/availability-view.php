@@ -38,11 +38,16 @@ set_error_handler(static function($severity, $message, $file, $line) {
     return false;
 });
 try {
-    $data = ['is_pt' => true, 'is_dark' => true, 'page_title' => 'Test', 'config' => Config::defaults(),
+    $data = ['is_pt' => true, 'is_dark' => true, 'can_configure' => true, 'page_title' => 'Test', 'config' => Config::defaults(),
         'report' => null, 'job' => null, 'error' => null, 'month' => '2026-05', 'department' => -1];
     $renderer = new AvailabilityViewRenderer();
     $html = $renderer->render($data);
-    renderCheck(strpos($html, 'Seu primeiro indicador') !== false, 'empty fresh configuration has its own CTA');
+    renderCheck(strpos($html, 'Criar indicadores de disponibilidade') !== false, 'admin sees empty-state setup CTA');
+    $data['can_configure'] = false;
+    $viewerHtml = $renderer->render($data);
+    renderCheck(strpos($viewerHtml, 'governance.availability.config') === false
+        && strpos($viewerHtml, 'Peça a um administrador') !== false, 'viewer has no configuration link');
+    $data['can_configure'] = true;
     $store = new Store($directory);
     $job = $store->create('1', hash('sha256', 'failed-start'), static function() {
         throw new RuntimeException('Pretend invalid month or unavailable rules.');
@@ -52,7 +57,7 @@ try {
     renderCheck($data['job']['snapshot']['timezone'] === '', 'actual failed initializer has no confirmed timezone');
     $html = $renderer->render($data);
     renderCheck(strpos($html, 'Confira o mês') !== false, 'failed start renders error without an HTTP500');
-    renderCheck(strpos($html, 'Seu primeiro indicador') === false, 'unconfirmed rules do not imply no configuration');
+    renderCheck(strpos($html, 'Criar indicadores de disponibilidade') === false, 'unconfirmed rules do not imply no configuration');
     renderCheck(strpos($html, 'id="gav-report"') === false, 'no partial report rendered for failure');
     renderCheck(strpos($html, 'id="gav-job-data"') !== false, 'failure projection available to the workflow');
     $data['is_pt'] = false; $data['is_dark'] = false;
@@ -62,7 +67,7 @@ try {
     $data['error'] = 'Calculation busy / Cálculo ocupado';
     $html = $renderer->render($data);
     renderCheck(strpos($html, 'Calculation busy') !== false, 'busy bootstrap renders without a snapshot timezone');
-    renderCheck(strpos($html, 'Your first indicator') === false, 'busy bootstrap does not show misleading setup CTA');
+    renderCheck(strpos($html, 'Create availability indicators') === false, 'busy bootstrap does not show misleading setup CTA');
     $data['job']['snapshot'] = ['timezone' => '', 'month' => ''];
     $renderer->render($data);
     renderCheck(true, 'explicit empty timezone handled as unconfirmed');
@@ -70,7 +75,7 @@ try {
     $data['error'] = 'Calculation unavailable or expired / Cálculo indisponível ou expirado';
     $html = $renderer->render($data);
     renderCheck(strpos($html, 'Return to period selection') !== false, 'expired job offers a direct restart path');
-    renderCheck(strpos($html, 'Your first indicator') === false, 'expired job does not imply rules were lost');
+    renderCheck(strpos($html, 'Create availability indicators') === false, 'expired job does not imply rules were lost');
     $data['rules_changed'] = true;
     $data['error'] = null;
     $html = $renderer->render($data);

@@ -10,11 +10,13 @@ use Modules\Governance\QualityCalculation;
 use Modules\Governance\QualityJobException;
 use Modules\Governance\QualityJobStore;
 use Modules\Governance\GovernanceConfig;
+use Modules\Governance\GovernanceAccess;
+use Modules\Governance\GovernanceModuleConfig;
 use Modules\Governance\QualityCatalog;
 
 /** Native Zabbix SID validation remains enabled for every authenticated POST. */
 class QualityRun extends CController {
-    protected function checkPermissions(): bool { return $this->getUserType() == USER_TYPE_SUPER_ADMIN; }
+    protected function checkPermissions(): bool { return GovernanceAccess::canConfigure(); }
     protected function checkInput(): bool {
         $valid = ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $this->validateInput([
             'operation' => 'required|string', 'page' => 'string', 'revision' => 'string',
@@ -74,9 +76,7 @@ class QualityRun extends CController {
                 $page = $this->getInput('page', ''); $groups = $this->getInput('groupids', []);
                 $revision = $this->getInput('revision');
                 $job = $store->create($owner, $request, static function() use ($page, $groups, $revision): array {
-                    $modules = API::Module()->get(['output' => ['config'], 'filter' => ['id' => 'zabbix_module_governance']]);
-                    if (!is_array($modules) || !$modules) { throw new \RuntimeException('Module unavailable.'); }
-                    return QualityCalculation::create($modules[0]['config'], $page, $groups, $revision);
+                    return QualityCalculation::create(GovernanceModuleConfig::read(), $page, $groups, $revision);
                 });
             }
             elseif ($operation === 'step') {

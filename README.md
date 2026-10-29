@@ -18,6 +18,20 @@ Os pacotes antigos foram retirados da pasta de trabalho de forma recuperável;
 o local do arquivo está registrado em `notes/README.md`. Nenhuma versão do
 módulo ou regra de cálculo é duplicada entre as versões.
 
+## Novidades 1.26.0 — Acesso de leitura à Disponibilidade
+
+Uma conta com função **User** ou **Admin** pode abrir e calcular o painel
+**Governança → Disponibilidade** quando sua função permite o módulo Governance.
+O submenu mostra somente Disponibilidade para essas contas. As páginas de
+Qualidade, configurações, salvamento e prévia de regras continuam exclusivas
+de **Super Admin**, inclusive quando a URL é acessada diretamente.
+
+O cálculo usa as permissões da própria conta para consultar hosts, itens,
+histórico, trends e serviços. Para um resultado completo, conceda ao grupo
+do usuário leitura de todos os grupos de hosts e serviços usados nas regras.
+Resultados temporários pertencem à conta que iniciou o cálculo e expiram;
+uma mudança de função exige iniciar um cálculo novo.
+
 ## Correção 1.25.2 — Memória na agregação departamental
 
 Os totais mensais e diários de departamentos que usam itens agora são
@@ -596,7 +610,8 @@ um valor padrão `null` não protege o acesso a um campo ausente.
 
 ## Funcionalidades
 
-- Menu visível exclusivamente para usuários Super Admin.
+- Menu completo para Super Admin; somente Disponibilidade para usuários com
+  função User/Admin autorizada a acessar o módulo.
 - Interface automática em português ou inglês.
 - Página **Configurar qualidade / Configure quality** totalmente traduzida conforme o
   idioma do usuário.
@@ -906,6 +921,24 @@ os dados fictícios do teste; salvar valida o JSON sem modificar qualquer módul
 5. Habilite **Governance & Quality Audit**.
 6. Entre como Super Admin e abra **Governança** no menu principal.
 
+### Conta somente de leitura para Disponibilidade
+
+1. Em **Usuários → Funções de usuário**, crie uma função do tipo **User** e
+   habilite o acesso ao módulo **Governance & Quality Audit**. Restrinja as
+   demais seções do frontend e os demais módulos conforme a necessidade da conta.
+2. Associe essa função ao usuário. No grupo de usuários, conceda permissão de
+   **leitura** aos grupos de hosts usados nas regras. Se a configuração usa SLA
+   nativo, conceda também a leitura dos serviços correspondentes.
+3. Garanta acesso de leitura aos métodos da API necessários ao relatório:
+   `hostgroup.get`, `host.get`, `item.get`, `history.get`, `trend.get` e, quando
+   houver SLA nativo, `sla.get`, `sla.getsli` e `service.get`.
+4. Abra **Governança → Disponibilidade**. Para ir diretamente ao painel, use
+   `zabbix.php?action=governance.availability.view`.
+
+Essa função não pode abrir Qualidade ou alterar regras. O Zabbix ainda pode
+exibir outras páginas básicas da conta conforme as permissões da função; a
+visibilidade dessas páginas é configurada na própria função de usuário.
+
 Para atualizar, faça backup dos arquivos e do banco do frontend e substitua os
 arquivos na pasta existente do módulo. Mantenha o nome da pasta e o registro do
 módulo no Zabbix; não o exclua para reinstalar, pois as configurações ficam nesse
@@ -936,7 +969,7 @@ sem criar tabelas adicionais.
 - Se o módulo não aparecer na lista, confira o caminho do `manifest.json` e
   execute novamente **Examinar diretório**.
 - Se aparecer na lista, mas não no menu, confirme que está habilitado e que a
-  conta é Super Admin.
+  função da conta permite acesso ao módulo. Super Admin vê o menu completo.
 - Em caso de tela em branco ou erro técnico, consulte o log do PHP e do servidor
   web. Erros de frontend não são gravados no log do `zabbix_server`.
 
@@ -948,8 +981,10 @@ usa manifesto `2.0`, `Zabbix\Core\CModule`, `CHtmlPage` e tokens CSRF vinculados
 da versão instalada.
 
 As páginas GET desabilitam somente a validação de requisições de escrita pelo
-método oferecido pela versão. Todas as operações POST continuam autenticadas,
-exigem Super Admin e enviam o token nativo correspondente.
+método oferecido pela versão. Todas as operações POST continuam autenticadas e
+enviam o token nativo correspondente. O cálculo de Disponibilidade aceita
+contas User/Admin autorizadas ao módulo; alterações de configuração e consultas
+de edição exigem Super Admin.
 
 O endpoint de cálculo usa `layout.json`, necessário para emitir `main_block`
 como JSON nos dois frontends; `layout: null` não serve para essa resposta.

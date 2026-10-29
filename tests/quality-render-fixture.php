@@ -33,6 +33,7 @@ function qualityRenderData(bool $pt = true, bool $dark = true, string $pageId = 
     $config = fixtureConfig();
     $page = $config['quality_pages'][$pageId === 'empty' ? 1 : 0];
     return ['page_title' => $pt ? 'Qualidade do monitoramento' : 'Monitoring quality', 'is_pt' => $pt, 'is_dark' => $dark,
+        'can_configure' => true,
         'pages' => $config['quality_pages'], 'selected_page' => $page['id'], 'page_name' => $page['name'],
         'cards' => $page['cards'], 'cards_count' => count($page['cards']), 'groupids' => ['10'],
         'revision' => Modules\Governance\GovernanceConfig::qualityRevision($config), 'error' => null];
